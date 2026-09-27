@@ -16,6 +16,8 @@
             <conv:InverseBoolConverter x:Key="InverseBoolConverter" />
             <conv:ResourceKeyToBrushConverter x:Key="ResourceKeyToBrushConverter" />
             <conv:BoolToStatusColorConverter x:Key="BoolToStatusColorConverter" />
+            <conv:DoctorCheckToStatusColorConverter x:Key="DoctorCheckToStatusColorConverter" />
+            <conv:DoctorCheckFixHintToVisibilityConverter x:Key="DoctorCheckFixHintToVisibilityConverter" />
             <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter" />
 
             <!-- Liquid card: elevated, clearly bordered surface used by every page. -->

@@ -294,3 +294,8 @@ public partial class TerminalViewModel : ObservableObject
     private static string[] SplitCommandLine(string commandLine) =>
         [.. ProcessRunner.SplitCommandLine(commandLine)];
 }
+
+public sealed record TerminalLine(string Text, bool IsCommand = false, bool IsError = false);
+
+/// <summary>One documented built-in command.</summary>
+public sealed record TerminalCommandDoc(string Name, string Explanation);

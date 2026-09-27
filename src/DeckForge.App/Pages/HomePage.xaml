@@ -86,17 +86,20 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Ellipse Width="10" Height="10" Margin="0,0,10,0"
-                                         Fill="{Binding Ok, Converter={StaticResource BoolToStatusColorConverter}}" />
+                                         Fill="{Binding Converter={StaticResource DoctorCheckToStatusColorConverter}}" />
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="{Binding Title}" FontWeight="Medium" />
                                     <TextBlock Text="{Binding Detail}"
                                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
-                                               FontSize="12" />
+                                               FontSize="12"
+                                               TextWrapping="Wrap" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="{Binding FixHint}"
                                            Foreground="{DynamicResource Liquid.WarningBrush}"
                                            FontSize="12"
-                                           MaxWidth="260" TextWrapping="Wrap" />
+                                           MaxWidth="260" TextWrapping="Wrap"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding Converter={StaticResource DoctorCheckFixHintToVisibilityConverter}}" />
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

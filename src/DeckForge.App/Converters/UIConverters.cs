@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using DeckForge.CliAdapter;
 using DeckForge.Validators;
 
 namespace DeckForge.App.Converters;
@@ -37,6 +38,42 @@ public sealed class BoolToStatusColorConverter : IValueConverter
         brush.Freeze();
         return brush;
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// A <see cref="DoctorCheck"/> to a status colour that respects its severity.
+/// </summary>
+/// <remarks>
+/// The flat bool converter painted every failed check red, so an absent Macro Deck desktop app -
+/// which the bundled stub host does not need - looked identical to a missing .NET SDK.
+/// </remarks>
+public sealed class DoctorCheckToStatusColorConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var color = value is DoctorCheck { Ok: true }
+            ? Color.FromRgb(0x3F, 0xB8, 0x63)
+            : value is DoctorCheck { Severity: DoctorSeverity.Optional }
+                ? Color.FromRgb(0x9A, 0x9A, 0x9A)
+                : Color.FromRgb(0xE5, 0x48, 0x4D);
+
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>Collapses the fix hint on a check that passed, so a green row has no trailing text.</summary>
+public sealed class DoctorCheckFixHintToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is DoctorCheck { Ok: false, FixHint: not null } ? Visibility.Visible : Visibility.Collapsed;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
