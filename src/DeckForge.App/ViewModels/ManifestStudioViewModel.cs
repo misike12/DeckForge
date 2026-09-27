@@ -72,6 +72,10 @@ public partial class ManifestStudioViewModel : ObservableObject
     [ObservableProperty]
     private string _saveStatus = "";
 
+    /// <summary>True when the form differs from what is on disk.</summary>
+    [ObservableProperty]
+    private bool _isDirty;
+
     public ObservableCollection<ValidationIssue> Issues { get; } = [];
 
     public ObservableCollection<string> Platforms { get; } = [];
@@ -83,23 +87,48 @@ public partial class ManifestStudioViewModel : ObservableObject
         var ws = _workspaces.Current;
         if (ws is null || !File.Exists(ws.ManifestPath))
         {
-            _document = null;
-            HasDocument = false;
+            ClearDocument();
+            ValidationSummary = ws is null
+                ? "No workspace is open."
+                : $"{ws.ManifestPath} does not exist.";
             return;
         }
+
         try
         {
             _document = ManifestDocument.Load(ws.ManifestPath);
             ManifestPath = ws.ManifestPath;
             HasDocument = true;
             LoadIntoFields();
+            IsDirty = false;
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or InvalidOperationException)
         {
-            _document = null;
-            HasDocument = false;
-            ValidationSummary = "manifest.json could not be parsed; fix the JSON first.";
+            // The previous manifest's fields used to stay on screen here, so a parse failure left
+            // the form showing one manifest's values while claiming it could not read the file -
+            // and Save would then have written those stale values over the real one.
+            ClearDocument();
+            ValidationSummary = "manifest.json could not be parsed; fix the JSON first. " + ex.Message;
         }
+    }
+
+    private void ClearDocument()
+    {
+        _document = null;
+        HasDocument = false;
+        ManifestPath = "";
+        RawJson = "";
+        Issues.Clear();
+        _suppressRefresh = true;
+        Platforms.Clear();
+        Permissions.Clear();
+        foreach (var group in PermissionGroups)
+        {
+            group.Recount();
+        }
+
+        _suppressRefresh = false;
+        IsDirty = false;
     }
 
     private void LoadIntoFields()
@@ -148,7 +177,9 @@ public partial class ManifestStudioViewModel : ObservableObject
         {
             return;
         }
+
         apply(_document);
+        IsDirty = true;
         QueueRefresh();
     }
 
@@ -185,14 +216,29 @@ public partial class ManifestStudioViewModel : ObservableObject
             d.SetPermissions([.. current]);
         });
 
+        // Every group is recounted, not just the one that owns this permission: a custom
+        // permission is not in any group, and the group rows are what the counters read.
         foreach (var group in PermissionGroups)
         {
-            var row = group.Rows.FirstOrDefault(r => r.Name == permission);
-            if (row is not null)
-            {
-                group.NotifyToggled(enabled);
-            }
+            group.Recount();
         }
+    }
+
+    /// <summary>Called by the shell when the page is navigated to.</summary>
+    /// <remarks>
+    /// Navigating away and back reloaded from disk, which silently discarded every unsaved edit.
+    /// A dirty form is left alone and says so, because throwing the work away is worse than showing
+    /// a stale one.
+    /// </remarks>
+    public void RefreshOnNavigate()
+    {
+        if (IsDirty)
+        {
+            SaveStatus = "Unsaved changes are still here - press Save, or Reload to discard them.";
+            return;
+        }
+
+        LoadFromWorkspace();
     }
 
     [RelayCommand]
@@ -202,13 +248,21 @@ public partial class ManifestStudioViewModel : ObservableObject
         {
             return;
         }
+
         _document.Save(ManifestPath);
         RawJson = _document.ToJson();
+        IsDirty = false;
         SaveStatus = $"Saved {DateTime.Now:HH:mm:ss}";
     }
 
+    /// <summary>Discards unsaved edits and reads the manifest again.</summary>
     [RelayCommand]
-    private void ReloadFromDisk() => LoadFromWorkspace();
+    private void ReloadFromDisk()
+    {
+        IsDirty = false;
+        LoadFromWorkspace();
+        SaveStatus = "Reloaded from disk.";
+    }
 
     private bool _suppressRefresh;
     private System.Timers.Timer? _refreshTimer;
@@ -220,13 +274,31 @@ public partial class ManifestStudioViewModel : ObservableObject
         {
             return;
         }
+
         _refreshTimer?.Dispose();
         _refreshTimer = new System.Timers.Timer(350) { AutoReset = false };
         _refreshTimer.Elapsed += (_, _) =>
         {
             _refreshTimer.Dispose();
             _refreshTimer = null;
-            System.Windows.Application.Current?.Dispatcher.Invoke(RefreshValidation);
+
+            // The timer fires on a thread-pool thread. Posting rather than Invoke means a slow
+            // layout pass cannot block the timer thread, and posting when already on the UI thread
+            // avoids the deadlock that blocking a dispatcher from inside a dispatcher call causes.
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is null)
+            {
+                return;
+            }
+
+            if (dispatcher.CheckAccess())
+            {
+                RefreshValidation();
+            }
+            else
+            {
+                dispatcher.BeginInvoke(RefreshValidation);
+            }
         };
         _refreshTimer.Start();
     }
@@ -246,96 +318,4 @@ public partial class ManifestStudioViewModel : ObservableObject
         ValidationSummary = result.ToString();
         RawJson = _document.ToJson();
     }
-}
-
-/// <summary>One checkable permission with its explanation; checkbox state is rebound per load.</summary>
-public sealed class PermissionRow : System.ComponentModel.INotifyPropertyChanged
-{
-    private Action<string, bool> _toggle;
-    private bool _enabled;
-
-    public PermissionRow(string name, bool enabled, Action<string, bool> toggle, bool isCustom = false)
-    {
-        Name = name;
-        _enabled = enabled;
-        _toggle = toggle;
-        IsCustom = isCustom;
-        Explanation = Core.Plugins.PermissionCatalog.ExplanationOf(name)
-            ?? (isCustom ? "Custom permission - not in the known vocabulary. The host shows it to the user but ignores it (unknown-permission warning at validate)." : "");
-    }
-
-    public string Name { get; }
-    public string Explanation { get; }
-    public bool IsCustom { get; }
-
-    public bool Enabled
-    {
-        get => _enabled;
-        private set
-        {
-            if (_enabled != value)
-            {
-                _enabled = value;
-                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Enabled)));
-            }
-        }
-    }
-
-    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-
-    /// <summary>Rebinds the row to the current manifest state without firing the toggle.</summary>
-    public void Rebind(bool enabled, Action<string, bool> toggle)
-    {
-        _toggle = toggle;
-        Enabled = enabled;
-    }
-
-    /// <summary>Called by the page's Checked/Unchecked handlers.</summary>
-    public void SetEnabled(bool value) => _toggle(Name, value);
-}
-
-/// <summary>One grouped permission section: title, summary, and its rows.</summary>
-public partial class PermissionGroupVM : ObservableObject
-{
-    public PermissionGroupVM(PermissionGroup group)
-    {
-        Group = group;
-        Title = Core.Plugins.PermissionCatalog.Title(group);
-        Summary = Core.Plugins.PermissionCatalog.GroupSummary(group);
-        Rows = [.. Core.Plugins.PermissionCatalog.OfGroup(group)
-            .Select(p => new PermissionRow(p.Name, false, (_, _) => { }))];
-    }
-
-    public PermissionGroup Group { get; }
-    public string Title { get; }
-    public string Summary { get; }
-
-    public IReadOnlyList<PermissionRow> Rows { get; }
-
-    [ObservableProperty]
-    private int _enabledCount;
-
-    public string CountLabel => EnabledCount == 0 ? "" : $"({EnabledCount} enabled)";
-
-    public string GroupBrushKey => Group switch
-    {
-        PermissionGroup.Host => "Liquid.AccentBrush",
-        PermissionGroup.Publishing => "Liquid.SuccessBrush",
-        _ => "Liquid.WarningBrush",
-    };
-
-    partial void OnEnabledCountChanged(int value) => OnPropertyChanged(nameof(CountLabel));
-
-    /// <summary>Rebuilds the checked state of every row against the manifest's permission set.</summary>
-    public void Refresh(HashSet<string> enabled, Action<string, bool> toggle)
-    {
-        foreach (var row in Rows)
-        {
-            row.Rebind(enabled.Contains(row.Name), toggle);
-        }
-        EnabledCount = Rows.Count(r => r.Enabled);
-    }
-
-    /// <summary>Called after a row toggles so the group counter stays current.</summary>
-    public void NotifyToggled(bool enabled) => EnabledCount = Math.Max(0, EnabledCount + (enabled ? 1 : -1));
 }

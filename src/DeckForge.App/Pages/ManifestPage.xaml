@@ -144,8 +144,7 @@
                                                         <DataTemplate>
                                                             <StackPanel Margin="0,2">
                                                                 <CheckBox IsChecked="{Binding Enabled, Mode=OneWay}"
-                                                                          Checked="Permission_Checked"
-                                                                          Unchecked="Permission_Unchecked"
+                                                                          Click="Permission_Click"
                                                                           ToolTip="{Binding Explanation}">
                                                                     <StackPanel Orientation="Horizontal">
                                                                         <TextBlock Text="{Binding Name}" FontFamily="Cascadia Mono, Consolas" FontSize="12" />
@@ -208,7 +207,30 @@
                         <TextBlock Text="{Binding SaveStatus}"
                                    VerticalAlignment="Center" Margin="10,0,0,0"
                                    Foreground="{DynamicResource Liquid.SuccessBrush}" FontSize="12" />
+                        <TextBlock Text="unsaved changes"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"
+                                   Foreground="{DynamicResource Liquid.WarningBrush}" FontSize="12"
+                                   FontStyle="Italic"
+                                   Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibilityConverter}}" />
                     </StackPanel>
+
+                    <!--
+                        The manifest the host actually reads, after every field above has been
+                        applied. It was recomputed on each keystroke and never shown anywhere, so a
+                        field that did not round-trip - a lost key, a re-ordered list - was
+                        invisible until a build failed against the real CLI.
+                    -->
+                    <Expander Header="manifest.json" Margin="0,12,0,0"
+                              IsExpanded="False">
+                        <TextBox Text="{Binding RawJson, Mode=OneWay}"
+                                 IsReadOnly="True"
+                                 AcceptsReturn="True"
+                                 FontFamily="Cascadia Mono, Consolas"
+                                 FontSize="12"
+                                 MaxHeight="320"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto" />
+                    </Expander>
                 </StackPanel>
             </Grid>
         </ScrollViewer>
