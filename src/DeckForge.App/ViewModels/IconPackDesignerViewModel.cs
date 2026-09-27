@@ -57,17 +57,94 @@ public partial class IconPackDesignerViewModel : ObservableObject
     /// <summary>Documented pack limits (IconPackArchiveLimits).</summary>
     public const int MaxFiles = 29996;
 
+    /// <summary>Documented total uncompressed size limit (IconPackArchiveLimits).</summary>
+    public const long MaxTotalBytes = 32L * 1024 * 1024;
+
     public void Load() => HasWorkspace = _workspaces.Current is not null;
 
     public void RefreshOnNavigate() => Load();
 
-    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    /// <summary>
+    /// The uncompressed size of the pack as it stands.
+    /// </summary>
+    /// <remarks>
+    /// The 32 MiB limit was named in a comment and enforced nowhere, so a pack that exceeded it
+    /// was written and only rejected by the CLI - after the user had waited for the export. This is
+    /// read from the source files, and the export checks it again.
+    /// </remarks>
+    public long TotalBytes
+    {
+        get
+        {
+            long total = 0;
+            foreach (var icon in Icons)
+            {
+                total += SafeLength(icon.FilePath);
+            }
+
+            return total;
+        }
+    }
+
+    private static long SafeLength(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists ? info.Length : 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>Adds icons, refusing what would push the pack past the file or size limit.</summary>
+    public void AddIconFiles(IEnumerable<IconPackEntry> entries)
+    {
+        var added = 0;
+        foreach (var entry in entries)
+        {
+            if (Icons.Count >= MaxFiles)
+            {
+                StatusText = $"Pack limit reached ({MaxFiles} files).";
+                break;
+            }
+
+            // Two files with the same name would be written to the same zip entry, and the second
+            // would silently replace the first - so the pack.json list would name one icon and
+            // the archive would hold a different one.
+            if (Icons.Any(i => string.Equals(i.FileName, Path.GetFileName(entry.FilePath), StringComparison.OrdinalIgnoreCase)))
+            {
+                StatusText = $"{Path.GetFileName(entry.FilePath)} is already in the pack.";
+                continue;
+            }
+
+            var size = SafeLength(entry.FilePath);
+            if (TotalBytes + size > MaxTotalBytes)
+            {
+                StatusText = $"Adding {Path.GetFileName(entry.FilePath)} would exceed the "
+                    + $"{MaxTotalBytes / (1024 * 1024)} MiB pack limit.";
+                break;
+            }
+
+            Icons.Add(entry);
+            added++;
+        }
+
+        OnPropertyChanged(nameof(TotalBytes));
+        if (added > 0)
+        {
+            StatusText = $"{Icons.Count} icon(s) in the pack, {TotalBytes / 1024} KiB.";
+        }
+    }
+
     private CancellableOperation? _operation;
 
     /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
     public CancellableOperation Operation =>
         _operation ??= new CancellableOperation().Track(BundleIntoPluginCommand);
-    
+
     [RelayCommand]
     private void AddIcons()
     {
@@ -81,20 +158,12 @@ public partial class IconPackDesignerViewModel : ObservableObject
         {
             return;
         }
-        foreach (var file in dialog.FileNames)
-        {
-            if (Icons.Count >= MaxFiles)
+        AddIconFiles(dialog.FileNames.Select(path =>
+            new IconPackEntry
             {
-                StatusText = $"Pack limit reached ({MaxFiles} files).";
-                break;
-            }
-            Icons.Add(new IconPackEntry
-            {
-                Name = Path.GetFileNameWithoutExtension(file),
-                FilePath = file,
-            });
-        }
-        StatusText = $"{Icons.Count} icon(s) in the pack.";
+                Name = Path.GetFileNameWithoutExtension(path),
+                FilePath = path,
+            }));
     }
 
     [RelayCommand]
@@ -103,6 +172,7 @@ public partial class IconPackDesignerViewModel : ObservableObject
         if (entry is not null)
         {
             Icons.Remove(entry);
+            OnPropertyChanged(nameof(TotalBytes));
         }
     }
 
@@ -113,6 +183,24 @@ public partial class IconPackDesignerViewModel : ObservableObject
         if (Icons.Count == 0)
         {
             StatusText = "Add icons first.";
+            return;
+        }
+
+        // Checked again here, not only on add: files can be replaced on disk between the two, and
+        // an over-limit pack is rejected by the CLI only after the whole export has been written.
+        if (TotalBytes > MaxTotalBytes)
+        {
+            StatusText = $"The pack is {TotalBytes / (1024 * 1024)} MiB, over the "
+                + $"{MaxTotalBytes / (1024 * 1024)} MiB limit. Remove an icon and try again.";
+            return;
+        }
+
+        var duplicate = Icons
+            .GroupBy(i => i.FileName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicate is not null)
+        {
+            StatusText = $"{duplicate.Key} appears {duplicate.Count()} times; the archive would keep only one.";
             return;
         }
 
@@ -205,7 +293,7 @@ public partial class IconPackDesignerViewModel : ObservableObject
                 ? "Bundled into the plugin - macrodeck-plugin build will carry it."
                 : $"icon-pack add failed ({result.ExitCode}): {CliAdapter.Tools.MacroDeckCli.ExplainExitCode(result.ExitCode)}";
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (CliAdapter.Processes.ProcessStartFailedException)
         {
             StatusText = "macrodeck-plugin CLI not found on PATH.";
         }

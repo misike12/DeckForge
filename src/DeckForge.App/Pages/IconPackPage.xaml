@@ -64,6 +64,14 @@
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="{Binding Icons.Count, StringFormat='Icons ({0})', FallbackValue='Icons (0)'}"
                                FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <!--
+                        The 32 MiB pack limit is now enforced on add and again on export. Showing
+                        the running total is what makes the refusal at add time explicable.
+                    -->
+                    <TextBlock DockPanel.Dock="Top" FontSize="12" Margin="0,0,0,8"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}">
+                        <Run Text="{Binding TotalBytes, StringFormat='{}{0} bytes uncompressed', FallbackValue='0 bytes'}" />
+                    </TextBlock>
                     <ListBox ItemsSource="{Binding Icons}" Background="Transparent" BorderThickness="0">
                         <ListBox.ItemTemplate>
                             <DataTemplate>

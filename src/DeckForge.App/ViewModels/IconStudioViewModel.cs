@@ -15,6 +15,11 @@ public partial class IconStudioViewModel : ObservableObject
         _workspaces = workspaces;
         Services.ShellMessenger.WorkspaceChanged += _ => Load();
         BuildTemplates();
+
+        // Select before rendering. The constructor used to call RenderSelected with nothing
+        // selected and return an empty string, so the page opened on a blank preview until the
+        // user happened to click a template - and Save would then have written an empty <svg>.
+        SelectedTemplate = Templates.FirstOrDefault();
         Svg = RenderSelected();
     }
 
@@ -109,10 +114,21 @@ public partial class IconStudioViewModel : ObservableObject
             StatusText = "Open a workspace first.";
             return;
         }
+
+        if (string.IsNullOrWhiteSpace(Svg))
+        {
+            // There is no template selected, or the selected one rendered nothing. Writing
+            // <svg></svg> over the plugin's icon would replace a working icon with an empty
+            // document, and the host would fail to load it at run time with nothing pointing here.
+            StatusText = "Nothing to save - pick a template first.";
+            return;
+        }
+
         var iconPath = Path.Combine(ws.AssetsDirectory, "icon.svg");
+        var existed = File.Exists(iconPath);
         Directory.CreateDirectory(ws.AssetsDirectory);
         File.WriteAllText(iconPath, Wrap());
-        StatusText = $"Saved {iconPath}";
+        StatusText = existed ? $"Replaced {iconPath}" : $"Saved {iconPath}";
     }
 
     [RelayCommand]
@@ -133,8 +149,19 @@ public partial class IconStudioViewModel : ObservableObject
         </svg>
         """;
 
+    /// <summary>
+    /// A six-digit hex colour, or the accent default.
+    /// </summary>
+    /// <remarks>
+    /// This runs on every keystroke of the colour boxes - twice, since two colours are rendered -
+    /// and used <c>Regex.IsMatch</c> with a pattern that is not constant, so the regex engine was
+    /// re-parsing the pattern on each call. A GeneratedRegex is compiled once.
+    /// </remarks>
     private static string SafeColor(string color) =>
-        System.Text.RegularExpressions.Regex.IsMatch(color, @"^#[0-9A-Fa-f]{6}$") ? color : "#4F8CFF";
+        HexColor().IsMatch(color) ? color : "#4F8CFF";
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^#[0-9A-Fa-f]{6}$")]
+    private static partial System.Text.RegularExpressions.Regex HexColor();
 }
 
 public sealed record IconTemplate(string Name, string Shape);

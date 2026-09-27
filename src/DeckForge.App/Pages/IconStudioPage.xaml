@@ -63,8 +63,14 @@
                                     MaxLength="3" />
 
                         <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                            <!--
+                                HasWorkspace drives the state of this button but was never bound,
+                                so "Save to workspace" was clickable with no workspace open and
+                                only failed once pressed.
+                            -->
                             <ui:Button Content="Save to workspace" Appearance="Primary"
-                                       Command="{Binding SaveToWorkspaceCommand}" />
+                                       Command="{Binding SaveToWorkspaceCommand}"
+                                       IsEnabled="{Binding HasWorkspace}" />
                             <ui:Button Content="Save as..." Margin="8,0,0,0"
                                        Command="{Binding SaveAsCommand}" />
                         </StackPanel>
