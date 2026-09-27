@@ -77,17 +77,14 @@ public static class IntegrationPatcher
                 "No using directive found; add `using " + @namespace + ";` by hand.");
         }
 
-        var lineStart = source.LastIndexOf('\n', Math.Max(directive - 1, 0)) + 1;
-        var lineEnd = source.IndexOf('\n', directive);
-        if (lineEnd < 0)
-        {
-            lineEnd = source.Length;
-        }
-
-        var indent = source[lineStart..directive];
-        var insertion = $"{indent}using {@namespace};" + Environment.NewLine;
+        // FirstUsingDirective already returns a line start, but keep the derivation local so a
+        // future change to that helper cannot silently turn an insert into a replace. Splicing
+        // from lineStart to lineEnd would overwrite the first directive, and every added
+        // capability would delete an import the previous one needed.
+        var lineStart = directive;
+        var insertion = $"using {@namespace};" + Environment.NewLine;
         return new SourcePatch(PatchOutcome.Patched,
-            string.Concat(source.AsSpan(0, lineStart), insertion, source.AsSpan(lineEnd)),
+            string.Concat(source.AsSpan(0, lineStart), insertion, source.AsSpan(lineStart)),
             $"Added using {@namespace};.");
     }
 
@@ -102,11 +99,13 @@ public static class IntegrationPatcher
                 lineEnd = source.Length;
             }
 
-            var line = source[offset..lineEnd];
-            var trimmed = line.AsSpan().TrimStart();
-            if (trimmed.StartsWith("using ", StringComparison.Ordinal) && trimmed.EndsWith(";", StringComparison.Ordinal))
+            // Trim both ends, not just the start. A CRLF file leaves a \r at the end of every
+            // line, and a test for EndsWith(";") then fails on every directive in the file - which
+            // is why the first capability could be added and the second reported "add this by hand".
+            var line = source.AsSpan(offset, lineEnd - offset).Trim();
+            if (line.StartsWith("using ", StringComparison.Ordinal) && line.EndsWith(";", StringComparison.Ordinal))
             {
-                return offset + (line.Length - trimmed.Length);
+                return offset;
             }
 
             offset = lineEnd + 1;
@@ -116,44 +115,78 @@ public static class IntegrationPatcher
     }
 
     /// <summary>Adds an interface to the integration's base list.</summary>
+    /// <remarks>
+    /// The base list is parsed rather than matched as a fixed string. Matching
+    /// <c>"public sealed class PluginIntegration : IPluginIntegration"</c> works exactly once: the
+    /// moment a second interface is added the anchor no longer appears, so every subsequent
+    /// capability reported "add this by hand" against a class it had just edited itself.
+    /// </remarks>
     public static SourcePatch AddInterface(string source, string interfaceName)
     {
-        if (RegexContainsInterface(source, interfaceName))
+        var classIndex = source.IndexOf("public sealed class PluginIntegration", StringComparison.Ordinal);
+        if (classIndex < 0)
+        {
+            return new SourcePatch(PatchOutcome.AnchorMissing, source,
+                "Could not find the integration class declaration; add " + interfaceName + " to it by hand.");
+        }
+
+        var body = source.IndexOf('{', classIndex);
+        if (body < 0)
+        {
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "The integration class has no body.");
+        }
+
+        // The declaration runs from the class keyword to the opening brace of the body.
+        var colon = source.IndexOf(':', classIndex);
+        if (colon < 0 || colon > body)
+        {
+            return new SourcePatch(PatchOutcome.AnchorMissing, source,
+                "The integration class declares no base list; add " + interfaceName + " by hand.");
+        }
+
+        var raw = source[colon..body];
+        var list = raw.TrimEnd();
+        if (list.Contains(interfaceName, StringComparison.Ordinal))
         {
             return new SourcePatch(PatchOutcome.AlreadyPresent, source, $"Already implements {interfaceName}.");
         }
 
-        if (!source.Contains(IntegrationClassAnchor, StringComparison.Ordinal))
-        {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source,
-                $"Could not find '{IntegrationClassAnchor}'; add {interfaceName} to the class declaration by hand.");
-        }
-
-        var updated = source.Replace(
-            IntegrationClassAnchor,
-            $"public sealed class PluginIntegration : IPluginIntegration, {interfaceName}",
-            StringComparison.Ordinal);
+        // Insert at the end of the trimmed list, not at the brace. The stock template puts the
+        // opening brace on the next line, so appending at `body` lands the interface after the
+        // newline and produces `IPluginIntegration\n , IVariableProvider{` - which is valid C#
+        // but reads as though a generator mangled the file.
+        var insertAt = colon + list.Length;
+        var separator = raw.Length == list.Length ? " " : " ";
+        var updated = string.Concat(
+            source.AsSpan(0, insertAt),
+            separator + ", " + interfaceName,
+            source.AsSpan(insertAt));
         return new SourcePatch(PatchOutcome.Patched, updated, $"Integration now implements {interfaceName}.");
     }
 
-    /// <summary>True when the integration already declares the named interface.</summary>
-    public static bool RegexContainsInterface(string source, string interfaceName)
+    /// <summary>The interfaces the integration class currently declares, base list only.</summary>
+    public static IReadOnlyList<string> DeclaredInterfaces(string source)
     {
-        // The anchor already lists IPluginIntegration, so a plain Contains would report that one
-        // as present. Check the base list specifically.
-        var index = source.IndexOf("public sealed class PluginIntegration", StringComparison.Ordinal);
-        if (index < 0)
+        var classIndex = source.IndexOf("public sealed class PluginIntegration", StringComparison.Ordinal);
+        if (classIndex < 0)
         {
-            return false;
+            return [];
         }
 
-        var end = source.IndexOf('\n', index);
-        if (end < 0)
+        var body = source.IndexOf('{', classIndex);
+        var colon = source.IndexOf(':', classIndex);
+        if (body < 0 || colon < 0 || colon > body)
         {
-            end = source.Length;
+            return [];
         }
 
-        return source[index..end].Contains(interfaceName, StringComparison.Ordinal);
+        return
+        [
+            .. source[colon..body]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(part => part.Trim())
+                .Where(part => part.Length > 0),
+        ];
     }
 
     /// <summary>Appends an action to the integration's Actions collection.</summary>

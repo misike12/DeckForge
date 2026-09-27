@@ -180,6 +180,17 @@ public static class CapabilityCatalog
         Glyph = "\uE9D9",
     };
 
+    public static readonly CapabilityDescriptor Logging = new()
+    {
+        Id = "logging",
+        Name = "Logging",
+        Summary = "Write to the Macro Deck log, and report a standing condition as a resolvable issue.",
+        Category = CapabilityCategory.SetupAndMaintenance,
+        Interface = "MacroDeck.Sdk.Logging.IntegrationLog",
+        DocsPath = "features/logging",
+        Glyph = "\uE9D5",
+    };
+
     public static readonly CapabilityDescriptor Devices = new()
     {
         Id = "devices",
@@ -269,7 +280,7 @@ public static class CapabilityCatalog
         Actions, ButtonStates, ButtonIcons,
         Variables, Events, Messaging,
         DeckNavigation, MusicPlayers, Weather, VirtualProfiles,
-        ConfigFlows, IntegrationIssues, SettingsMigrations, Localization, Testing,
+        ConfigFlows, IntegrationIssues, SettingsMigrations, Localization, Testing, Logging,
         Devices, Layouts, AndroidDevices, MacroDeckUi, WidgetTypes, FolderViews, Screensavers,
     ];
 
