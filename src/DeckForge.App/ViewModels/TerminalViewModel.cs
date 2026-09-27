@@ -283,39 +283,14 @@ public partial class TerminalViewModel : ObservableObject
         }
     }
 
-    private static string[] SplitCommandLine(string commandLine)
-    {
-        var result = new List<string>();
-        var current = new System.Text.StringBuilder();
-        var inQuotes = false;
-        foreach (var c in commandLine)
-        {
-            if (c == '"')
-            {
-                inQuotes = !inQuotes;
-            }
-            else if (c == ' ' && !inQuotes)
-            {
-                if (current.Length > 0)
-                {
-                    result.Add(current.ToString());
-                    current.Clear();
-                }
-            }
-            else
-            {
-                current.Append(c);
-            }
-        }
-        if (current.Length > 0)
-        {
-            result.Add(current.ToString());
-        }
-        return [.. result];
-    }
+    /// <summary>
+    /// Splits a command line for the console.
+    /// </summary>
+    /// <remarks>
+    /// This used to be a byte-for-byte copy of the one in <c>ProcessRunner</c>, with the same
+    /// faults: no escapes, and every empty argument dropped, so <c>--filter ""</c> disappeared.
+    /// Both now call the one implementation so a fix lands in both places.
+    /// </remarks>
+    private static string[] SplitCommandLine(string commandLine) =>
+        [.. ProcessRunner.SplitCommandLine(commandLine)];
 }
-
-public sealed record TerminalLine(string Text, bool IsCommand = false, bool IsError = false);
-
-/// <summary>One documented built-in command.</summary>
-public sealed record TerminalCommandDoc(string Name, string Explanation);
