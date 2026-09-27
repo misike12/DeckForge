@@ -74,6 +74,35 @@ public static class ResxMerger
         return true;
     }
 
+    /// <summary>
+    /// Renames a key in place, keeping its value and its position in the file. Returns true when
+    /// the file changed.
+    /// </summary>
+    /// <remarks>
+    /// The attribute is set rather than the element replaced, because replacing it would move the
+    /// key to the end of the file and lose the hand-ordered grouping most resx files rely on.
+    /// Renaming onto a key that already exists is refused rather than silently merging two strings.
+    /// </remarks>
+    public static bool RenameKey(string path, string oldKey, string newKey)
+    {
+        var doc = Load(path);
+        var data = FindData(doc, oldKey);
+        if (data is null)
+        {
+            return false;
+        }
+
+        if (HasData(doc, newKey))
+        {
+            throw new InvalidOperationException(
+                $"'{newKey}' already exists in {Path.GetFileName(path)}; rename would discard one of them.");
+        }
+
+        data.SetAttributeValue("name", newKey);
+        Save(doc, path);
+        return true;
+    }
+
     /// <summary>Reads all data entries as key -> value.</summary>
     public static IReadOnlyDictionary<string, string> ReadKeys(string path)
     {

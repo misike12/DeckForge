@@ -51,9 +51,21 @@
 
             <!-- Translation editor -->
             <Border Grid.Column="2" Style="{StaticResource LiquidCard}">
-                <DockPanel DataContext="{Binding SelectedKey}">
-                    <TextBlock DockPanel.Dock="Top" Text="{Binding Key, FallbackValue='Select a key'}"
-                               FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8" />
+                <DockPanel>
+                    <!--
+                        Rename lives here rather than on the key list: it acts on the selected key
+                        across every resx, and there was no way to do it at all. AddKey produced
+                        Custom.Key1, Custom.Key2 and so on with nothing to correct them.
+                    -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding SelectedKey.Key, FallbackValue='Select a key'}"
+                                   FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <ui:TextBox x:Name="RenameBox" Margin="10,0,0,0" Width="200"
+                                    PlaceholderText="new key name" />
+                        <ui:Button Content="Rename" Margin="8,0,0,0"
+                                   Click="Rename_Click" />
+                    </StackPanel>
+                    <ContentControl DockPanel.Dock="Top" DataContext="{Binding SelectedKey}">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Translations}">
                             <ItemsControl.ItemTemplate>
@@ -61,7 +73,15 @@
                                     <StackPanel Margin="0,6">
                                         <TextBlock FontSize="12" FontWeight="Medium">
                                             <Run Text="{Binding CultureTag, Mode=OneWay}" />
-                                            <Run Text="  (missing)" Foreground="{DynamicResource Liquid.WarningBrush}" />
+                                            <!--
+                                                Empty once the culture declares the key. A Run has no
+                                                Visibility of its own, so the label comes from the
+                                                row rather than a trigger: it rendered
+                                                unconditionally, and every correctly translated row
+                                                carried a "(missing)" marker in the warning colour.
+                                            -->
+                                            <Run Text="{Binding MissingLabel, Mode=OneWay}"
+                                                  Foreground="{DynamicResource Liquid.WarningBrush}" />
                                         </TextBlock>
                                         <ui:TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                     PlaceholderText="Translation..." />
@@ -73,6 +93,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
+                    </ContentControl>
                 </DockPanel>
             </Border>
 

@@ -20,4 +20,7 @@ public partial class LocalizationPage : Page, IRefreshOnNavigate
 
     private void OpenDocs_Click(object sender, RoutedEventArgs e) =>
         ShellMessenger.NavigateTo("docs::features/localization");
+
+    private void Rename_Click(object sender, RoutedEventArgs e) =>
+        _vm.RenameKeyCommand.Execute(RenameBox.Text);
 }
