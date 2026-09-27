@@ -1,16 +1,25 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeckForge.App.Services;
-using DeckForge.CodeGen.Generation;
+using DeckForge.Core.Code;
 using DeckForge.Core.Workspace;
 
 namespace DeckForge.App.ViewModels;
 
 /// <summary>One row in the parameter designer.</summary>
-public partial class ParameterSpec : ObservableObject
+/// <remarks>
+/// Every field here is reachable from the designer. The previous version carried eleven fields
+/// of which the XAML bound five, so <c>Range</c>, <c>Options</c>, <c>Description</c>,
+/// <c>Placeholder</c> and both <c>OnlyWhen</c> fields could be set in the generator but never in
+/// the UI.
+/// </remarks>
+public partial class ParameterSpec : ParameterSpecBase
 {
+    protected override string EditorTypeValue => EditorType;
+
     [ObservableProperty]
     private string _name = "value";
 
@@ -39,13 +48,98 @@ public partial class ParameterSpec : ObservableObject
     [ObservableProperty]
     private string _onlyWhenValue = "";
 
-    /// <summary>For Slider/Number: min;max;step.</summary>
+    /// <summary>For Slider/Number/Duration: minimum.</summary>
     [ObservableProperty]
-    private string _range = "0;100;1";
+    private string _minimum = "";
 
-    /// <summary>For Choice/MultiSelect: one option per line "value=Label".</summary>
+    /// <summary>For Slider/Number/Duration: maximum.</summary>
+    [ObservableProperty]
+    private string _maximum = "100";
+
+    /// <summary>For Slider/Number: step.</summary>
+    [ObservableProperty]
+    private string _step = "1";
+
+    /// <summary>For Choice/MultiSelect/Autocomplete: one option per line "value=Label".</summary>
     [ObservableProperty]
     private string _options = "option1=First\noption2=Second";
+
+    /// <summary>For DynamicChoice/Autocomplete/MultiSelect: the named source to resolve from.</summary>
+    [ObservableProperty]
+    private string _optionsSourceId = "";
+
+    /// <summary>For File: comma-separated extension filter, e.g. <c>.png,.jpg</c>.</summary>
+    [ObservableProperty]
+    private string _fileExtensions = "";
+
+    /// <summary>For Code: the language identifier.</summary>
+    [ObservableProperty]
+    private string _language = "csharp";
+
+    /// <summary>For Text: a validation pattern.</summary>
+    [ObservableProperty]
+    private string _validationRegex = "";
+
+    /// <summary>For Text/MultilineText: a maximum length.</summary>
+    [ObservableProperty]
+    private string _maxLength = "";
+
+    [ObservableProperty]
+    private bool _autoPrefixHttps;
+
+    [ObservableProperty]
+    private bool _supportsReset;
+
+    [ObservableProperty]
+    private bool _literalOnly;
+
+    /// <summary>For WidgetTarget: whether the widget may target itself.</summary>
+    [ObservableProperty]
+    private bool _allowSelf = true;
+
+    /// <summary>For WidgetTarget: comma-separated widget type ids to narrow the picker.</summary>
+    [ObservableProperty]
+    private string _widgetTypes = "";
+
+    /// <summary>For Object: child parameters, one per line as <c>name|Type|Label</c>.</summary>
+    [ObservableProperty]
+    private string _children = "";
+
+    /// <summary>For Array: the item template as <c>name|Type|Label</c>.</summary>
+    [ObservableProperty]
+    private string _itemTemplate = "";
+
+    partial void OnEditorTypeChanged(string value) => RefreshCapabilities();
+
+    /// <summary>Projects the designer row onto the emitter's model.</summary>
+    public ActionParameterSpec ToSpec() => new()
+    {
+        Name = Name.Trim(),
+        EditorType = EditorType,
+        Label = Label,
+        Description = Description,
+        Placeholder = Placeholder,
+        Required = Required,
+        DefaultValue = DefaultValue,
+        Options = SplitLines(Options).Select(ParameterOption.Parse).Where(o => o.Value.Length > 0).ToList(),
+        Min = Number(Minimum),
+        Max = Number(Maximum),
+        Step = Number(Step),
+        OptionsSourceId = OptionsSourceId.Trim(),
+        FileExtensions = SplitList(FileExtensions),
+        Language = Language,
+        ValidationRegex = ValidationRegex,
+        MaxLength = Int(MaxLength),
+        AutoPrefixHttps = AutoPrefixHttps,
+        SupportsReset = SupportsReset,
+        LiteralOnly = LiteralOnly,
+        AllowSelf = AllowSelf,
+        WidgetTypes = SplitList(WidgetTypes),
+        OnlyWhenParameter = OnlyWhenParameter.Trim(),
+        OnlyWhenValue = OnlyWhenValue,
+        Children = ParseNested(Children),
+        ItemTemplate = ParseNestedItem(ItemTemplate),
+    };
 }
 
 public partial class ActionsEditorViewModel : ObservableObject
@@ -77,14 +171,14 @@ public partial class ActionsEditorViewModel : ObservableObject
 
     public ObservableCollection<ParameterSpec> Parameters { get; } = [];
 
-    public static IReadOnlyList<string> EditorTypes { get; } =
-    [
-        "Text", "MultilineText", "Number", "Slider", "Toggle", "Password", "Secret",
-        "Choice", "DynamicChoice", "Autocomplete", "MultiSelect", "Color", "File",
-        "Folder", "Hotkey", "Duration", "DateTime", "Json", "Code", "KeyValue",
-        "Object", "Array", "IpAddress", "Url", "Icon", "Image", "KeyboardSequence",
-        "KeyboardCombo", "WidgetTarget",
-    ];
+    /// <summary>Every editor type the SDK declares, in SDK order.</summary>
+    public static IReadOnlyList<string> EditorTypes => ActionParameterTypes.Names;
+
+    /// <summary>The capability table, for the designer's help text.</summary>
+    public static IReadOnlyList<ActionParameterTypeInfo> EditorTypeDetails => ActionParameterTypes.All;
+
+    /// <summary>The parameter names in use, so the designer can offer a OnlyWhen picker.</summary>
+    public IReadOnlyList<string> ParameterNames => [.. Parameters.Select(p => p.Name)];
 
     public void Load() => HasWorkspace = _workspaces.Current is not null;
 
@@ -104,6 +198,7 @@ public partial class ActionsEditorViewModel : ObservableObject
         if (parameter is not null)
         {
             Parameters.Remove(parameter);
+            OnPropertyChanged(nameof(ParameterNames));
         }
     }
 
@@ -117,43 +212,76 @@ public partial class ActionsEditorViewModel : ObservableObject
             StatusText = "Open a plugin first.";
             return;
         }
+
         if (!Core.Utils.MacroDeckRules.IsValidLocalId(ActionId))
         {
-            StatusText = "Action id must be lowercase kebab-case (it is persisted - choose carefully).";
+            StatusText = "Action id must be lowercase kebab-case and at most 64 characters (it is persisted - choose carefully).";
+            return;
+        }
+
+        if (Parameters.Count == 0)
+        {
+            StatusText = "Add at least one parameter, or the action cannot be configured.";
+            return;
+        }
+
+        // A parameter name is the wire identity of a configured value: the host persists it and
+        // every existing button that uses this action keeps referring to it. Duplicates, blanks
+        // and illegal characters are refused up front rather than emitting code that will not bind.
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var parameter in Parameters)
+        {
+            var name = parameter.Name.Trim();
+            if (name.Length == 0)
+            {
+                StatusText = "Every parameter needs a name.";
+                return;
+            }
+
+            if (!Core.Utils.MacroDeckRules.IsValidLocalId(name))
+            {
+                StatusText = $"Parameter name '{name}' must be lowercase kebab-case (it is the persisted wire name).";
+                return;
+            }
+
+            if (!seen.Add(name))
+            {
+                StatusText = $"Parameter name '{name}' is used twice.";
+                return;
+            }
+        }
+
+        foreach (var parameter in Parameters)
+        {
+            if (!ActionParameterTypes.IsKnown(parameter.EditorType))
+            {
+                StatusText = $"Unknown editor type '{parameter.EditorType}'.";
+                return;
+            }
+        }
+
+        var className = CSharpCode.ToPascal(ActionId) + "Action";
+        var path = Path.Combine(ws.PluginProjectDirectory, className + ".cs");
+        if (File.Exists(path))
+        {
+            StatusText = $"{className}.cs already exists - delete it first or change the action id.";
             return;
         }
 
         try
         {
-            var className = ToPascal(ActionId) + "Action";
-            var source = RenderAction(ws.ProjectName, className);
-            var path = Path.Combine(ws.PluginProjectDirectory, className + ".cs");
+            var source = RenderAction(className);
             File.WriteAllText(path, source);
 
-            // resx keys for name/description/labels.
             var stringsPath = Path.Combine(ws.LocalizationDirectory, "Strings.resx");
-            var entries = new Dictionary<string, string>
-            {
-                [$"Actions.{ToPascal(ActionId)}.Name"] = ActionName,
-                [$"Actions.{ToPascal(ActionId)}.Description"] = ActionDescription,
-            };
-            foreach (var parameter in Parameters)
-            {
-                entries[$"Actions.{ToPascal(ActionId)}.{ToPascal(parameter.Name)}.Label"] = parameter.Label;
-                if (!string.IsNullOrWhiteSpace(parameter.Description))
-                {
-                    entries[$"Actions.{ToPascal(ActionId)}.{ToPascal(parameter.Name)}.Description"] = parameter.Description;
-                }
-                if (!string.IsNullOrWhiteSpace(parameter.Placeholder))
-                {
-                    entries[$"Actions.{ToPascal(ActionId)}.{ToPascal(parameter.Name)}.Placeholder"] = parameter.Placeholder;
-                }
-            }
+            var entries = BuildStringEntries();
             _resx.AddKeys(stringsPath, entries);
 
-            RegisterInIntegration(ws, className);
+            var registered = RegisterInIntegration(ws, className);
 
-            StatusText = $"Generated {className}.cs, resx keys and registration. Build & Run to try it.";
+            StatusText = registered
+                ? $"Generated {className}.cs with {Parameters.Count} parameter(s), {entries.Count} resx keys, and registered it in PluginIntegration.cs."
+                : $"Generated {className}.cs with {Parameters.Count} parameter(s) and {entries.Count} resx keys, but PluginIntegration.cs could not be patched - add `new {className}(logger)` to the Actions list by hand.";
         }
         catch (Exception ex)
         {
@@ -161,10 +289,43 @@ public partial class ActionsEditorViewModel : ObservableObject
         }
     }
 
-    private string RenderAction(string projectName, string className)
+    private Dictionary<string, string> BuildStringEntries()
     {
-        var ns = projectName;
+        var group = $"Actions.{CSharpCode.ToPascal(ActionId)}";
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [$"{group}.Name"] = ActionName,
+            [$"{group}.Description"] = ActionDescription,
+        };
+
+        // Parameters live under their own `Parameters` group rather than as siblings of Name and
+        // Description. A sibling group is what trips the SDK's own MDLOC008 diagnostic when a
+        // parameter happens to be called "Name" or "Description", because the key is then both a
+        // leaf and the group other keys nest under.
+        foreach (var parameter in Parameters)
+        {
+            var key = $"{group}.Parameters.{CSharpCode.ToPascal(parameter.Name)}";
+            entries[$"{key}.Label"] = parameter.Label;
+            if (!string.IsNullOrWhiteSpace(parameter.Description))
+            {
+                entries[$"{key}.Description"] = parameter.Description;
+            }
+
+            if (!string.IsNullOrWhiteSpace(parameter.Placeholder))
+            {
+                entries[$"{key}.Placeholder"] = parameter.Placeholder;
+            }
+        }
+
+        return entries;
+    }
+
+    private string RenderAction(string className)
+    {
+        var ns = CSharpCode.Identifier(CSharpCode.ToPascal(ActionId));
+        var stem = CSharpCode.ToPascal(ActionId);
         var sb = new System.Text.StringBuilder();
+
         sb.AppendLine("using MacroDeck.Localization;");
         sb.AppendLine("using MacroDeck.Sdk;");
         sb.AppendLine("using MacroDeck.Sdk.Actions;");
@@ -173,8 +334,8 @@ public partial class ActionsEditorViewModel : ObservableObject
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
         sb.AppendLine("/// <summary>");
-        sb.AppendLine($"/// {EscapeXml(ActionName)} - generated by DeckForge Actions editor.");
-        sb.AppendLine("/// Extend the executor below with the real work; the parameter plumbing is done.");
+        sb.AppendLine($"/// {CSharpCode.Xml(ActionName)} - generated by DeckForge's Actions editor.");
+        sb.AppendLine("/// The parameter plumbing is complete; replace the body of ExecuteAsync with the real work.");
         sb.AppendLine("/// </summary>");
         sb.AppendLine($"public sealed class {className} : IActionDefinition");
         sb.AppendLine("{");
@@ -182,98 +343,29 @@ public partial class ActionsEditorViewModel : ObservableObject
         sb.AppendLine();
         sb.AppendLine($"    public {className}(ILogger logger) => _logger = logger.ForContext<{className}>();");
         sb.AppendLine();
-        sb.AppendLine($"    public string Id => \"{ActionId}\";");
+        sb.AppendLine($"    public string Id => {CSharpCode.StringLiteral(ActionId)};");
         sb.AppendLine();
-        sb.AppendLine($"    public LocalizedText Name => Strings.Actions.{ToPascal(ActionId)}.Name();");
+        sb.AppendLine($"    public LocalizedText Name => Strings.Actions.{stem}.Name();");
         sb.AppendLine();
-        sb.AppendLine($"    public LocalizedText Description => Strings.Actions.{ToPascal(ActionId)}.Description();");
+        sb.AppendLine($"    public LocalizedText Description => Strings.Actions.{stem}.Description();");
         sb.AppendLine();
         sb.AppendLine("    public IReadOnlyList<ActionParameter> Parameters { get; } =");
         sb.AppendLine("    [");
+
         foreach (var parameter in Parameters)
         {
-            var key = $"Actions.{ToPascal(ActionId)}.{ToPascal(parameter.Name)}";
-            var args = new List<string>
+            var spec = parameter.ToSpec();
+            var key = $"Strings.Actions.{stem}.Parameters.{CSharpCode.ToPascal(spec.Name)}";
+            var call = ActionParameterFactory.Emit(spec, property => $"{key}.{property}()");
+
+            if (!string.IsNullOrWhiteSpace(spec.OnlyWhenParameter))
             {
-                $"\"{parameter.Name}\"",
-            };
-            var factoryArgs = new List<string>();
-            if (parameter.EditorType is "Slider" or "Number")
-            {
-                var range = parameter.Range.Split(';');
-                var min = range.Length > 0 ? range[0] : "0";
-                var max = range.Length > 1 ? range[1] : "100";
-                var step = range.Length > 2 ? range[2] : "1";
-                factoryArgs.Add($"{min}");
-                factoryArgs.Add($"{max}");
-                if (parameter.EditorType == "Slider")
-                {
-                    factoryArgs.Add(step);
-                }
-            }
-            if (parameter.EditorType is "Choice" or "MultiSelect")
-            {
-                var options = parameter.Options.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(line =>
-                    {
-                        var parts = line.Split('=', 2);
-                        var value = parts[0].Trim();
-                        var label = parts.Length > 1 ? parts[1].Trim() : value;
-                        return $"new ActionParameterOption {{ Value = \"{value}\", Label = \"{label}\" }}";
-                    });
-                factoryArgs.Add($"[{string.Join(", ", options)}]");
-            }
-            if (parameter.EditorType is "Duration")
-            {
-                factoryArgs.Add("defaultMilliseconds: 5000");
-            }
-            factoryArgs.Add($"label: Strings.{key}.Label()");
-            if (!string.IsNullOrWhiteSpace(parameter.Description))
-            {
-                factoryArgs.Add($"description: Strings.{key}.Description()");
-            }
-            if (!string.IsNullOrWhiteSpace(parameter.Placeholder))
-            {
-                factoryArgs.Add($"placeholder: Strings.{key}.Placeholder()");
-            }
-            if (parameter.Required)
-            {
-                factoryArgs.Add("required: true");
-            }
-            if (!string.IsNullOrWhiteSpace(parameter.DefaultValue))
-            {
-                var defaultValue = parameter.EditorType is "Number" or "Slider"
-                    ? parameter.DefaultValue
-                    : $"\"{parameter.DefaultValue}\"";
-                factoryArgs.Add($"defaultValue: {defaultValue}");
+                call += $".OnlyWhen({CSharpCode.StringLiteral(spec.OnlyWhenParameter)}, {CSharpCode.StringLiteral(spec.OnlyWhenValue)})";
             }
 
-            var factoryCall = parameter.EditorType switch
-            {
-                "Slider" => $"ActionParameter.Slider({string.Join(", ", factoryArgs)})",
-                "Number" => $"ActionParameter.Number({string.Join(", ", factoryArgs)})",
-                "Toggle" => $"ActionParameter.Toggle({string.Join(", ", factoryArgs)})",
-                "Choice" => $"ActionParameter.Choice({string.Join(", ", factoryArgs)})",
-                "MultiSelect" => $"ActionParameter.MultiSelect({string.Join(", ", factoryArgs)})",
-                "MultilineText" => $"ActionParameter.MultilineText({string.Join(", ", factoryArgs)})",
-                "Duration" => $"ActionParameter.Duration({string.Join(", ", factoryArgs)})",
-                "Url" => $"ActionParameter.Url({string.Join(", ", factoryArgs)})",
-                "IpAddress" => $"ActionParameter.IpAddress({string.Join(", ", factoryArgs)})",
-                "Json" => $"ActionParameter.Json({string.Join(", ", factoryArgs)})",
-                "Code" => $"ActionParameter.Code({string.Join(", ", factoryArgs)})",
-                "Color" => $"ActionParameter.Color({string.Join(", ", factoryArgs)})",
-                _ => $"ActionParameter.{parameter.EditorType}({string.Join(", ", factoryArgs)})",
-            };
-
-            if (!string.IsNullOrWhiteSpace(parameter.OnlyWhenParameter))
-            {
-                sb.AppendLine($"        {factoryCall}.OnlyWhen(\"{parameter.OnlyWhenParameter}\", \"{parameter.OnlyWhenValue}\"),");
-            }
-            else
-            {
-                sb.AppendLine($"        {factoryCall},");
-            }
+            sb.AppendLine($"        {call},");
         }
+
         sb.AppendLine("    ];");
         sb.AppendLine();
         sb.AppendLine("    public MacroDeckPlatform Platforms => MacroDeckPlatform.All;");
@@ -286,53 +378,95 @@ public partial class ActionsEditorViewModel : ObservableObject
         sb.AppendLine();
         sb.AppendLine("        public Executor(ILogger logger) => _logger = logger;");
         sb.AppendLine();
-        sb.AppendLine("        public Task<ActionResult> ExecuteAsync(ActionExecutionContext context)");
+        // async unconditionally, so a later Block Programmer save that injects an await - Task.Delay,
+        // an HTTP call, a folder change - cannot land a bare await in a non-async method.
+        sb.AppendLine("        public async Task<ActionResult> ExecuteAsync(ActionExecutionContext context)");
         sb.AppendLine("        {");
-        sb.AppendLine("            // TODO: implement the real work. Read parameters:");
-        foreach (var parameter in Parameters.Take(3))
+        sb.AppendLine("            // TODO: implement the real work. The configured values are:");
+        foreach (var parameter in Parameters)
         {
-            sb.AppendLine($"            // context.Parameters.TryGetValue(\"{parameter.Name}\", out var {parameter.Name});");
+            var local = CSharpCode.Identifier(parameter.Name.Trim());
+            sb.AppendLine($"            //     {CSharpCode.StringLiteral(parameter.Name.Trim())} -> context.Parameters.TryGetValue({CSharpCode.StringLiteral(parameter.Name.Trim())}, out var {local});");
         }
-        sb.AppendLine("            _logger.Information(\"Action " + ActionId + " executed\");");
-        sb.AppendLine("            return ActionResult.SucceededTask;");
+
+        sb.AppendLine();
+        sb.AppendLine("            // Parameters is IReadOnlyDictionary<string, object>, so a value is never null:");
+        sb.AppendLine("            // narrow it yourself (value as string, Convert.ToDouble, and so on).");
+        sb.AppendLine("            //");
+        sb.AppendLine("            // context.CancellationToken is already cancelled when the flow is aborted, so forward it.");
+        sb.AppendLine("            await Task.CompletedTask;");
+        sb.AppendLine();
+        sb.AppendLine($"            _logger.Information(\"Action {CSharpCode.EscapeLiteralBody(ActionId)} executed\");");
+        sb.AppendLine("            return ActionResult.Success();");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
         return sb.ToString();
     }
 
-    private void RegisterInIntegration(WorkspaceContext ws, string className)
+    /// <summary>Appends the new action to the integration's Actions list. Returns false when it could not.</summary>
+    private bool RegisterInIntegration(WorkspaceContext ws, string className)
     {
         var path = Path.Combine(ws.PluginProjectDirectory, "PluginIntegration.cs");
         if (!File.Exists(path))
         {
-            return;
+            return false;
         }
+
         var source = File.ReadAllText(path);
         if (source.Contains(className, StringComparison.Ordinal))
         {
-            return;
+            return true;
         }
+
+        // The stock template's anchor, used verbatim.
         var anchor = "Actions = [new LogMessageAction(logger)];";
         if (source.Contains(anchor, StringComparison.Ordinal))
         {
-            source = source.Replace(anchor, $"Actions = [new LogMessageAction(logger), new {className}(logger)];");
+            source = source.Replace(
+                anchor,
+                $"Actions = [new LogMessageAction(logger), new {className}(logger)];",
+                StringComparison.Ordinal);
+            File.WriteAllText(path, source);
+            return true;
         }
-        else
+
+        // Otherwise splice into the existing collection expression by bracket matching, so a
+        // renamed or hand-extended list still works. IndexOf(']', -1) used to throw here.
+        var open = source.IndexOf("Actions = [", StringComparison.Ordinal);
+        if (open < 0)
         {
-            var actionsAnchor = "Actions = [";
-            var idx = source.IndexOf(actionsAnchor, StringComparison.Ordinal);
-            var close = source.IndexOf(']', idx);
-            source = source.Insert(close, $", new {className}(logger)");
+            return false;
         }
+
+        var depth = 0;
+        var close = -1;
+        for (var i = source.IndexOf('[', open); i >= 0 && i < source.Length; i++)
+        {
+            if (source[i] == '[')
+            {
+                depth++;
+            }
+            else if (source[i] == ']')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    close = i;
+                    break;
+                }
+            }
+        }
+
+        if (close < 0)
+        {
+            return false;
+        }
+
+        var before = source[..close].TrimEnd();
+        var needsComma = before.EndsWith(']') ? false : !before.EndsWith('[');
+        source = source.Insert(close, $"{(needsComma ? ", " : string.Empty)}new {className}(logger)");
         File.WriteAllText(path, source);
+        return true;
     }
-
-    private static string ToPascal(string kebab)
-    {
-        var parts = kebab.Split('-', StringSplitOptions.RemoveEmptyEntries);
-        return string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
-    }
-
-    private static string EscapeXml(string s) => System.Security.SecurityElement.Escape(s) ?? s;
 }
