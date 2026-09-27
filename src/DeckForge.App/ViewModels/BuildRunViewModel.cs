@@ -89,7 +89,7 @@ public partial class BuildRunViewModel : ObservableObject
         Directory.CreateDirectory(Workspace.ArtifactsDirectory);
         await RunStreamingAsync(
             "macrodeck-plugin build --output artifacts",
-            () => _cli.BuildAsync(Workspace.PluginProjectDirectory, Workspace.ArtifactsDirectory, null, ct));
+            () => _cli.BuildAsync(Workspace.PluginProjectDirectory, Workspace.ArtifactsDirectory, null, true, ct));
     }
 
     /// <summary>Run-console v2: pokes a reserved plugin endpoint and prints the response.</summary>

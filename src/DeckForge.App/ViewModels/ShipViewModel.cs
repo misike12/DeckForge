@@ -37,6 +37,21 @@ public partial class ShipViewModel : ObservableObject
     [ObservableProperty]
     private string _artifactPath = "";
 
+    /// <summary>
+    /// The certificate the Creator Portal issued, as an absolute path. A key pair is not a
+    /// certificate: <c>keygen</c> produces one and says so, and the Portal issues the other.
+    /// </summary>
+    [ObservableProperty]
+    private string _certificatePath = "";
+
+    /// <summary>The detached signature the Portal issued alongside the certificate.</summary>
+    [ObservableProperty]
+    private string _certificateSignaturePath = "";
+
+    /// <summary>The key name <c>keygen</c> was asked for, which decides the two file names.</summary>
+    [ObservableProperty]
+    private string _keyName = MacroDeckCli.DefaultKeyName;
+
     public ObservableCollection<string> OutputLines { get; } = [];
 
     private WorkspaceContext? Workspace => _workspaces.Current;
@@ -57,17 +72,27 @@ public partial class ShipViewModel : ObservableObject
             {
                 Append(line.TrimEnd('\r'));
             }
-            StatusText = result.Succeeded ? $"{label} OK" : $"{label} FAILED ({result.ExitCode})";
+
+            StatusText = result.Succeeded
+                ? $"{label} OK"
+                : $"{label} FAILED ({result.ExitCode}): {MacroDeckCli.ExplainExitCode(result.ExitCode)}";
         }
         catch (System.ComponentModel.Win32Exception)
         {
             StatusText = $"{label} failed: macrodeck-plugin not found on PATH.";
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled run is a user action, not a failure worth a crash-log entry.
+            StatusText = $"{label} cancelled.";
         }
         finally
         {
             IsBusy = false;
         }
     }
+
+    private string? FindNewestArtifactUnchanged() => FindNewestArtifact();
 
     [RelayCommand]
     private async Task PackageAsync(CancellationToken ct)
@@ -76,9 +101,10 @@ public partial class ShipViewModel : ObservableObject
         {
             return;
         }
+
         Directory.CreateDirectory(Workspace.ArtifactsDirectory);
         await RunStepAsync("macrodeck-plugin build (publish + pack)",
-            () => _cli.BuildAsync(Workspace.PluginProjectDirectory, Workspace.ArtifactsDirectory, null, ct));
+            () => _cli.BuildAsync(Workspace.PluginProjectDirectory, Workspace.ArtifactsDirectory, null, true, ct));
         var artifact = FindNewestArtifact();
         if (artifact is not null)
         {
@@ -110,7 +136,8 @@ public partial class ShipViewModel : ObservableObject
             return;
         }
         ArtifactPath = artifact;
-        await RunStepAsync("macrodeck-plugin inspect", () => _cli.InspectAsync(artifact, "text", ct));
+        await RunStepAsync("macrodeck-plugin inspect",
+            () => _cli.InspectAsync(artifact, "text", false, ct));
     }
 
     [RelayCommand]
@@ -122,31 +149,85 @@ public partial class ShipViewModel : ObservableObject
             StatusText = "Package first - no artifact found.";
             return;
         }
-        await RunStepAsync("macrodeck-plugin verify (Store-signed or creator-signed)",
-            () => _cli.VerifyAsync(artifact, ct));
+
+        await RunStepAsync("macrodeck-plugin verify",
+            () => _cli.VerifyAsync(artifact, "text", null, ct));
     }
+
+    private string KeysDirectory => Path.GetFullPath(
+        Path.Combine(Workspace?.RootDirectory ?? ".", "creator-keys"));
+
+    /// <summary>The private key <c>keygen</c> writes, or null when it has not been run.</summary>
+    private string? PrivateKeyPath => Path.GetFullPath(MacroDeckCli.KeyPrivatePath(KeysDirectory, KeyName));
+
+    /// <summary>The public key <c>keygen</c> writes, which is what gets submitted to the Portal.</summary>
+    private string? PublicKeyPath => Path.GetFullPath(MacroDeckCli.KeyPublicPath(KeysDirectory, KeyName));
 
     [RelayCommand]
     private async Task GenerateKeyAsync(CancellationToken ct)
     {
-        var keysDir = Path.Combine(Workspace?.RootDirectory ?? ".", "creator-keys");
-        Directory.CreateDirectory(keysDir);
+        if (MacroDeckCli.ReservedKeyNames.Contains(KeyName, StringComparer.OrdinalIgnoreCase))
+        {
+            StatusText = $"'{KeyName}' is a reserved key name. Pick another.";
+            return;
+        }
+
+        Directory.CreateDirectory(KeysDirectory);
         await RunStepAsync("macrodeck-plugin keygen (creator key for out-of-Store distribution)",
-            () => _cli.KeygenAsync(keysDir, ct));
+            () => _cli.KeygenAsync(KeysDirectory, KeyName, ct));
+
+        var publicPath = PublicKeyPath;
+        if (publicPath is not null && File.Exists(publicPath))
+        {
+            StatusText = $"Key pair written. Submit {publicPath} to the Creator Portal; it issues the certificate.";
+        }
     }
 
     [RelayCommand]
     private async Task SignAsync(CancellationToken ct)
     {
         var artifact = ArtifactPath is not "" ? ArtifactPath : FindNewestArtifact();
-        var keysDir = Path.Combine(Workspace?.RootDirectory ?? ".", "creator-keys");
-        var keyPath = Directory.GetFiles(keysDir).FirstOrDefault(f => f.EndsWith(".key", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".pem", StringComparison.OrdinalIgnoreCase));
-        if (artifact is null || keyPath is null)
+        if (artifact is null)
         {
-            StatusText = "Needs an artifact and a creator key (Generate key first).";
+            StatusText = "Package first - no artifact found.";
             return;
         }
-        await RunStepAsync("macrodeck-plugin sign", () => _cli.SignAsync(artifact, keyPath, ct));
+
+        // The tool's contract: sign needs a package, an output path, a certificate, its detached
+        // signature and a private key. All five. The previous version looked for a "*.key" file,
+        // which keygen has never written, so this button could never succeed.
+        var keyPath = PrivateKeyPath;
+        if (keyPath is null || !File.Exists(keyPath))
+        {
+            StatusText = "No creator key yet - run Generate key first.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(CertificatePath) || string.IsNullOrWhiteSpace(CertificateSignaturePath))
+        {
+            StatusText = "Signing needs the certificate the Creator Portal issued. Set the certificate and its "
+                + "signature paths above. The key pair on its own cannot sign anything.";
+            return;
+        }
+
+        if (!File.Exists(CertificatePath))
+        {
+            StatusText = $"No certificate at '{CertificatePath}'.";
+            return;
+        }
+
+        if (!File.Exists(CertificateSignaturePath))
+        {
+            StatusText = $"No certificate signature at '{CertificateSignaturePath}'.";
+            return;
+        }
+
+        var output = Path.Combine(
+            Path.GetDirectoryName(artifact) ?? KeysDirectory,
+            Path.GetFileNameWithoutExtension(artifact) + ".signed" + Path.GetExtension(artifact));
+
+        await RunStepAsync("macrodeck-plugin sign",
+            () => _cli.SignAsync(artifact, output, CertificatePath, CertificateSignaturePath, keyPath, ct: ct));
     }
 
     /// <summary>Packs DeckForge itself with Velopack: setup, portable and delta packages.</summary>

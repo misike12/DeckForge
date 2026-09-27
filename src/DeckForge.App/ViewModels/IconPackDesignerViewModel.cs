@@ -23,10 +23,12 @@ public partial class IconPackEntry : ObservableObject
 public partial class IconPackDesignerViewModel : ObservableObject
 {
     private readonly WorkspaceManager _workspaces;
+    private readonly CliAdapter.Tools.MacroDeckCli _cli;
 
-    public IconPackDesignerViewModel(WorkspaceManager workspaces)
+    public IconPackDesignerViewModel(WorkspaceManager workspaces, CliAdapter.Tools.MacroDeckCli cli)
     {
         _workspaces = workspaces;
+        _cli = cli;
         Services.ShellMessenger.WorkspaceChanged += _ => Load();
     }
 
@@ -170,27 +172,38 @@ public partial class IconPackDesignerViewModel : ObservableObject
             StatusText = "Open a plugin first.";
             return;
         }
-        var packFile = Path.Combine(Path.GetTempPath(), PackId + ".macroDeckIconPack");
-        ExportTo(packFile);
-        if (!File.Exists(packFile))
+
+        if (Icons.Count == 0)
         {
+            StatusText = "Add at least one icon to the pack first.";
             return;
         }
+
+        // Written under the workspace rather than the temp directory, so a failed bundle leaves a
+        // file the user can inspect and a successful one is cleaned up. The previous version
+        // wrote to TEMP and never removed it.
+        var packDirectory = Path.Combine(ws.ArtifactsDirectory, "icon-packs");
+        Directory.CreateDirectory(packDirectory);
+        var packFile = Path.Combine(packDirectory, PackId + ".macroDeckIconPack");
+        ExportTo(packFile);
 
         StatusText = "Bundling via macrodeck-plugin icon-pack add...";
         try
         {
-            var runner = App.Services.GetService(typeof(CliAdapter.Processes.ProcessRunner)) as CliAdapter.Processes.ProcessRunner;
-            var result = await runner!.RunAsync("macrodeck-plugin",
-                ["icon-pack", "add", "--project", ws.PluginProjectDirectory, "--pack", packFile],
-                ws.RootDirectory, null, ct);
+            // The pack path is positional and the project is --source; --project/--pack were both
+            // rejected as unrecognized arguments.
+            var result = await _cli.IconPackAddAsync(packFile, ws.PluginProjectDirectory, key: null, copy: true, force: true, ct);
             StatusText = result.Succeeded
                 ? "Bundled into the plugin - macrodeck-plugin build will carry it."
-                : $"icon-pack add failed ({result.ExitCode}).";
+                : $"icon-pack add failed ({result.ExitCode}): {CliAdapter.Tools.MacroDeckCli.ExplainExitCode(result.ExitCode)}";
         }
         catch (System.ComponentModel.Win32Exception)
         {
             StatusText = "macrodeck-plugin CLI not found on PATH.";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText = "Bundling cancelled.";
         }
     }
 
