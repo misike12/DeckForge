@@ -83,6 +83,11 @@
                        Height="44"
                        Margin="0,16,0,0"
                        Command="{Binding CreateCommand}" />
+            <ui:Button Content="Cancel"
+                       Height="44"
+                       Margin="8,16,0,0"
+                       Command="{Binding Operation.CancelCommand}"
+                       ToolTip="Stop generating the plugin project." />
 
             <TextBlock Text="{Binding CreatedPath}"
                        Foreground="{StaticResource Liquid.SuccessBrush}"

@@ -6,7 +6,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class IconStudioPage : Page
+public partial class IconStudioPage : Page, IRefreshOnNavigate
 {
     private readonly IconStudioViewModel _vm;
     private bool _initialized;

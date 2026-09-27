@@ -34,6 +34,9 @@
                        Command="{Binding TestCommand}" />
             <ui:Button Content="Package" Icon="{ui:SymbolIcon Archive24}" Margin="0,0,8,8"
                        Command="{Binding PackageCommand}" />
+            <ui:Button Content="Cancel" Icon="{ui:SymbolIcon Dismiss24}" Margin="0,0,8,8"
+                       Command="{Binding Operation.CancelCommand}"
+                       ToolTip="Stop the command that is running. A build or a pack otherwise has to be waited out." />
             <Separator Margin="4,4,12,12" />
             <ui:Button Content="/_health" Margin="0,0,8,8" Command="{Binding PokeEndpointCommand}" CommandParameter="_macrodeck/health" />
             <ui:Button Content="/_ready" Margin="0,0,8,8" Command="{Binding PokeEndpointCommand}" CommandParameter="_macrodeck/ready" />

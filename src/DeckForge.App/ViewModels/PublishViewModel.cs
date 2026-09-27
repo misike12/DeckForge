@@ -87,7 +87,14 @@ public partial class PublishViewModel : ObservableObject
     }
 
     /// <summary>Writes the exact release workflow the Creator Portal checks for.</summary>
-    [RelayCommand]
+
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    private CancellableOperation? _operation;
+
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    public CancellableOperation Operation =>
+        _operation ??= new CancellableOperation().Track(CreateReleaseCommand);
+        [RelayCommand]
     private void WriteReleaseWorkflow()
     {
         var ws = _workspaces.Current;

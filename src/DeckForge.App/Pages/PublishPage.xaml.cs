@@ -5,7 +5,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class PublishPage : Page
+public partial class PublishPage : Page, IRefreshOnNavigate
 {
     private readonly PublishViewModel _vm;
 

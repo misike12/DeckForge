@@ -6,7 +6,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class TerminalPage : Page
+public partial class TerminalPage : Page, IRefreshOnNavigate
 {
     private readonly TerminalViewModel _vm;
 

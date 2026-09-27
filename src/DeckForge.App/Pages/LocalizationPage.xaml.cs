@@ -5,7 +5,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class LocalizationPage : Page
+public partial class LocalizationPage : Page, IRefreshOnNavigate
 {
     private readonly LocalizationManagerViewModel _vm;
 

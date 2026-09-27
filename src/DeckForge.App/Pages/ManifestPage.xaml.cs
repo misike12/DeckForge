@@ -6,7 +6,7 @@ using DeckForge.Core.Plugins;
 
 namespace DeckForge.App.Pages;
 
-public partial class ManifestPage : Page
+public partial class ManifestPage : Page, IRefreshOnNavigate
 {
     private readonly ManifestStudioViewModel _vm;
 

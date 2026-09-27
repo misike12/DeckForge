@@ -1,6 +1,7 @@
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DeckForge.App.Services;
 using DeckForge.CodeGen.Generation;
 using DeckForge.Core.Workspace;
 
@@ -100,6 +101,13 @@ public partial class NewProjectViewModel : ObservableObject
             (LinuxX64, "linux-x64"),
         }).Where(p => p.Selected).Select(p => p.Rid);
 
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    private CancellableOperation? _operation;
+
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    public CancellableOperation Operation =>
+        _operation ??= new CancellableOperation().Track(CreateCommand);
+    
     [RelayCommand]
     private void TouchPluginId() => PluginIdTouched = true;
 

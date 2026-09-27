@@ -5,7 +5,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class BlockActionPage : Page
+public partial class BlockActionPage : Page, IRefreshOnNavigate
 {
     private readonly BlockActionViewModel _vm;
 

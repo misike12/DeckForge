@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DeckForge.App.Services;
 using DeckForge.CliAdapter.Processes;
 using DeckForge.Core.Workspace;
 
@@ -91,6 +92,13 @@ public partial class TerminalViewModel : ObservableObject
         ["sdk"] = "DeckForge pins Macro Deck SDK 3.0.0-beta.14 (the version the docs describe). The pin lives in MacroDeckSdkInfo.cs - bump it only when Macro Deck ships a new beta.",
     };
 
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    private CancellableOperation? _operation;
+
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    public CancellableOperation Operation =>
+        _operation ??= new CancellableOperation().Track(RunCommand);
+    
     [RelayCommand]
     private async Task RunAsync(CancellationToken ct)
     {

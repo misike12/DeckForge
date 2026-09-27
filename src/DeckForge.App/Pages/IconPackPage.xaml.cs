@@ -5,7 +5,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class IconPackPage : Page
+public partial class IconPackPage : Page, IRefreshOnNavigate
 {
     private readonly IconPackDesignerViewModel _vm;
 

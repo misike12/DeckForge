@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DeckForge.App.Services;
 using DeckForge.CliAdapter.Processes;
 using DeckForge.CliAdapter.Tools;
 using DeckForge.Core.Workspace;
@@ -38,6 +39,13 @@ public partial class BuildRunViewModel : ObservableObject
 
     private WorkspaceContext? Workspace => _workspaces.Current;
 
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    private CancellableOperation? _operation;
+
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    public CancellableOperation Operation =>
+        _operation ??= new CancellableOperation().Track(BuildCommand, TestCommand, RunStubHostCommand, PackageCommand);
+    
     [RelayCommand]
     private async Task BuildAsync(CancellationToken ct)
     {

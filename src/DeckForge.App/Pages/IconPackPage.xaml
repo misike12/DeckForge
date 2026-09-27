@@ -54,6 +54,9 @@
                                Command="{Binding ExportPackCommand}" />
                     <ui:Button Content="Bundle into plugin (CLI)" Margin="0,8,0,0" HorizontalAlignment="Left"
                                Command="{Binding BundleIntoPluginCommand}" />
+                    <ui:Button Content="Cancel" Margin="0,8,0,0" HorizontalAlignment="Left"
+                               Command="{Binding Operation.CancelCommand}"
+                               ToolTip="Stop the bundling command that is running." />
                 </StackPanel>
             </Border>
 

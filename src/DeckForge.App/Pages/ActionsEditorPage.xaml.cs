@@ -5,7 +5,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class ActionsEditorPage : Page
+public partial class ActionsEditorPage : Page, IRefreshOnNavigate
 {
     private readonly ActionsEditorViewModel _vm;
 

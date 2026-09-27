@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DeckForge.App.Services;
 using DeckForge.CliAdapter.Processes;
 using DeckForge.CliAdapter.Tools;
 using DeckForge.Core.Workspace;
@@ -94,6 +95,13 @@ public partial class ShipViewModel : ObservableObject
 
     private string? FindNewestArtifactUnchanged() => FindNewestArtifact();
 
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    private CancellableOperation? _operation;
+
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    public CancellableOperation Operation =>
+        _operation ??= new CancellableOperation().Track(PackageCommand, ValidateCommand, InspectCommand, VerifySignatureCommand, GenerateKeyCommand, SignCommand, PackVelopackCommand);
+    
     [RelayCommand]
     private async Task PackageAsync(CancellationToken ct)
     {

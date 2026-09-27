@@ -98,6 +98,12 @@ public partial class App : Application
 
         settings.SettingsChanged += () => ApplyTheme(settings);
 
+        // WorkspaceManager.CurrentChanged had no subscribers at all, so the shell's workspace
+        // broadcast was raised by hand from two places and missed from the rest. The shell now
+        // listens to the one event that already exists, and every Open/Close is announced.
+        var workspaces = Services.GetRequiredService<WorkspaceManager>();
+        workspaces.CurrentChanged += context =>
+            ShellMessenger.NotifyWorkspaceChanged(context?.SolutionPath);
         var window = new MainWindow();
         MainWindow = window;
         window.Show();

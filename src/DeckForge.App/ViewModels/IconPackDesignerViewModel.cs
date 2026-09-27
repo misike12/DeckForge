@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DeckForge.App.Services;
 using DeckForge.Core.Workspace;
 
 namespace DeckForge.App.ViewModels;
@@ -60,6 +61,13 @@ public partial class IconPackDesignerViewModel : ObservableObject
 
     public void RefreshOnNavigate() => Load();
 
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    private CancellableOperation? _operation;
+
+    /// <summary>Lets one Cancel button stop whichever of this page's commands is running.</summary>
+    public CancellableOperation Operation =>
+        _operation ??= new CancellableOperation().Track(BundleIntoPluginCommand);
+    
     [RelayCommand]
     private void AddIcons()
     {

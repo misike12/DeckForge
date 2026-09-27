@@ -5,7 +5,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class WidgetDesignerPage : Page
+public partial class WidgetDesignerPage : Page, IRefreshOnNavigate
 {
     /// <summary>Exposed for XAML ItemsSource bindings inside data templates.</summary>
     public static System.Collections.Generic.IReadOnlyList<string> EventNames => NodeEvent.EventNames;

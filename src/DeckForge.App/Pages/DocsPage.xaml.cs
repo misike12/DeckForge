@@ -7,7 +7,7 @@ using Microsoft.Web.WebView2.Core;
 
 namespace DeckForge.App.Pages;
 
-public partial class DocsPage : Page
+public partial class DocsPage : Page, INavigateWithin
 {
     private const string DocsHome = "https://docs.macro-deck.app/";
 
@@ -110,23 +110,26 @@ public partial class DocsPage : Page
     }
 
     /// <summary>Navigates the embedded browser (used by deep links from every editor page).</summary>
-    public void NavigateToDocs(string docsPath)
+    public void NavigateToDocs(string docsPath) => NavigateWithin(docsPath);
+
+    /// <inheritdoc />
+    public void NavigateWithin(string path)
     {
         UpdateStatusLine();
         if (_offline || OfflineToggle.IsChecked == true)
         {
-            _pendingOfflinePath = docsPath;
+            _pendingOfflinePath = path;
             if (Browser.CoreWebView2 is not null)
             {
                 ApplyVirtualHostMapping();
-                NavigateOffline(docsPath);
+                NavigateOffline(path);
             }
             return;
         }
 
-        var url = docsPath.StartsWith("http", StringComparison.OrdinalIgnoreCase)
-            ? docsPath
-            : DocsHome + docsPath.TrimStart('/') + "/";
+        var url = path.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? path
+            : DocsHome + path.TrimStart('/') + "/";
         AddressBox.Text = url;
         _ = EnsureAndNavigate(url);
     }

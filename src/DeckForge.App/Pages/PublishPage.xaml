@@ -50,6 +50,9 @@
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                     <ui:Button Content="Write release.yml" Appearance="Primary" Margin="0,10,0,0"
                                Command="{Binding WriteReleaseWorkflowCommand}" />
+                    <ui:Button Content="Cancel" Margin="8,10,0,0"
+                               Command="{Binding Operation.CancelCommand}"
+                               ToolTip="Stop the release command that is running." />
                 </StackPanel>
             </Border>
 

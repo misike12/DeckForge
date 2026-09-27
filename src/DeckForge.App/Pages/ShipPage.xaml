@@ -54,6 +54,9 @@
             <ui:Button Content="Velopack releases (DeckForge installer)" Margin="8,0,8,8"
                        Command="{Binding PackVelopackCommand}"
                        ToolTip="Publish DeckForge and run vpk pack: setup.exe, portable build and delta packages for auto-update" />
+            <ui:Button Content="Cancel" Margin="0,0,8,8"
+                       Command="{Binding Operation.CancelCommand}"
+                       ToolTip="Stop the signing or packaging command that is running." />
         </WrapPanel>
 
         <Border Grid.Row="2"

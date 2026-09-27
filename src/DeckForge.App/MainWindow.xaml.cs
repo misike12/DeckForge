@@ -114,58 +114,16 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             return;
         }
 
-        // Workspace-dependent pages refresh when they come into view.
-        if (page is ManifestPage manifest)
+        // Workspace-dependent pages refresh when they come into view. One test, not a chain: a page
+        // that implements the interface refreshes, and a page that does not cannot be forgotten.
+        if (page is IRefreshOnNavigate refreshable)
         {
-            manifest.RefreshOnNavigate();
+            refreshable.RefreshOnNavigate();
         }
-        else if (page is TerminalPage terminal)
+
+        if (docsPath is not null && page is INavigateWithin within)
         {
-            terminal.RefreshOnNavigate();
-        }
-        else if (page is ExplorerPage explorer)
-        {
-            explorer.RefreshOnNavigate();
-        }
-        else if (page is PublishPage publish)
-        {
-            publish.RefreshOnNavigate();
-        }
-        else if (page is BlockActionPage blocks)
-        {
-            blocks.RefreshOnNavigate();
-        }
-        else if (page is IconStudioPage icons)
-        {
-            icons.RefreshOnNavigate();
-        }
-        else if (page is ActionsEditorPage actions)
-        {
-            actions.RefreshOnNavigate();
-        }
-        else if (page is EventsEditorPage events)
-        {
-            events.RefreshOnNavigate();
-        }
-        else if (page is ConfigFlowEditorPage configFlow)
-        {
-            configFlow.RefreshOnNavigate();
-        }
-        else if (page is LocalizationPage localization)
-        {
-            localization.RefreshOnNavigate();
-        }
-        else if (page is WidgetDesignerPage widget)
-        {
-            widget.RefreshOnNavigate();
-        }
-        else if (page is IconPackPage iconPack)
-        {
-            iconPack.RefreshOnNavigate();
-        }
-        else if (page is DocsPage docs && docsPath is not null)
-        {
-            docs.NavigateToDocs(docsPath);
+            within.NavigateWithin(docsPath);
         }
 
         PageHost.Navigate(page);

@@ -67,6 +67,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="PS&gt;" FontFamily="Cascadia Mono, Consolas"
                        VerticalAlignment="Center" Margin="0,0,8,0"
@@ -77,6 +78,9 @@
                         KeyDown="CommandInput_KeyDown" />
             <ui:Button Grid.Column="2" Content="Run" Appearance="Primary" Margin="8,0,0,0"
                        Command="{Binding RunCommand}" />
+            <ui:Button Grid.Column="3" Content="Cancel" Margin="8,0,0,0"
+                       Command="{Binding Operation.CancelCommand}"
+                       ToolTip="Stop the process this console started." />
         </Grid>
     </Grid>
 </Page>

@@ -5,7 +5,7 @@ using DeckForge.App.ViewModels;
 
 namespace DeckForge.App.Pages;
 
-public partial class ConfigFlowEditorPage : Page
+public partial class ConfigFlowEditorPage : Page, IRefreshOnNavigate
 {
     private readonly ConfigFlowEditorViewModel _vm;
 
