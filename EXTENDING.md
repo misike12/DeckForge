@@ -26,7 +26,7 @@ Two extension seams do most of the work:
 
 | Seam | Contract | Where it runs |
 |---|---|---|
-| Generation contributors | `IProjectContentContributor` | New-project wizard + "add capability" flows |
+| Generation contributors | `IProjectContentContributor` | New-project wizard. `CapabilityPresetContributor` is the one in-tree example: it turns the wizard's capability ticks into interfaces, members, resx keys and permissions. |
 | Page registry | `PageRegistry.Create(tag)` + DI | MainWindow navigation |
 
 ---
@@ -106,7 +106,9 @@ Notes:
 Add a page (or a section inside the capability gallery page), then:
 
 - `src/DeckForge.App/Pages/MyThingPage.xaml` + `.cs`
-- register in DI: `services.AddTransient<MyThingPage>();`
+- register in DI: `services.AddSingleton<MyThingPage>();` - pages and view models are
+  singletons on purpose, so the terminal's scrollback and the editors' unsaved state survive
+  navigation. `AddTransient` would reset them on every page change.
 - add one line in `PageRegistry.Create`: `"my-thing" => ...GetService(typeof(MyThingPage))...`
 - add the nav item in `MainWindow.xaml` (or a card on the gallery page)
 
@@ -119,7 +121,8 @@ catalog entry you wrote in step 1.
 
 1. Create `Pages/MyPage.xaml` + code-behind (inherit `Page`, take your VM via ctor).
 2. ViewModel in `ViewModels/` using CommunityToolkit `[ObservableProperty]`/`[RelayCommand]`.
-3. DI: `services.AddTransient<MyPage>();` (+ the VM if injected).
+3. DI: `services.AddSingleton<MyPage>();` (+ the VM if injected). Singletons keep page state
+   across navigation; `AddTransient` would discard it every time you navigate away.
 4. `PageRegistry.Create`: add the tag mapping.
 5. `MainWindow.xaml`: add `ui:NavigationViewItem` with `Tag` and `Click="Nav_Click"`.
 
@@ -158,10 +161,13 @@ All pages use `Liquid.*` resources only - never hard-coded colors. Add tokens in
 
 ## Conventions worth keeping
 
-- **Generated projects stay 100% stock Macro Deck template.** DeckForge writes its own
-  state only under `.deckforge/` in the workspace.
-- **The macrodeck-plugin CLI is authoritative.** Parse its JSON output where available
-  (`validate --output Json`); never reimplement protocol behavior.
+- **Generated projects stay 100% stock Macro Deck template.** DeckForge writes its own state
+  under `.deckforge/` in the workspace, plus two places outside it: `%LOCALAPPDATA%/DeckForge/`
+  for application settings and the documentation snapshot cache. Neither is inside a generated
+  plugin.
+- **The macrodeck-plugin CLI is authoritative.** Never reimplement protocol behavior. The
+  exit codes are translated in `MacroDeckCli.ExplainExitCode`; no command currently emits JSON
+  on stdout, so there is nothing to parse yet - read the exit code and the transcript instead.
 - **SDK version pin lives in `MacroDeckSdkInfo`** (Core). Bump `DefaultVersion` when
   Macro Deck releases; beta > preview in SemVer order, so pin exact versions.
 - **Localization keys are dotted** and named after where they are used; reuse

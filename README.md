@@ -12,7 +12,8 @@ A native Windows visual studio for building **[Macro Deck 3](https://macro-deck.
   pinned to Macro Deck SDK **3.0.0-beta.14**, with instant open + jump to Build & Run.
 - **Manifest Studio**: full live editor (identity, publication, compatibility, platforms,
   permissions) with debounced native validation beside the raw JSON.
-- **Capability Gallery**: all 22 documented capabilities as cards with docs deep links.
+- **Capability Gallery**: all 23 documented capabilities as cards with docs deep links, each with
+  real SDK scaffolding behind its "Add to plugin" button.
 - **Explorer**: file tree of the open workspace (opens files with their default app).
 - **Block Programmer**: statement blocks (log, parameter read, delay, HTTP GET, results)
   compiled to real C# inside `macrodeck-blocks` markers - hand-written code survives.

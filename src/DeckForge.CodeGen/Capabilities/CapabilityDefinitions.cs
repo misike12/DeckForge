@@ -34,6 +34,34 @@ public sealed record CapabilityDefinition
 
     /// <summary>One line for the gallery card, saying what the author still has to do.</summary>
     public required string NextStep { get; init; }
+
+    /// <summary>
+    /// Whether this capability is ticked in the new-project wizard.
+    /// </summary>
+    /// <remarks>
+    /// The selection lives on the shared definition rather than in a view model, because the wizard
+    /// and the Capabilities page both show the same list. Two copies of "is this ticked" drift
+    /// within a session, and the wizard's copy was the one that was never read.
+    /// </remarks>
+    public bool IsSelected
+    {
+        get => _selected;
+        set
+        {
+            if (_selected == value)
+            {
+                return;
+            }
+
+            _selected = value;
+            SelectedChanged?.Invoke(this, value);
+        }
+    }
+
+    private bool _selected;
+
+    /// <summary>Raised when <see cref="IsSelected"/> changes, so a view model can track the ids.</summary>
+    public event EventHandler<bool>? SelectedChanged;
 }
 
 /// <summary>

@@ -23,6 +23,15 @@ public static class MacroDeckTemplateFactory
         b.AddFile(".gitignore", GitIgnore);
         b.AddFile("README.md", Readme(b));
 
+        // NuGet.config declares local-feed as a package source, and a source that does not exist
+        // makes every restore warn. The directory is kept by a placeholder because .gitignore
+        // excludes its contents.
+        b.AddFile("local-feed/.gitkeep", "");
+
+        // The official template ships a LICENSE and the manifest declares one, so a plugin
+        // generated without it points at a file that is not there.
+        b.AddFile("LICENSE", License(b));
+
         b.AddFile($"src/{p}/{p}.csproj", Fill(PluginCsproj, tokens));
         b.AddFile($"src/{p}/manifest.json", Manifest(b));
         b.AddFile($"src/{p}/macrodeck-build.json", MacroDeckBuildJson(p, b.Options.Platforms, b.Options.SelfContained));
@@ -245,10 +254,82 @@ public static class MacroDeckTemplateFactory
         # DeckForge private workspace state
         .deckforge/
 
+        # Local NuGet feed. NuGet.config declares it as a source, so the directory has to exist or
+        # every restore warns - but its contents are per-machine and must not be committed. The
+        # negation is what keeps the placeholder itself.
+        local-feed/*
+        !local-feed/.gitkeep
+
         # OS
         Thumbs.db
         .DS_Store
         """;
+
+    /// <summary>
+    /// The plugin's LICENSE, named for whatever the wizard chose.
+    /// </summary>
+    /// <remarks>
+    /// The official template ships one and the manifest declares <c>license</c>, so a generated
+    /// plugin pointed at a file that was not there - and publication validation is the point at
+    /// which that matters. Only the handful of identifiers the wizard offers are recognised; an
+    /// unknown one still produces a file, because an unrecognised licence is better handled by the
+    /// author than by a plugin with no licence at all.
+    /// </remarks>
+    private static string License(ProjectContentBuilder b)
+    {
+        var year = DateTime.UtcNow.Year;
+        var holder = string.IsNullOrWhiteSpace(b.Options.Publisher) ? "the author" : b.Options.Publisher;
+
+        return b.Options.License.Trim() switch
+        {
+            "MIT" or "MIT License" => $"""
+                MIT License
+
+                Copyright (c) {year} {holder}
+
+                Permission is hereby granted, free of charge, to any person obtaining a copy
+                of this software and associated documentation files (the "Software"), to deal
+                in the Software without restriction, including without limitation the rights
+                to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+                copies of the Software, and to permit persons to whom the Software is
+                furnished to do so, subject to the following conditions:
+
+                The above copyright notice and this permission notice shall be included in all
+                copies or substantial portions of the Software.
+
+                THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+                IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+                FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+                AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+                LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+                OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+                SOFTWARE.
+                """,
+            "Apache-2.0" or "Apache License 2.0" => $"""
+                Copyright {year} {holder}
+
+                Licensed under the Apache License, Version 2.0 (the "License");
+                you may not use this file except in compliance with the License.
+                You may obtain a copy of the License at
+
+                    http://www.apache.org/licenses/LICENSE-2.0
+
+                Unless required by applicable law or agreed to in writing, software
+                distributed under the License is distributed on an "AS IS" BASIS,
+                WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+                See the License for the specific language governing permissions and
+                limitations under the License.
+                """,
+            var other => $"""
+                {other}
+
+                Copyright (c) {year} {holder}
+
+                Replace this file with the full text of the licence named in manifest.json
+                before publishing. A licence identifier on its own is not a licence.
+                """,
+        };
+    }
 
     private static string Readme(ProjectContentBuilder b) => Fill("""
         # $PluginName
@@ -276,7 +357,19 @@ public static class MacroDeckTemplateFactory
         ## Package
 
         ```
-        macrodeck-plugin build --project src/$ProjectName --output artifacts
+        macrodeck-plugin build --source src/$ProjectName --output artifacts --force
+        ```
+
+        ## Check before you publish
+
+        ```
+        macrodeck-plugin validate --artifact artifacts/$PluginId-1.0.0.macroDeckPlugin --level publication
+        ```
+
+        ## Test
+
+        ```
+        macrodeck-plugin test --project src/$ProjectName
         ```
         """, Tokens(b));
 

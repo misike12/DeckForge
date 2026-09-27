@@ -67,6 +67,52 @@
                 <CheckBox Content="Linux x64" IsChecked="{Binding LinuxX64}" MinWidth="200" />
             </StackPanel>
 
+            <CheckBox Content="Self-contained (larger output, no .NET runtime needed on the target)"
+                      IsChecked="{Binding SelfContained}"
+                      Margin="0,12,0,0"
+                      ToolTip="A framework-dependent build is smaller but needs the matching .NET runtime installed wherever the plugin runs." />
+
+            <!--
+                The capability picker. These ids were collected nowhere and passed to nothing, so
+                the generator's contributor had nothing to act on and the wizard produced the same
+                project whatever was chosen here. Each entry contributes its interfaces, members,
+                resx keys and host permissions.
+            -->
+            <TextBlock Text="Capabilities" Margin="0,18,0,2" />
+            <TextBlock Text="Scaffold these into the integration now. You can add more later from the Capabilities page."
+                       FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,8"
+                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+            <ScrollViewer MaxHeight="190" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding AvailableCapabilities}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Margin="0,3" IsChecked="{Binding IsSelected}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Id}" FontSize="12" FontWeight="Medium" />
+                                    <TextBlock Text="{Binding NextStep}" FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                                </StackPanel>
+                            </CheckBox>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <TextBlock Text="Languages" Margin="0,14,0,4"
+                       ToolTip="One Strings.&lt;culture&gt;.resx is scaffolded per tag, beside Strings.resx." />
+            <ItemsControl ItemsSource="{Binding PresetLanguageTags}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <CheckBox Content="{Binding}" IsChecked="{Binding IsChecked}" MinWidth="110" Margin="0,0,12,4" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
             <CheckBox Content="Initialize a git repository"
                       IsChecked="{Binding InitGit}"
                       Margin="0,12,0,0" />
