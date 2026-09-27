@@ -41,7 +41,7 @@
                     <ui:NavigationViewItem Content="Blocks" Tag="blocks" Icon="{ui:SymbolIcon PuzzlePiece24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Widget Designer" Tag="widget" Icon="{ui:SymbolIcon Fingerprint24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Icon Studio" Tag="icons" Icon="{ui:SymbolIcon Color20}" Click="Nav_Click" />
-                    <ui:NavigationViewItem Content="Icon Packs" Tag="iconpack" Icon="{ui:SymbolIcon Mail24}" Click="Nav_Click" />
+                    <ui:NavigationViewItem Content="Icon Packs" Tag="iconpack" Icon="{ui:SymbolIcon Apps24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Localization" Tag="localization" Icon="{ui:SymbolIcon Translate24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Build &amp; Run" Tag="buildrun" Icon="{ui:SymbolIcon Play24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Ship" Tag="ship" Icon="{ui:SymbolIcon Send24}" Click="Nav_Click" />

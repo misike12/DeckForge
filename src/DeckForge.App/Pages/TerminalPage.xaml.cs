@@ -64,5 +64,5 @@ public partial class TerminalPage : Page, IRefreshOnNavigate
     }
 
     private void OpenDocs_Click(object sender, RoutedEventArgs e) =>
-        Services.ShellMessenger.NavigateTo("docs::cli/");
+        Services.ShellMessenger.NavigateTo("docs::cli");
 }

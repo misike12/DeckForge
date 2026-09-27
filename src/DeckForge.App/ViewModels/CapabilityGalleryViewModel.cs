@@ -94,5 +94,9 @@ public partial class CapabilityCard : ObservableObject
     public string Permissions => Descriptor.Permissions.Count > 0
         ? string.Join(", ", Descriptor.Permissions)
         : "none required";
+
+    /// <summary>The descriptor's own glyph, so each card is distinguishable.</summary>
+    public string Glyph => Descriptor.Glyph;
+
     public string DocsUrl => "https://docs.macro-deck.app/" + Descriptor.DocsPath;
 }

@@ -1,7 +1,6 @@
 <Page x:Class="DeckForge.App.Pages.BlockActionPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:blocks="clr-namespace:DeckForge.Core.Blocks;assembly=DeckForge.Core"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
 
     <Grid Margin="40,24,40,24">

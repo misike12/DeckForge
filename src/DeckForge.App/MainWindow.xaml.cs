@@ -8,12 +8,16 @@ namespace DeckForge.App;
 
 public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 {
-    /// <summary>Shortcut order mirrors the sidebar: Ctrl+1..9, 0 = terminal.</summary>
-    private static readonly string[] ShortcutTags =
-    [
-        "home", "new-project", "capabilities", "explorer", "manifest",
-        "blocks", "icons", "buildrun", "ship", "terminal",
-    ];
+    /// <summary>
+    /// Ctrl+digit targets, read from the sidebar in the order it is declared.
+    /// </summary>
+    /// <remarks>
+    /// This used to be a hand-written list of ten tags next to a sidebar of nineteen, and it had
+    /// already drifted: position 6 was "blocks" while the sidebar's sixth item is "actions", so
+    /// Ctrl+6 opened the wrong page. Reading the tags from the nav items makes drift impossible
+    /// and gives every page a shortcut rather than the ten that happened to be listed.
+    /// </remarks>
+    private string[] _shortcutTags = [];
 
     public MainWindow()
     {
@@ -26,6 +30,17 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         ShellMessenger.Attach(this);
         TryApplyLiquidChrome();
+        _shortcutTags =
+        [
+            .. RootNavigation.MenuItems
+                .OfType<System.Collections.IEnumerable>()
+                .SelectMany(items => items.Cast<Wpf.Ui.Controls.NavigationViewItem>())
+                .Concat(RootNavigation.FooterMenuItems.OfType<Wpf.Ui.Controls.NavigationViewItem>())
+                .Select(item => item.Tag as string)
+                .Where(tag => !string.IsNullOrEmpty(tag))
+                .Select(tag => tag!),
+        ];
+
         NavigateTo("home");
     }
 
@@ -44,7 +59,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 e.Handled = true;
                 return;
             case Key.F5:
+                // F5 runs the stub host, which is what the Terminal page's help text and the
+                // Build & Run page both tell the user it does. It only navigated there, so the
+                // claim was false in three places.
                 NavigateTo("buildrun");
+                ShellMessenger.RequestRun();
                 e.Handled = true;
                 return;
         }
@@ -80,9 +99,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 or Key.D6 or Key.D7 or Key.D8 or Key.D9 or Key.D0:
             {
                 var digit = e.Key is Key.D0 ? 9 : (int)(e.Key - Key.D1);
-                if (digit < ShortcutTags.Length)
+                if (digit < _shortcutTags.Length)
                 {
-                    NavigateTo(ShortcutTags[digit]);
+                    NavigateTo(_shortcutTags[digit]);
                     e.Handled = true;
                 }
                 break;
@@ -156,8 +175,12 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
 /// <summary>
 /// Page registry: maps navigation tags to pages resolved from the DI container.
-/// New pages register one line here and one in App.xaml.cs - nothing else changes.
 /// </summary>
+/// <remarks>
+/// A new page needs three edits, not one: a line here, a registration in App.xaml.cs, and a
+/// NavigationViewItem in MainWindow.xaml. The third is also what gives it a Ctrl+digit shortcut,
+/// so the nav item is not optional garnish.
+/// </remarks>
 public static class PageRegistry
 {
     public static Page? Create(string tag) => tag switch

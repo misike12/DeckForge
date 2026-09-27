@@ -30,7 +30,13 @@
                                                 Width="330" Margin="0,0,12,12">
                                             <StackPanel>
                                                 <StackPanel Orientation="Horizontal">
-                                                    <ui:SymbolIcon Symbol="Grid20" FontSize="18"
+                                                    <!--
+                                                        Each capability declares its own glyph.
+                                                        Every card hardcoded Grid20, so the
+                                                        descriptor's Glyph was written for all
+                                                        twenty-three and read by none.
+                                                    -->
+                                                    <ui:SymbolIcon Symbol="{Binding Glyph}" FontSize="18"
                                                                    Foreground="{DynamicResource Liquid.AccentStrongBrush}" />
                                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
                                                                FontSize="14" Margin="8,0,0,0"
@@ -53,8 +59,15 @@
                                                                Click="Scaffold_Click"
                                                                IsEnabled="{Binding DataContext.HasWorkspace, RelativeSource={RelativeSource AncestorType=Page}}"
                                                                ToolTip="Scaffold this capability into the open plugin (where supported)" />
+                                                    <!--
+                                                        Opens in the embedded docs browser, like
+                                                        every other page. This used to shell out to
+                                                        the system browser, which ignored DeckForge's
+                                                        offline snapshot entirely and left the WebView2
+                                                        sitting unused.
+                                                    -->
                                                     <ui:Button Content="Docs" Padding="10,4" Click="Docs_Click"
-                                                               ToolTip="{Binding DocsUrl}" />
+                                                               ToolTip="Open the documentation for this capability" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>

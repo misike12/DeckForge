@@ -17,7 +17,7 @@ public static class CapabilityCatalog
         Interface = "IActionDefinition",
         DocsPath = "features/actions",
         IsInDefaultPresets = true,
-        Glyph = "\uE73A",
+        Glyph = "PlayCircle24",
     };
 
     public static readonly CapabilityDescriptor ButtonStates = new()
@@ -28,7 +28,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.Buttons,
         Interface = "IStateProviderActionDefinition",
         DocsPath = "features/button-states",
-        Glyph = "\uE9D2",
+        Glyph = "ToggleMultiple24",
     };
 
     public static readonly CapabilityDescriptor ButtonIcons = new()
@@ -39,7 +39,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.Buttons,
         Interface = "IIconProviderActionDefinition",
         DocsPath = "features/button-icons",
-        Glyph = "\uEB9F",
+        Glyph = "DrawImage24",
     };
 
     public static readonly CapabilityDescriptor Variables = new()
@@ -52,7 +52,7 @@ public static class CapabilityCatalog
         Permissions = ["host:variables", "host:variable-values"],
         DocsPath = "features/variables",
         IsInDefaultPresets = true,
-        Glyph = "\uE9F5",
+        Glyph = "DataUsage24",
     };
 
     public static readonly CapabilityDescriptor Events = new()
@@ -64,7 +64,7 @@ public static class CapabilityCatalog
         Interface = "IEventProvider",
         Permissions = ["events:publish", "host:event-bindings"],
         DocsPath = "features/events",
-        Glyph = "\uEC92",
+        Glyph = "Megaphone24",
     };
 
     public static readonly CapabilityDescriptor Messaging = new()
@@ -76,7 +76,7 @@ public static class CapabilityCatalog
         Interface = "IIntegrationContext.Messages",
         Permissions = ["host:messaging"],
         DocsPath = "features/messaging",
-        Glyph = "\uE8BD",
+        Glyph = "MailInbox24",
     };
 
     public static readonly CapabilityDescriptor DeckNavigation = new()
@@ -88,7 +88,7 @@ public static class CapabilityCatalog
         Interface = "IIntegrationContext.Deck",
         Permissions = ["host:deck"],
         DocsPath = "features/deck",
-        Glyph = "\uE8A9",
+        Glyph = "WindowApps24",
     };
 
     public static readonly CapabilityDescriptor MusicPlayers = new()
@@ -99,7 +99,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.DeckAndClients,
         Interface = "IMusicPlayerProvider",
         DocsPath = "features/music-players",
-        Glyph = "\uE768",
+        Glyph = "MusicNote124",
     };
 
     public static readonly CapabilityDescriptor Weather = new()
@@ -110,7 +110,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.DeckAndClients,
         Interface = "IWeatherProvider",
         DocsPath = "features/weather",
-        Glyph = "\uE9BE",
+        Glyph = "WeatherSunny24",
     };
 
     public static readonly CapabilityDescriptor VirtualProfiles = new()
@@ -121,7 +121,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.DeckAndClients,
         Interface = "IProfileProvider",
         DocsPath = "features/virtual-profiles",
-        Glyph = "\uE8A5",
+        Glyph = "PersonAccounts24",
     };
 
     public static readonly CapabilityDescriptor ConfigFlows = new()
@@ -133,7 +133,7 @@ public static class CapabilityCatalog
         Interface = "IConfigFlowProvider",
         Permissions = ["host:config"],
         DocsPath = "features/setup-flows",
-        Glyph = "\uE9F9",
+        Glyph = "Flowchart24",
     };
 
     public static readonly CapabilityDescriptor IntegrationIssues = new()
@@ -144,7 +144,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.SetupAndMaintenance,
         Interface = "IIntegrationIssueProvider",
         DocsPath = "features/integration-issues",
-        Glyph = "\uE7BA",
+        Glyph = "Warning24",
     };
 
     public static readonly CapabilityDescriptor SettingsMigrations = new()
@@ -155,7 +155,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.SetupAndMaintenance,
         Interface = "IMigrationProvider",
         DocsPath = "features/settings-migrations",
-        Glyph = "\uE895",
+        Glyph = "ArrowSync24",
     };
 
     public static readonly CapabilityDescriptor Localization = new()
@@ -166,7 +166,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.SetupAndMaintenance,
         DocsPath = "features/localization",
         IsInDefaultPresets = true,
-        Glyph = "\uF2B7",
+        Glyph = "Translate24",
     };
 
     public static readonly CapabilityDescriptor Testing = new()
@@ -177,7 +177,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.SetupAndMaintenance,
         DocsPath = "features/testing",
         IsInDefaultPresets = true,
-        Glyph = "\uE9D9",
+        Glyph = "Beaker24",
     };
 
     public static readonly CapabilityDescriptor Logging = new()
@@ -188,7 +188,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.SetupAndMaintenance,
         Interface = "MacroDeck.Sdk.Logging.IntegrationLog",
         DocsPath = "features/logging",
-        Glyph = "\uE9D5",
+        Glyph = "TextBulletListSquare24",
     };
 
     public static readonly CapabilityDescriptor Devices = new()
@@ -200,7 +200,7 @@ public static class CapabilityCatalog
         Interface = "IDeviceProvider",
         Permissions = ["host:devices", "device:usb"],
         DocsPath = "features/devices",
-        Glyph = "\uE770",
+        Glyph = "Board24",
     };
 
     public static readonly CapabilityDescriptor Layouts = new()
@@ -212,7 +212,7 @@ public static class CapabilityCatalog
         Interface = "ILayoutProvider",
         Permissions = ["host:layouts"],
         DocsPath = "features/layouts",
-        Glyph = "\uEE5A",
+        Glyph = "Grid24",
     };
 
     public static readonly CapabilityDescriptor AndroidDevices = new()
@@ -224,7 +224,7 @@ public static class CapabilityCatalog
         Interface = "IAndroidDeviceManager",
         Permissions = ["host:adb"],
         DocsPath = "features/android-devices",
-        Glyph = "\uE8EA",
+        Glyph = "Phone24",
     };
 
     public static readonly CapabilityDescriptor MacroDeckUi = new()
@@ -236,7 +236,7 @@ public static class CapabilityCatalog
         Interface = "IUiProvider",
         Permissions = ["assets:upload"],
         DocsPath = "ui/index",
-        Glyph = "\uE790",
+        Glyph = "Window24",
     };
 
     public static readonly CapabilityDescriptor WidgetTypes = new()
@@ -247,7 +247,7 @@ public static class CapabilityCatalog
         Category = CapabilityCategory.HardwareAndSurfaces,
         Interface = "IWidgetTypeProvider",
         DocsPath = "ui/views/widget-types",
-        Glyph = "\uF0E2",
+        Glyph = "PuzzlePiece24",
     };
 
     public static readonly CapabilityDescriptor FolderViews = new()
@@ -259,7 +259,7 @@ public static class CapabilityCatalog
         Interface = "IFolderViewProvider",
         Permissions = ["host:folder-views"],
         DocsPath = "ui/views/folder-views",
-        Glyph = "\uE8B7",
+        Glyph = "Folder24",
     };
 
     public static readonly CapabilityDescriptor Screensavers = new()
@@ -271,7 +271,7 @@ public static class CapabilityCatalog
         Interface = "IScreenSaverProvider",
         Permissions = ["host:screensavers"],
         DocsPath = "ui/views/screensavers",
-        Glyph = "\uE706",
+        Glyph = "Screenshot24",
     };
 
     /// <summary>All descriptors in documentation order.</summary>

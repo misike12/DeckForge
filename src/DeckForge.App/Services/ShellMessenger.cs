@@ -14,7 +14,20 @@ public static class ShellMessenger
     /// <summary>Raised when the open workspace changed (args = solution path or null).</summary>
     public static event Action<string?>? WorkspaceChanged;
 
+    /// <summary>
+    /// Raised when something wants the stub host started. F5, and anything else that needs to run
+    /// the plugin without going through the Build &amp; Run page's own button.
+    /// </summary>
+    /// <remarks>
+    /// F5 is documented in three places as running the stub host and only navigated to the page,
+    /// so following the documentation did nothing. The window raises this rather than reaching into
+    /// the Build &amp; Run view model, which keeps the shell unaware of any particular page.
+    /// </remarks>
+    public static event Action? RunRequested;
+
     public static void NavigateTo(string tag) => NavigationRequested?.Invoke(tag);
+
+    public static void RequestRun() => RunRequested?.Invoke();
 
     public static void NotifyWorkspaceChanged(string? solutionPath) => WorkspaceChanged?.Invoke(solutionPath);
 

@@ -27,6 +27,16 @@ public partial class BuildRunViewModel : ObservableObject
                 ? "Open or create a plugin first."
                 : $"Workspace: {Workspace.Options.PluginName}";
         };
+
+        // F5 is documented as running the stub host. The window raises this rather than reaching
+        // in here, so the shell stays unaware of which page owns the command.
+        Services.ShellMessenger.RunRequested += () =>
+        {
+            if (RunStubHostCommand.CanExecute(null))
+            {
+                RunStubHostCommand.Execute(null);
+            }
+        };
     }
 
     [ObservableProperty]
