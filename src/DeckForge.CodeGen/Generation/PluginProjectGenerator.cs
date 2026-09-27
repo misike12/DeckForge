@@ -43,6 +43,10 @@ public sealed class PluginProjectGenerator
             contributor.Contribute(builder, options);
         }
 
+        // The stock files are written first so a contributor can patch them, which means the ones
+        // derived from contributor state have to be re-rendered once the contributors are done.
+        MacroDeckTemplateFactory.ApplyContributorState(builder);
+
         return builder;
     }
 

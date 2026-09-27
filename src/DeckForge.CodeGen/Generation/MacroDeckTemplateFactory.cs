@@ -25,7 +25,7 @@ public static class MacroDeckTemplateFactory
 
         b.AddFile($"src/{p}/{p}.csproj", Fill(PluginCsproj, tokens));
         b.AddFile($"src/{p}/manifest.json", Manifest(b));
-        b.AddFile($"src/{p}/macrodeck-build.json", MacroDeckBuildJson(p, b.Options.Platforms));
+        b.AddFile($"src/{p}/macrodeck-build.json", MacroDeckBuildJson(p, b.Options.Platforms, b.Options.SelfContained));
         b.AddFile($"src/{p}/Program.cs", Fill(ProgramCs, tokens));
         b.AddFile($"src/{p}/PluginIntegration.cs", Fill(PluginIntegrationCs, tokens));
         b.AddFile($"src/{p}/LogMessageAction.cs", Fill(LogMessageActionCs, tokens));
@@ -39,6 +39,65 @@ public static class MacroDeckTemplateFactory
 
         b.AddFile($"tests/{p}.Tests/{p}.Tests.csproj", Fill(TestCsproj, tokens));
         b.AddFile($"tests/{p}.Tests/PluginIntegrationTests.cs", Fill(IntegrationTestsCs, tokens));
+    }
+
+    /// <summary>
+    /// Re-renders the files that depend on what contributors contributed.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AddStockFiles"/> runs before contributors so that a contributor can read and
+    /// patch a stock file. That ordering meant every list a contributor fills -
+    /// <see cref="ProjectContentBuilder.ExtraIntegrationUsings"/> and friends,
+    /// <c>ExtraIntegrationInterfaces</c>, <c>ExtraIntegrationMembers</c>,
+    /// <c>ExtraPermissions</c>, <c>ExtraMacroDeckPackages</c> and
+    /// <see cref="ProjectContentBuilder.StringsKeys"/> - was already consumed, or not consumed at
+    /// all, by the time anything was written. Selecting a capability in the wizard changed nothing
+    /// about the project it produced. These files are written from the builder's final state here.
+    /// </remarks>
+    public static void ApplyContributorState(ProjectContentBuilder b)
+    {
+        var p = b.ProjectName;
+
+        b.AddFile("Directory.Packages.props", DirectoryPackagesProps(b));
+        b.AddFile($"src/{p}/Localization/Strings.resx", StringsResx(b));
+        b.AddFile($"src/{p}/manifest.json", Manifest(b));
+
+        if (b.ExtraIntegrationUsings.Count > 0
+            || b.ExtraIntegrationInterfaces.Count > 0
+            || b.ExtraIntegrationMembers.Count > 0)
+        {
+            b.AddFile($"src/{p}/PluginIntegration.cs", PluginIntegration(b));
+        }
+    }
+
+    /// <summary>
+    /// The stock PluginIntegration.cs with any contributor additions applied.
+    /// </summary>
+    /// <remarks>
+    /// The patcher is the one the Capabilities page uses, so a project generated from a preset and
+    /// one that had the same capability added afterwards end up with the same source - including
+    /// the explicit interface implementations that let several providers coexist.
+    /// </remarks>
+    private static string PluginIntegration(ProjectContentBuilder b)
+    {
+        var source = Fill(PluginIntegrationCs, Tokens(b));
+
+        foreach (var @namespace in b.ExtraIntegrationUsings)
+        {
+            source = IntegrationPatcher.AddUsing(source, @namespace).Content;
+        }
+
+        foreach (var contract in b.ExtraIntegrationInterfaces)
+        {
+            source = IntegrationPatcher.AddInterface(source, contract).Content;
+        }
+
+        foreach (var member in b.ExtraIntegrationMembers)
+        {
+            source = IntegrationPatcher.AddMember(source, member).Content;
+        }
+
+        return source;
     }
 
     /// <summary>Replaces $token placeholders with values; a token with no value is left for inspection.</summary>
@@ -275,7 +334,7 @@ public static class MacroDeckTemplateFactory
         sb.AppendLine("{");
         sb.AppendLine("  \"$schema\": \"https://schemas.macro-deck.app/plugin-manifest-v1.schema.json\",");
         sb.AppendLine("  \"manifestVersion\": 1,");
-        sb.AppendLine($"  \"id\": \"{o.PluginId}\",");
+        sb.AppendLine($"  \"id\": \"{Json(o.PluginId)}\",");
         sb.AppendLine($"  \"name\": \"{Json(o.PluginName)}\",");
         sb.AppendLine("  \"version\": \"1.0.0\",");
         sb.AppendLine($"  \"description\": \"{Json(o.Description)}\",");
@@ -304,21 +363,45 @@ public static class MacroDeckTemplateFactory
         sb.AppendLine("  \"publisher\": {");
         sb.AppendLine($"    \"name\": \"{Json(o.Publisher)}\"");
         sb.AppendLine("  },");
-        sb.AppendLine($"  \"license\": \"{o.License}\",");
+        sb.AppendLine($"  \"license\": \"{Json(o.License)}\",");
         sb.AppendLine($"  \"repository\": \"{Json(string.IsNullOrWhiteSpace(o.Repository) ? "https://github.com/example/my-plugin" : o.Repository)}\",");
         if (!string.IsNullOrWhiteSpace(o.Homepage))
         {
-            sb.AppendLine($"  \"homepage\": \"{o.Homepage}\",");
+            sb.AppendLine($"  \"homepage\": \"{Json(o.Homepage)}\",");
         }
+
+        // The host grants a plugin only what its manifest asks for, so a capability that needs
+        // host:config or host:devices and does not declare it fails at run time, not at build time.
+        var permissions = o.Permissions
+            .Concat(b.ExtraPermissions)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToList();
+
         sb.AppendLine("  \"compatibility\": {");
         sb.AppendLine($"    \"macroDeck\": \"{MacroDeckSdkInfo.DefaultMacroDeckRange}\"");
         sb.AppendLine("  }");
+
+        if (permissions.Count > 0)
+        {
+            sb.AppendLine($",");
+            sb.AppendLine("  \"permissions\": [");
+            for (var i = 0; i < permissions.Count; i++)
+            {
+                var comma = i < permissions.Count - 1 ? "," : "";
+                sb.AppendLine($"    \"{Json(permissions[i])}\"{comma}");
+            }
+
+            sb.Append("  ]");
+        }
+
         sb.Append('}');
 
         return sb.ToString();
     }
 
-    private static string MacroDeckBuildJson(string p, IReadOnlyList<string> platforms)
+    private static string MacroDeckBuildJson(string p, IReadOnlyList<string> platforms, bool selfContained)
     {
         var sb = new StringBuilder();
         sb.AppendLine("{");
@@ -334,8 +417,20 @@ public static class MacroDeckTemplateFactory
             sb.AppendLine($"        \"publish\", \"{p}.csproj\",");
             sb.AppendLine("        \"-c\", \"Release\",");
             sb.AppendLine($"        \"-r\", \"{rid}\",");
-            sb.AppendLine("        \"--self-contained\", \"false\",");
-            sb.AppendLine("        \"-p:UseAppHost=false\",");
+
+            // This was hardcoded to "false" and the options builder was never passed in, so
+            // asking for a self-contained build produced a build.json that contradicted the
+            // manifest's entrypoints and shipped a framework-dependent app.
+            sb.AppendLine($"        \"--self-contained\", \"{(selfContained ? "true" : "false")}\",");
+
+            // An aphost is only produced for a self-contained build, so a framework-dependent one
+            // has to ask for UseAppHost=false or the aphost lands in the output and confuses the
+            // runtime selection.
+            if (!selfContained)
+            {
+                sb.AppendLine("        \"-p:UseAppHost=false\",");
+            }
+
             sb.AppendLine($"        \"-o\", \"bin/publish/{rid}\"");
             sb.AppendLine("      ],");
             sb.AppendLine($"      \"output\": \"bin/publish/{rid}\"");
@@ -629,7 +724,52 @@ public static class MacroDeckTemplateFactory
         }
         """;
 
-    private static string Json(string s) => s
-        .Replace("\\", "\\\\")
-        .Replace("\"", "\\\"");
+    /// <summary>
+    /// A JSON string literal body: the value escaped for use inside double quotes.
+    /// </summary>
+    /// <remarks>
+    /// A hand-written escape of backslash and quote is not enough. JSON forbids a raw control
+    /// character inside a string, so a description typed with a line break - or a tab, or a
+    /// carriage return from a pasted field - produced a manifest.json that would not parse. The
+    /// failure appeared at pack time, long after the wizard accepted the value. The callers add the
+    /// surrounding quotes, so this returns the body only; serializing the value and trimming the
+    /// quotes would be shorter and would quietly break the moment a caller stopped adding them.
+    /// </remarks>
+    private static string Json(string s)
+    {
+        if (!s.Any(c => c is '\\' or '"' or < ' '))
+        {
+            return s;
+        }
+
+        var sb = new StringBuilder(s.Length + 8);
+        foreach (var c in s)
+        {
+            switch (c)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '"': sb.Append("\\\""); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                default:
+                    // Every other control character, including U+0000 through U+001F, has to go out
+                    // as \uXXXX or the document is not valid JSON.
+                    if (c < ' ')
+                    {
+                        sb.Append("\\u").Append(((int)c).ToString("x4", System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                    else
+                    {
+                        sb.Append(c);
+                    }
+
+                    break;
+            }
+        }
+
+        return sb.ToString();
+    }
 }

@@ -45,6 +45,16 @@ public sealed record NewProjectOptions
     /// <summary>Capability presets to scaffold beyond the example action.</summary>
     public IReadOnlyList<string> CapabilityPresets { get; init; } = [];
 
+    /// <summary>
+    /// Host permissions to declare, beyond the ones the chosen capabilities imply.
+    /// </summary>
+    /// <remarks>
+    /// The manifest template emitted no permissions array at all, so a plugin that called the host
+    /// for config or devices shipped without declaring it - and the host grants a plugin only what
+    /// its manifest asks for, so the failure shows up at run time rather than at build time.
+    /// </remarks>
+    public IReadOnlyList<string> Permissions { get; init; } = [];
+
     /// <summary>Create a git repository with an initial commit.</summary>
     public bool InitGit { get; init; } = true;
 

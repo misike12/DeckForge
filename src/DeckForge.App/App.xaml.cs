@@ -43,6 +43,9 @@ public partial class App : Application
         // so extensions can register IProjectContentContributor implementations and
         // immediately take part in every generation run.
         services.AddSingleton<PluginProjectGenerator>();
+        services.AddSingleton<CodeGen.Capabilities.CapabilityPresetContributor>();
+        services.AddSingleton<IProjectContentContributor>(
+            sp => sp.GetRequiredService<CodeGen.Capabilities.CapabilityPresetContributor>());
         services.AddSingleton<Services.CapabilityScaffolder>();
 
         // ViewModels.

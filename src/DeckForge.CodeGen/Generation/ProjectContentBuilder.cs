@@ -32,6 +32,13 @@ public sealed class ProjectContentBuilder
     /// <summary>Extra PackageReference ids added by contributors (version resolved via CPM).</summary>
     public List<string> ExtraMacroDeckPackages { get; } = [];
 
+    /// <summary>
+    /// Host permissions the generated manifest declares, contributed alongside the code that
+    /// needs them. A capability whose code calls the host but whose permission is missing fails at
+    /// run time, not at build time, so the two travel together.
+    /// </summary>
+    public List<string> ExtraPermissions { get; } = [];
+
     /// <summary>Integration interfaces contributors add, e.g. "IVariableProvider".</summary>
     public List<string> ExtraIntegrationInterfaces { get; } = [];
 
