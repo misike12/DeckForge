@@ -1,0 +1,50 @@
+<Page x:Class="DeckForge.App.Pages.ExplorerPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:vm="clr-namespace:DeckForge.App.ViewModels"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="Explorer" FontSize="26" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding RootPath}"
+                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                       FontSize="12" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <Border Grid.Row="1"
+                Background="#14000000"
+                BorderBrush="{DynamicResource Liquid.BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="8">
+            <TreeView ItemsSource="{Binding Root.Children}"
+                      FontSize="13"
+                      Background="Transparent"
+                      BorderThickness="0"
+                      SelectedItemChanged="Tree_SelectedItemChanged">
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate DataType="{x:Type vm:FileNode}" ItemsSource="{Binding Children}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Glyph}"
+                                       FontFamily="Segoe Fluent Icons"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" />
+                            <TextBlock Text="{Binding Name}" Margin="6,0,0,0" />
+                        </StackPanel>
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+        </Border>
+
+        <TextBlock Grid.Row="1" Text="No workspace open."
+                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="{Binding HasWorkspace, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+    </Grid>
+</Page>

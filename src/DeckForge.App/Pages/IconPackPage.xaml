@@ -1,0 +1,88 @@
+<Page x:Class="DeckForge.App.Pages.IconPackPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Icon pack designer" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Build a .macroDeckIconPack (pack.json + master images, max 29,996 files / 32 MiB). Declare AI-created icons - not declared is never treated as free of AI."
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
+                    <ui:Button Content="Docs → Icon packs" Icon="{ui:SymbolIcon Book24}" Margin="0,0,8,0"
+                               Click="OpenDocs_Click" ToolTip="Open the icon-pack documentation" />
+                    <ui:Button Content="Docs → Publishing packs" Click="OpenPublishDocs_Click"
+                               ToolTip="Open the icon-pack publishing documentation" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="{Binding StatusText}" FontSize="12"
+                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <TextBlock Text="Pack id" FontSize="12" />
+                    <ui:TextBox Text="{Binding PackId, Mode=TwoWay}" />
+                    <TextBlock Text="Pack name" FontSize="12" Margin="0,10,0,0" />
+                    <ui:TextBox Text="{Binding PackName, Mode=TwoWay}" />
+                    <TextBlock Text="Author" FontSize="12" Margin="0,10,0,0" />
+                    <ui:TextBox Text="{Binding Author, Mode=TwoWay}" />
+                    <CheckBox Content="Icons were AI-created" IsChecked="{Binding AiCreatedIcons}" Margin="0,10,0,0" />
+                    <Separator Margin="0,14" />
+                    <ui:Button Content="Add icons..." Appearance="Primary" HorizontalAlignment="Left"
+                               Command="{Binding AddIconsCommand}" />
+                    <ui:Button Content="Export .macroDeckIconPack" Margin="0,8,0,0" HorizontalAlignment="Left"
+                               Command="{Binding ExportPackCommand}" />
+                    <ui:Button Content="Bundle into plugin (CLI)" Margin="0,8,0,0" HorizontalAlignment="Left"
+                               Command="{Binding BundleIntoPluginCommand}" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource LiquidCard}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Icons.Count, StringFormat='Icons ({0})', FallbackValue='Icons (0)'}"
+                               FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ListBox ItemsSource="{Binding Icons}" Background="Transparent" BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding Name}" FontWeight="Medium" FontSize="12.5" />
+                                        <TextBlock Text="{Binding FileName}" Margin="10,0,0,0"
+                                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" FontSize="11.5" />
+                                    </StackPanel>
+                                    <ui:Button Grid.Column="1" Content="✕" Padding="6,2"
+                                               Command="{Binding DataContext.RemoveIconCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

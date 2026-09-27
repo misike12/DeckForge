@@ -1,0 +1,78 @@
+<Page x:Class="DeckForge.App.Pages.PublishPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="920" Margin="40,24,40,40">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Publish" FontSize="26" FontWeight="SemiBold" />
+                <ui:Button Grid.Column="1" Content="Docs → Publishing" Icon="{ui:SymbolIcon Book24}"
+                           VerticalAlignment="Top" Click="OpenDocs_Click"
+                           ToolTip="Open the publishing guide" />
+            </Grid>
+            <TextBlock Text="Plugin id:" FontSize="12" Margin="0,6,0,0"
+                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+            <TextBlock Text="{Binding PluginId}" FontSize="14" FontWeight="Medium" />
+            <TextBlock Text="{Binding Repository}" FontSize="12"
+                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis" />
+
+            <!-- Store Gate -->
+            <TextBlock Text="Store Gate" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <Border Style="{StaticResource LiquidCard}">
+                <ItemsControl ItemsSource="{Binding StoreGate}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                <Ellipse Width="10" Height="10" Margin="0,0,10,0"
+                                         Fill="{Binding Ok, Converter={StaticResource BoolToStatusColorConverter}}" />
+                                <TextBlock Text="{Binding Title}" FontSize="13" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+            <TextBlock Text="The Creator Portal also runs the conformance suite per platform, blocks disallowed packages and checks the minimum SDK - run Ship first."
+                       FontSize="12" Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                       TextWrapping="Wrap" Margin="0,6,0,0" />
+
+            <!-- Release workflow -->
+            <TextBlock Text="Release workflow" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <TextBlock Text="Writes .github/workflows/release.yml (publish-plugin.yml@v1) into the workspace. Merge it, then a published GitHub release uploads the build to the Creator Portal."
+                               FontSize="12.5" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                    <ui:Button Content="Write release.yml" Appearance="Primary" Margin="0,10,0,0"
+                               Command="{Binding WriteReleaseWorkflowCommand}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Create release -->
+            <TextBlock Text="Create GitHub release" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <TextBlock Text="Tag (semver, leading v)" FontSize="12" />
+                    <ui:TextBox Text="{Binding ReleaseTag, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Release notes (become the changelog)" FontSize="12" Margin="0,10,0,0" />
+                    <ui:TextBox Text="{Binding ReleaseNotes, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="- Add the Greet action"
+                                MinHeight="70" AcceptsReturn="True" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <ui:Button Content="Publish release (gh)" Appearance="Primary"
+                                   Command="{Binding CreateReleaseCommand}" />
+                        <ui:Button Content="Open Creator Portal" Margin="8,0,0,0"
+                                   Command="{Binding OpenPortalCommand}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding StatusText}" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" Margin="0,8,0,0" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

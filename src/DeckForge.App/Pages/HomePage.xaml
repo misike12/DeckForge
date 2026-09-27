@@ -1,0 +1,138 @@
+<Page x:Class="DeckForge.App.Pages.HomePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="880" Margin="40,24,40,40">
+
+            <!-- Hero -->
+            <Border Background="{StaticResource Liquid.AccentGradientBrush}"
+                    CornerRadius="16"
+                    Padding="32">
+                <StackPanel>
+                    <TextBlock Text="DeckForge"
+                               FontSize="34"
+                               FontWeight="SemiBold"
+                               Foreground="White" />
+                    <TextBlock Text="Visual plugin studio for Macro Deck 3"
+                               FontSize="18"
+                               Foreground="#E6FFFFFF"
+                               Margin="0,4,0,0" />
+                    <TextBlock Text="Design actions, variables, events and widgets. Build, test, sign and ship - without leaving the app."
+                               Foreground="#CCFFFFFF"
+                               Margin="0,10,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- Quick actions -->
+            <UniformGrid Columns="4" Margin="0,20,0,0">
+                <ui:Button Appearance="Primary" Content="New plugin" Icon="{ui:SymbolIcon Add24}" Margin="0,0,8,0" Height="44"
+                           Command="{Binding NewPluginCommand}" />
+                <ui:Button Content="Open solution" Icon="{ui:SymbolIcon Folder24}" Margin="8,0" Height="44"
+                           Command="{Binding OpenSolutionDialogCommand}" />
+                <ui:Button Content="Open manifest" Icon="{ui:SymbolIcon Document24}" Margin="8,0" Height="44"
+                           Command="{Binding OpenManifestDialogCommand}" />
+                <ui:Button Content="Docs" Icon="{ui:SymbolIcon Book24}" Margin="8,0,0,0" Height="44"
+                           Command="{Binding OpenDocsCommand}" />
+            </UniformGrid>
+
+            <!-- Current workspace -->
+            <TextBlock Text="Workspace"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Margin="0,28,0,8" />
+            <Border Background="{DynamicResource Liquid.AcrylicBrush}"
+                    BorderBrush="{DynamicResource Liquid.BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="{Binding WorkspaceTitle}" FontWeight="Medium" FontSize="15" />
+                        <TextBlock Text="{Binding WorkspaceDetail}"
+                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                   FontSize="12"
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+                    <ui:Button Grid.Column="1" Content="Close" Command="{Binding CloseWorkspaceCommand}"
+                               Visibility="{Binding HasWorkspace, Converter={StaticResource BoolToVisibilityConverter}}" />
+                </Grid>
+            </Border>
+
+            <!-- Environment -->
+            <TextBlock Text="Environment"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Margin="0,24,0,8" />
+            <Border Background="{DynamicResource Liquid.AcrylicBrush}"
+                    BorderBrush="{DynamicResource Liquid.BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="16">
+                <ItemsControl ItemsSource="{Binding EnvironmentChecks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Width="10" Height="10" Margin="0,0,10,0"
+                                         Fill="{Binding Ok, Converter={StaticResource BoolToStatusColorConverter}}" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding Title}" FontWeight="Medium" />
+                                    <TextBlock Text="{Binding Detail}"
+                                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                               FontSize="12" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="{Binding FixHint}"
+                                           Foreground="{DynamicResource Liquid.WarningBrush}"
+                                           FontSize="12"
+                                           MaxWidth="260" TextWrapping="Wrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <!-- Recents -->
+            <TextBlock Text="Recent workspaces"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Margin="0,24,0,8" />
+            <Border Background="{DynamicResource Liquid.AcrylicBrush}"
+                    BorderBrush="{DynamicResource Liquid.BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="8">
+                <Grid>
+                    <ItemsControl ItemsSource="{Binding RecentWorkspaces}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <ui:Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                           Background="Transparent" BorderThickness="0"
+                                           Margin="0,2" Padding="10,8"
+                                           Click="Recent_Click"
+                                           ToolTip="{Binding}">
+                                    <TextBlock Text="{Binding}" FontSize="13" TextTrimming="CharacterEllipsis" />
+                                </ui:Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="No workspaces yet - create your first plugin."
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                               Margin="8"
+                               Visibility="{Binding HasRecentWorkspaces, Converter={StaticResource BoolToInverseVisibilityConverter}}" />
+                </Grid>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>DeckForge.Validators</RootNamespace>
+    <Description>DeckForge native validators for Macro Deck manifests and localization files.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeckForge.Core\DeckForge.Core.csproj" />
+  </ItemGroup>
+
+</Project>

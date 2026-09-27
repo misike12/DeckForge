@@ -1,0 +1,153 @@
+<Page x:Class="DeckForge.App.Pages.BlockActionPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:blocks="clr-namespace:DeckForge.Core.Blocks;assembly=DeckForge.Core"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Blocks" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Compose the action executor from statement blocks. Save writes real C# into LogMessageAction.cs inside macrodeck-blocks markers - your hand-written code outside stays untouched."
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
+                    <ui:Button Content="Docs → Actions" Icon="{ui:SymbolIcon Book24}" Margin="0,0,8,0"
+                               Click="OpenDocs_Click" ToolTip="Open the Macro Deck actions documentation" />
+                    <ui:Button Content="Docs → Notifications" Click="OpenNotifyDocs_Click"
+                               ToolTip="Open the user-notifications documentation" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="{Binding StatusText}" FontSize="12"
+                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="1.2*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Palette -->
+            <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Add statement" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10" />
+
+                        <TextBlock Text="Log template" FontSize="12" />
+                        <ui:TextBox Text="{Binding NewLogTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <ui:Button Content="Log" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddLogCommand}" />
+
+                        <TextBlock Text="Variable name / parameter / type" FontSize="12" Margin="0,14,0,0" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="6" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+                            <ui:TextBox Grid.Row="0" Grid.Column="0" Text="{Binding NewVariableName, Mode=TwoWay}" />
+                            <ui:TextBox Grid.Row="0" Grid.Column="2" Text="{Binding NewParameterName, Mode=TwoWay}" />
+                            <ComboBox Grid.Row="1" Grid.Column="0" Margin="0,6,0,0"
+                                      ItemsSource="{Binding ParameterTypes}"
+                                      SelectedItem="{Binding SelectedParameterType, Mode=TwoWay}" />
+                        </Grid>
+                        <ui:Button Content="Read parameter" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddVariableCommand}" />
+
+                        <TextBlock Text="Delay ms" FontSize="12" Margin="0,14,0,0" />
+                        <ui:TextBox Text="{Binding NewDelayMs, Mode=TwoWay}" />
+                        <ui:Button Content="Wait" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddDelayCommand}" />
+
+                        <TextBlock Text="URL" FontSize="12" Margin="0,14,0,0" />
+                        <ui:TextBox Text="{Binding NewUrl, Mode=TwoWay}" />
+                        <ui:Button Content="HTTP GET" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddHttpCommand}" />
+
+                        <TextBlock Text="Notification title / message" FontSize="12" Margin="0,14,0,0" />
+                        <ui:TextBox Text="{Binding NewNotifyTitle, Mode=TwoWay}" />
+                        <ui:TextBox Text="{Binding NewNotifyMessage, Mode=TwoWay}" Margin="0,4,0,0" />
+                        <ui:Button Content="Notify user" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddNotifyCommand}" />
+
+                        <Separator Margin="0,14,0,10" />
+                        <StackPanel Orientation="Horizontal">
+                            <ui:Button Content="Return Success" Appearance="Success" Margin="0,0,8,0"
+                                       Command="{Binding AddSuccessCommand}" />
+                            <ui:Button Content="Return Failed" Appearance="Danger"
+                                       Command="{Binding AddFailureCommand}" />
+                        </StackPanel>
+                        <ui:Button Content="Clear all" Margin="0,12,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding ClearCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Statement list -->
+            <Border Grid.Column="2" Style="{StaticResource LiquidCard}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Program" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10" />
+                    <ListBox ItemsSource="{Binding Statements}"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Background="{DynamicResource Liquid.AccentWashBrush}"
+                                            CornerRadius="6" Padding="8,5">
+                                        <TextBlock Text="{Binding Describe()}" FontSize="12.5" />
+                                    </Border>
+                                    <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="6,0,0,0"
+                                               Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Compiled preview -->
+            <Border Grid.Column="4" Style="{StaticResource LiquidCard}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Generated C#" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <ui:Button Content="Save into action" Appearance="Primary" Padding="10,4"
+                                   Margin="12,0,0,0" Command="{Binding SaveIntoActionCommand}" />
+                    </StackPanel>
+                    <Border Background="#16000000" CornerRadius="8" Padding="10">
+                        <TextBox Text="{Binding CompiledPreview, Mode=OneWay}"
+                                 FontFamily="Cascadia Mono, Consolas" FontSize="12"
+                                 IsReadOnly="True" Background="Transparent"
+                                 BorderThickness="0" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto" />
+                    </Border>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

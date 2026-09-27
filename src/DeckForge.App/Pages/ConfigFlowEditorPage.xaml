@@ -1,0 +1,181 @@
+<Page x:Class="DeckForge.App.Pages.ConfigFlowEditorPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Config flow editor" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Design the setup flow users walk through to connect your integration: steps, form fields, instructions and links. Generates a real IConfigFlow class, localized strings and the IConfigFlowProvider registration."
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <ui:Button Grid.Column="1" Content="Docs → Setup flows" Icon="{ui:SymbolIcon Book24}"
+                           VerticalAlignment="Top" Margin="16,0,0,0"
+                           Click="OpenDocs_Click" ToolTip="Open the Macro Deck setup-flows documentation" />
+            </Grid>
+            <TextBlock Text="{Binding StatusText}" FontSize="12"
+                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="250" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Steps list + flow identity -->
+            <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <TextBlock Text="Flow" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="Name" FontSize="11.5" />
+                        <ui:TextBox Text="{Binding FlowName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="Class" FontSize="11.5" Margin="0,8,0,0"
+                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                        <TextBlock Text="{Binding FlowClassName}" FontSize="12.5"
+                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                        <CheckBox Content="Issue secret on complete" IsChecked="{Binding IssueSecretOnComplete}"
+                                  Margin="0,10,0,0" ToolTip="Adds a ConfigFlowValue.Secret when the flow completes (e.g. an OAuth token)." />
+                        <ui:TextBox Text="{Binding SecretValueName, Mode=TwoWay}" Margin="0,4,0,0"
+                                    Visibility="{Binding IssueSecretOnComplete, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        <Separator Margin="0,12" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Steps" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <ui:Button Content="Add step" Margin="12,0,0,0" Padding="8,2" Command="{Binding AddStepCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding Steps}" SelectedItem="{Binding SelectedStep}"
+                             Background="Transparent" BorderThickness="0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding StepId}" FontWeight="Medium" />
+                                        <TextBlock Text="{Binding Title, StringFormat=' · {0}'}"
+                                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}" Margin="4,0,0,0" />
+                                    </StackPanel>
+                                    <ui:Button Grid.Column="1" Content="✕" Padding="4,0"
+                                               Background="Transparent" BorderThickness="0"
+                                               Command="{Binding DataContext.RemoveStepCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Step settings -->
+            <Border Grid.Column="2" Style="{StaticResource LiquidCard}">
+                <DockPanel DataContext="{Binding SelectedStep}">
+                    <StackPanel DockPanel.Dock="Top" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Page}}">
+                        <TextBlock Text="Step settings" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    </StackPanel>
+                    <StackPanel>
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
+                        <TextBlock Text="Step id (kebab-case, stable)" FontSize="11.5" />
+                        <ui:TextBox Text="{Binding StepId, Mode=TwoWay}" />
+                        <TextBlock Text="Title" FontSize="11.5" Margin="0,10,0,0" />
+                        <ui:TextBox Text="{Binding Title, Mode=TwoWay}" />
+                        <TextBlock Text="Description (shown under the title)" FontSize="11.5" Margin="0,10,0,0" />
+                        <ui:TextBox Text="{Binding Description, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44" />
+                        <TextBlock Text="Instructions (one per line, rendered as a numbered list)" FontSize="11.5" Margin="0,10,0,0" />
+                        <ui:TextBox Text="{Binding Instructions, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="56" />
+                        <TextBlock Text="Links (one per line: Label=https://...)" FontSize="11.5" Margin="0,10,0,0" />
+                        <ui:TextBox Text="{Binding Links, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="44" />
+                        <CheckBox Content="Validate on submit (generates a TODO hook that returns Error on failure)"
+                                  IsChecked="{Binding ValidateOnSubmit}" Margin="0,10,0,0" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- Fields -->
+            <Border Grid.Column="4" Style="{StaticResource LiquidCard}">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Fields" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <ui:Button Content="Add field" Margin="12,0,0,0"
+                                   Command="{Binding AddFieldCommand}" CommandParameter="{Binding SelectedStep}" />
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding SelectedStep.Fields}"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource Liquid.AccentWashBrush}"
+                                        CornerRadius="8" Padding="10" Margin="0,3">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="120" />
+                                                    <ColumnDefinition Width="120" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="field_name" />
+                                                <ComboBox Grid.Column="1" Margin="6,0"
+                                                          ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                          SelectedItem="{Binding EditorType, Mode=TwoWay}" />
+                                                <ui:TextBox Grid.Column="2" Margin="0,0,6,0" Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
+                                                <CheckBox Grid.Column="3" Content="Required" IsChecked="{Binding Required}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            </Grid>
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <ui:TextBox Text="{Binding Placeholder, Mode=TwoWay}" PlaceholderText="Placeholder (optional)" />
+                                                <ui:TextBox Grid.Column="1" Margin="6,0"
+                                                            Text="{Binding OnlyWhenParameter, Mode=TwoWay}" PlaceholderText="OnlyWhen field (optional)" />
+                                                <ui:TextBox Grid.Column="2" Text="{Binding OnlyWhenValue, Mode=TwoWay}" PlaceholderText="value" />
+                                            </Grid>
+                                        </StackPanel>
+                                        <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="8,0,0,0"
+                                                   Command="{Binding DataContext.RemoveFieldCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                   CommandParameter="{Binding}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <ui:Button Grid.Row="2" Content="Generate config flow" Appearance="Primary"
+                   Margin="0,12,0,0" HorizontalAlignment="Left"
+                   Command="{Binding GenerateCommand}" />
+    </Grid>
+</Page>

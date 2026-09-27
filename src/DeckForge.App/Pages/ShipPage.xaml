@@ -1,0 +1,79 @@
+<Page x:Class="DeckForge.App.Pages.ShipPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Ship" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Build, pack, validate, inspect and sign the .macroDeckPlugin artifact. Store packages are signed server-side by the Creator Portal; sign here only for out-of-Store distribution."
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
+                    <ui:Button Content="Docs → CLI pack" Icon="{ui:SymbolIcon Book24}" Margin="0,0,8,0"
+                               Click="OpenDocs_Click" ToolTip="Open the macrodeck-plugin pack documentation" />
+                    <ui:Button Content="Docs → Signing" Click="OpenSigningDocs_Click"
+                               ToolTip="Open the signing documentation" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="{Binding ArtifactPath}"
+                       FontSize="12"
+                       Foreground="{DynamicResource Liquid.AccentStrongBrush}"
+                       TextTrimming="CharacterEllipsis"
+                       Margin="0,6,0,0" />
+        </StackPanel>
+
+        <WrapPanel Grid.Row="1" Margin="0,0,0,12"
+                   Visibility="{Binding HasWorkspace, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ui:Button Content="1 · Package" Appearance="Primary" Margin="0,0,8,8"
+                       Command="{Binding PackageCommand}" />
+            <ui:Button Content="2 · Validate" Margin="0,0,8,8"
+                       Command="{Binding ValidateCommand}" />
+            <ui:Button Content="3 · Inspect" Margin="0,0,8,8"
+                       Command="{Binding InspectCommand}" />
+            <ui:Button Content="Verify signature" Margin="0,0,8,8"
+                       Command="{Binding VerifySignatureCommand}" />
+            <ui:Button Content="Generate creator key" Margin="0,0,8,8"
+                       Command="{Binding GenerateKeyCommand}" />
+            <ui:Button Content="Sign artifact" Margin="0,0,8,8"
+                       Command="{Binding SignCommand}" />
+            <ui:Button Content="Velopack releases (DeckForge installer)" Margin="8,0,8,8"
+                       Command="{Binding PackVelopackCommand}"
+                       ToolTip="Publish DeckForge and run vpk pack: setup.exe, portable build and delta packages for auto-update" />
+        </WrapPanel>
+
+        <Border Grid.Row="2"
+                Background="#12000000"
+                BorderBrush="{DynamicResource Liquid.BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Visibility="{Binding HasWorkspace, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ListBox ItemsSource="{Binding OutputLines}"
+                     FontFamily="Cascadia Mono, Consolas" FontSize="12.5"
+                     Background="Transparent" BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+        </Border>
+
+        <TextBlock Grid.Row="2" Text="Open a plugin first."
+                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="{Binding HasWorkspace, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+
+        <TextBlock Grid.Row="3" Text="{Binding StatusText}" Margin="0,10,0,0"
+                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+    </Grid>
+</Page>

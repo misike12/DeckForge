@@ -1,0 +1,102 @@
+<Page x:Class="DeckForge.App.Pages.LocalizationPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Localization" FontSize="26" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ui:Button Content="Add key" Margin="16,0,0,0" Command="{Binding AddKeyCommand}" />
+                <ui:Button Content="Docs → Localization" Icon="{ui:SymbolIcon Book24}" Margin="12,0,0,0"
+                           Click="OpenDocs_Click" ToolTip="Open the Macro Deck localization documentation" />
+                <TextBlock Text="{Binding DiagnosticsSummary}" Margin="16,0,0,0" VerticalAlignment="Center"
+                           FontSize="12" Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+            </StackPanel>
+            <TextBlock Text="{Binding StatusText}" FontSize="12"
+                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.1*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="320" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Keys -->
+            <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
+                <ListBox ItemsSource="{Binding Keys}"
+                         SelectedItem="{Binding SelectedKey, Mode=TwoWay}"
+                         Background="Transparent" BorderThickness="0">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="2">
+                                <TextBlock Text="{Binding Key}" FontSize="12.5" FontWeight="Medium" />
+                                <TextBlock Text="{Binding DefaultValue}" FontSize="11.5"
+                                           Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+
+            <!-- Translation editor -->
+            <Border Grid.Column="2" Style="{StaticResource LiquidCard}">
+                <DockPanel DataContext="{Binding SelectedKey}">
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Key, FallbackValue='Select a key'}"
+                               FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Translations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,6">
+                                        <TextBlock FontSize="12" FontWeight="Medium">
+                                            <Run Text="{Binding CultureTag, Mode=OneWay}" />
+                                            <Run Text="  (missing)" Foreground="{DynamicResource Liquid.WarningBrush}" />
+                                        </TextBlock>
+                                        <ui:TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                    PlaceholderText="Translation..." />
+                                        <ui:Button Content="Save translation" Padding="10,4" Margin="0,4,0,0"
+                                                   Command="{Binding DataContext.SaveTranslationCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                   CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Diagnostics -->
+            <Border Grid.Column="4" Style="{StaticResource LiquidCard}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="MDLOC diagnostics" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Issues}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,3" Padding="8,6" CornerRadius="6"
+                                            Background="{Binding Severity, Converter={StaticResource SeverityToBrushConverter}}">
+                                        <StackPanel>
+                                            <TextBlock FontSize="11.5" FontWeight="SemiBold" Text="{Binding Code}" />
+                                            <TextBlock FontSize="11.5" Text="{Binding Message}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

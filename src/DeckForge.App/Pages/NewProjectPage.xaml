@@ -1,0 +1,93 @@
+<Page x:Class="DeckForge.App.Pages.NewProjectPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="820" Margin="40,24,40,40">
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="New Macro Deck plugin"
+                               FontSize="{StaticResource Liquid.FontSizeTitle}"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="Generates the exact official plugin template - buildable immediately, openable in any IDE."
+                               Foreground="{StaticResource Liquid.TextSecondaryBrush}"
+                               Margin="0,6,0,0" />
+                </StackPanel>
+                <ui:Button Grid.Column="1" Content="Docs → Quickstart" Icon="{ui:SymbolIcon Book24}"
+                           VerticalAlignment="Top" Click="OpenDocs_Click"
+                           ToolTip="Open the plugin development quickstart" />
+            </Grid>
+            <TextBlock Text=" " FontSize="4" Margin="0,0,0,14" />
+
+            <TextBlock Text="Plugin name" Margin="0,0,0,4" />
+            <ui:TextBox Text="{Binding PluginName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        PlaceholderText="Acme Light Control" />
+
+            <TextBlock Text="Plugin id (reverse-domain, permanent)" Margin="0,14,0,4" />
+            <ui:TextBox Text="{Binding PluginId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        PlaceholderText="com.acme.light-control"
+                        LostFocus="PluginId_LostFocus" />
+
+            <TextBlock Text="Publisher (Store account name)" Margin="0,14,0,4" />
+            <ui:TextBox Text="{Binding Publisher, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        PlaceholderText="Acme" />
+
+            <TextBlock Text="Description" Margin="0,14,0,4" />
+            <ui:TextBox Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        PlaceholderText="Control Hue lights from Macro Deck." />
+
+            <TextBlock Text="Repository URL" Margin="0,14,0,4" />
+            <ui:TextBox Text="{Binding Repository, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        PlaceholderText="https://github.com/acme/acme-light-control" />
+
+            <Grid Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Create in" Margin="0,0,0,4" />
+                    <ui:TextBox Text="{Binding ParentDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <ui:Button Grid.Column="2" Content="Browse..." VerticalAlignment="Bottom" Click="Browse_Click" />
+            </Grid>
+
+            <TextBlock Text="Platforms" Margin="0,18,0,6" />
+            <StackPanel Orientation="Horizontal">
+                <CheckBox Content="Windows x64 (win-x64)" IsChecked="{Binding WinX64}" MinWidth="200" />
+                <CheckBox Content="Windows ARM" IsChecked="{Binding WinArm64}" MinWidth="200" />
+                <CheckBox Content="macOS Apple Silicon" IsChecked="{Binding OsxArm64}" MinWidth="200" />
+                <CheckBox Content="Linux x64" IsChecked="{Binding LinuxX64}" MinWidth="200" />
+            </StackPanel>
+
+            <CheckBox Content="Initialize a git repository"
+                      IsChecked="{Binding InitGit}"
+                      Margin="0,12,0,0" />
+
+            <Border Background="{StaticResource Liquid.AccentWashBrush}"
+                    CornerRadius="{StaticResource Liquid.RadiusMedium}"
+                    Padding="12"
+                    Margin="0,20,0,0">
+                <TextBlock Text="{Binding ValidationSummary}" />
+            </Border>
+
+            <ui:Button Content="Create plugin"
+                       Appearance="Primary"
+                       Height="44"
+                       Margin="0,16,0,0"
+                       Command="{Binding CreateCommand}" />
+
+            <TextBlock Text="{Binding CreatedPath}"
+                       Foreground="{StaticResource Liquid.SuccessBrush}"
+                       Margin="0,10,0,0"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

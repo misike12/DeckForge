@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>DeckForge.App</RootNamespace>
+    <AssemblyName>DeckForge</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app-icon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Web.WebView2" />
+    <PackageReference Include="Velopack" />
+    <PackageReference Include="WPF-UI" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeckForge.Core\DeckForge.Core.csproj" />
+    <ProjectReference Include="..\DeckForge.CodeGen\DeckForge.CodeGen.csproj" />
+    <ProjectReference Include="..\DeckForge.Validators\DeckForge.Validators.csproj" />
+    <ProjectReference Include="..\DeckForge.CliAdapter\DeckForge.CliAdapter.csproj" />
+  </ItemGroup>
+
+</Project>

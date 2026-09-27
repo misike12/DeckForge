@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+artifacts/
+out/
+[Dd]ebug/
+[Rr]elease/
+TestResults/
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+local-feed/*
+!local-feed/.gitkeep
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+$RECYCLE.BIN/
+
+# DeckForge local state
+.deckforge/
+crash.log
+docs/

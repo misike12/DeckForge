@@ -1,0 +1,151 @@
+<Page x:Class="DeckForge.App.Pages.EventsEditorPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Events editor" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Declare an event users can trigger automations from: configuration parameters filter occurrences, payload parameters carry the data. Generates the IEventProvider definition, localized strings and the events:publish permission."
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <ui:Button Grid.Column="1" Content="Docs → Events" Icon="{ui:SymbolIcon Book24}"
+                           VerticalAlignment="Top" Margin="16,0,0,0"
+                           Click="OpenDocs_Click" ToolTip="Open the Macro Deck events documentation" />
+            </Grid>
+            <TextBlock Text="{Binding StatusText}" FontSize="12"
+                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" Margin="0,4,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="340" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Identity + generate -->
+            <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Event" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="Id (kebab-case, permanent)" FontSize="12" />
+                        <ui:TextBox Text="{Binding EventId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="Name" FontSize="12" Margin="0,10,0,0" />
+                        <ui:TextBox Text="{Binding EventName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="Description" FontSize="12" Margin="0,10,0,0" />
+                        <ui:TextBox Text="{Binding EventDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    AcceptsReturn="True" TextWrapping="Wrap" MinHeight="52" />
+                        <TextBlock Text="Category (optional, groups the picker)" FontSize="12" Margin="0,10,0,0" />
+                        <ui:TextBox Text="{Binding EventCategory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <ui:Button Content="Add event to plugin" Appearance="Primary" Margin="0,14,0,0"
+                                   HorizontalAlignment="Left" Command="{Binding GenerateCommand}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Parameter lists -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Configuration parameters (what the user filters on)" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <ui:Button Content="Add" Margin="12,0,0,0" Command="{Binding AddConfigurationParameterCommand}" />
+                </StackPanel>
+                <ListBox Grid.Row="1" ItemsSource="{Binding ConfigurationParameters}"
+                         Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource Liquid.AccentWashBrush}"
+                                    CornerRadius="8" Padding="10" Margin="0,3">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="150" />
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="name" />
+                                        <ComboBox Grid.Column="1" Margin="6,0"
+                                                  ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                  SelectedItem="{Binding EditorType, Mode=TwoWay}" />
+                                        <ui:TextBox Grid.Column="2" Margin="0,0,6,0" Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
+                                        <CheckBox Grid.Column="3" Content="Required" IsChecked="{Binding Required}" VerticalAlignment="Center" />
+                                        <ui:TextBox Grid.Column="4" Text="{Binding DefaultValue, Mode=TwoWay}" PlaceholderText="Default (optional)" />
+                                    </Grid>
+                                    <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="8,0,0,0"
+                                               Command="{Binding DataContext.RemoveConfigurationParameterCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,14,0,8">
+                    <TextBlock Text="Payload parameters (what an occurrence carries)" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <ui:Button Content="Add" Margin="12,0,0,0" Command="{Binding AddPayloadParameterCommand}" />
+                </StackPanel>
+                <ListBox Grid.Row="3" ItemsSource="{Binding PayloadParameters}"
+                         Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource Liquid.AccentWashBrush}"
+                                    CornerRadius="8" Padding="10" Margin="0,3">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="110" />
+                                            <ColumnDefinition Width="150" />
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="name" />
+                                        <ComboBox Grid.Column="1" Margin="6,0"
+                                                  ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                  SelectedItem="{Binding EditorType, Mode=TwoWay}" />
+                                        <ui:TextBox Grid.Column="2" Margin="0,0,6,0" Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
+                                        <CheckBox Grid.Column="3" Content="Required" IsChecked="{Binding Required}" VerticalAlignment="Center" />
+                                        <ui:TextBox Grid.Column="4" Text="{Binding DefaultValue, Mode=TwoWay}" PlaceholderText="Default (optional)" />
+                                    </Grid>
+                                    <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="8,0,0,0"
+                                               Command="{Binding DataContext.RemovePayloadParameterCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

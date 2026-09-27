@@ -1,0 +1,62 @@
+<Page x:Class="DeckForge.App.Pages.BuildRunPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Build &amp; Run"
+                       FontSize="{StaticResource Liquid.FontSizeTitle}"
+                       FontWeight="SemiBold" />
+            <ui:Button Grid.Column="1" Content="Docs → Testing" Icon="{ui:SymbolIcon Book24}"
+                       VerticalAlignment="Center" Click="OpenDocs_Click"
+                       ToolTip="Open the Macro Deck testing documentation" />
+        </Grid>
+
+        <WrapPanel Grid.Row="1" Margin="0,16,0,12">
+            <ui:Button Content="Build" Icon="{ui:SymbolIcon Wrench24}" Margin="0,0,8,8"
+                       Appearance="Primary"
+                       Command="{Binding BuildCommand}" />
+            <ui:Button Content="Run (stub host)" Icon="{ui:SymbolIcon Play24}" Margin="0,0,8,8"
+                       Command="{Binding RunStubHostCommand}" />
+            <ui:Button Content="Tests" Icon="{ui:SymbolIcon TaskListLtr24}" Margin="0,0,8,8"
+                       Command="{Binding TestCommand}" />
+            <ui:Button Content="Package" Icon="{ui:SymbolIcon Archive24}" Margin="0,0,8,8"
+                       Command="{Binding PackageCommand}" />
+            <Separator Margin="4,4,12,12" />
+            <ui:Button Content="/_health" Margin="0,0,8,8" Command="{Binding PokeEndpointCommand}" CommandParameter="_macrodeck/health" />
+            <ui:Button Content="/_ready" Margin="0,0,8,8" Command="{Binding PokeEndpointCommand}" CommandParameter="_macrodeck/ready" />
+            <ui:Button Content="/_info" Margin="0,0,8,8" Command="{Binding PokeEndpointCommand}" CommandParameter="_macrodeck/info" />
+            <ui:Button Content="/_diagnostics" Margin="0,0,8,8" Command="{Binding PokeEndpointCommand}" CommandParameter="_macrodeck/diagnostics" />
+        </WrapPanel>
+
+        <Border Grid.Row="2"
+                Background="#0D000000"
+                BorderBrush="{StaticResource Liquid.BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource Liquid.RadiusMedium}">
+            <ListBox ItemsSource="{Binding OutputLines}"
+                     FontFamily="Cascadia Mono, Consolas"
+                     FontSize="12.5"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+        </Border>
+
+        <TextBlock Grid.Row="3"
+                   Text="{Binding StatusText}"
+                   Margin="0,10,0,0"
+                   Foreground="{StaticResource Liquid.TextSecondaryBrush}" />
+    </Grid>
+</Page>

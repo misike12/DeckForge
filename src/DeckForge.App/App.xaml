@@ -1,0 +1,36 @@
+<Application x:Class="DeckForge.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:DeckForge.App.Converters"
+             DispatcherUnhandledException="OnDispatcherUnhandledException">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ui:ThemesDictionary Theme="Dark" />
+                <ui:ControlsDictionary />
+            </ResourceDictionary.MergedDictionaries>
+            <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+            <conv:BoolToInverseVisibilityConverter x:Key="BoolToInverseVisibilityConverter" />
+            <conv:InverseBoolConverter x:Key="InverseBoolConverter" />
+            <conv:ResourceKeyToBrushConverter x:Key="ResourceKeyToBrushConverter" />
+            <conv:BoolToStatusColorConverter x:Key="BoolToStatusColorConverter" />
+            <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter" />
+
+            <!-- Liquid card: elevated, clearly bordered surface used by every page. -->
+            <Style x:Key="LiquidCard" TargetType="Border">
+                <Setter Property="Background" Value="{DynamicResource Liquid.AcrylicBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Liquid.BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="16" />
+            </Style>
+
+            <!-- Default text follows the liquid palette (explicit Foreground still wins). -->
+            <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource Liquid.TextBrush}" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

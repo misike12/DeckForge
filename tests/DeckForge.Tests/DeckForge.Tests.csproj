@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="NUnit" />
+    <PackageReference Include="NUnit.Analyzers" PrivateAssets="all" />
+    <PackageReference Include="NUnit3TestAdapter" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DeckForge.Core\DeckForge.Core.csproj" />
+    <ProjectReference Include="..\..\src\DeckForge.CodeGen\DeckForge.CodeGen.csproj" />
+    <ProjectReference Include="..\..\src\DeckForge.Validators\DeckForge.Validators.csproj" />
+    <ProjectReference Include="..\..\src\DeckForge.CliAdapter\DeckForge.CliAdapter.csproj" />
+  </ItemGroup>
+
+</Project>

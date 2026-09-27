@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="src/DeckForge.Core/DeckForge.Core.csproj" />
+  <Project Path="src/DeckForge.CodeGen/DeckForge.CodeGen.csproj" />
+  <Project Path="src/DeckForge.Validators/DeckForge.Validators.csproj" />
+  <Project Path="src/DeckForge.CliAdapter/DeckForge.CliAdapter.csproj" />
+  <Project Path="src/DeckForge.App/DeckForge.App.csproj" />
+  <Project Path="tests/DeckForge.Tests/DeckForge.Tests.csproj" />
+</Solution>
