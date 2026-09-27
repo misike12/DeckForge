@@ -1,15 +1,18 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeckForge.App.Services;
+using DeckForge.CodeGen.Generation;
+using DeckForge.Core.Code;
+using DeckForge.Core.Widgets;
 using DeckForge.Core.Workspace;
 
 namespace DeckForge.App.ViewModels;
 
-/// <summary>One typed property in the JSON Schema builder.</summary>
+/// <summary>One property of a widget type's stored data.</summary>
 public partial class SchemaProperty : ObservableObject
 {
     [ObservableProperty]
@@ -27,11 +30,22 @@ public partial class SchemaProperty : ObservableObject
     [ObservableProperty]
     private string _defaultValue = "";
 
-    public static IReadOnlyList<string> SchemaTypes { get; } =
-        ["string", "number", "boolean", "array", "object"];
+    /// <summary>The five JSON Schema types a widget payload can use.</summary>
+    public static IReadOnlyList<string> SchemaTypes { get; } = ["string", "number", "boolean", "array", "object"];
+
+    public DesignedSchemaProperty ToModel() => new()
+    {
+        Name = Name.Trim(),
+        SchemaType = SchemaTypes.Contains(SchemaType, StringComparer.OrdinalIgnoreCase)
+            ? SchemaType.ToLowerInvariant()
+            : "string",
+        Title = Title,
+        Required = Required,
+        DefaultValue = DefaultValue,
+    };
 }
 
-/// <summary>One button state (e.g. "on" / "off") offered to a ui.button node.</summary>
+/// <summary>One named appearance a widget type offers.</summary>
 public partial class ButtonState : ObservableObject
 {
     [ObservableProperty]
@@ -44,26 +58,27 @@ public partial class ButtonState : ObservableObject
     private string _text = "On";
 }
 
-/// <summary>One event handler declared on a node (press, change, ...).</summary>
+/// <summary>One event handler on a designed node.</summary>
 public partial class NodeEvent : ObservableObject
 {
     [ObservableProperty]
     private string _eventName = "press";
 
-    /// <summary>What the handler does: log, publish an event, or a TODO stub.</summary>
+    /// <summary>
+    /// The handler body, as the author wants it. It is emitted verbatim into the generated
+    /// session, so it is code, not a choice from a list.
+    /// </summary>
     [ObservableProperty]
-    private string _handlerKind = "Log";
+    private string _detail = "_logger.Information(\"handled\");";
 
     [ObservableProperty]
-    private string _detail = "";
+    private bool _isAsync;
 
-    public static IReadOnlyList<string> EventNames { get; } =
-        ["press", "long-press", "press-start", "press-end", "double-press", "change", "adjust", "tap"];
-
-    public static IReadOnlyList<string> HandlerKinds { get; } = ["Log", "Publish event", "TODO"];
+    /// <summary>Every event name the component profile declares.</summary>
+    public static IReadOnlyList<string> EventNames => UiNodeCatalog.AllEvents;
 }
 
-/// <summary>One node in the widget UI tree (v2: reorderable, events, states).</summary>
+/// <summary>One node in the designed tree.</summary>
 public partial class WidgetNode : ObservableObject
 {
     [ObservableProperty]
@@ -75,37 +90,124 @@ public partial class WidgetNode : ObservableObject
     [ObservableProperty]
     private string _text = "Hello";
 
-    /// <summary>For ui.text: relative size (0..1 of tile).</summary>
     [ObservableProperty]
     private double _size = 0.14;
 
-    /// <summary>Background color for ui.button / container types.</summary>
     [ObservableProperty]
     private string _background = "#2C2C2E";
 
-    [ObservableProperty]
-    private bool _isVisible = true;
+    /// <summary>Property values keyed by the catalog's property name.</summary>
+    public ObservableCollection<PropertyValue> Properties { get; } = [];
 
-    /// <summary>Events this node declares (generated into the element's Events list).</summary>
     public ObservableCollection<NodeEvent> Events { get; } = [];
-
-    /// <summary>For ui.button: named states; the generated view switches face by state.</summary>
-    public ObservableCollection<ButtonState> States { get; } = [];
 
     public ObservableCollection<WidgetNode> Children { get; } = [];
 
-    public static IReadOnlyList<string> NodeTypes { get; } =
-    [
-        "ui.text", "ui.button", "ui.stack", "ui.layer", "ui.icon", "ui.image",
-        "ui.shape", "ui.slider", "ui.toggle", "ui.gauge", "ui.dial", "ui.chart",
-        "ui.range-bar", "ui.segmented", "ui.grid", "ui.list", "ui.text-field",
-        "macrodeck.dynamic-text", "macrodeck.progress-bar", "macrodeck.progress-text",
-        "macrodeck.clock-dial",
-    ];
+    public ObservableCollection<ButtonState> States { get; } = [];
 
-    public string Describe => $"{NodeType.Split('.').Last()}  \"{Key}\"";
+    /// <summary>The node this one hangs from, or null when it is a root.</summary>
+    public WidgetNode? Parent { get; internal set; }
+
+    /// <summary>The catalog entry for the selected type.</summary>
+    public UiNodeTypeInfo Info => UiNodeCatalog.Find(NodeType) ?? UiNodeCatalog.All[1];
+
+    /// <summary>True when the selected type accepts children.</summary>
+    public bool IsContainer => Info.IsContainer;
+
+    /// <summary>True when the selected type is one the reader derives from a reference.</summary>
+    public bool IsReaderDerived => NodeType.StartsWith("macrodeck.", StringComparison.Ordinal);
+
+    /// <summary>Every node type, all twenty-four.</summary>
+    public static IReadOnlyList<UiNodeTypeInfo> NodeTypes => UiNodeCatalog.All;
+
+    /// <summary>The events the selected type advertises, so the designer can offer them.</summary>
+    public IReadOnlyList<string> OfferableEvents => Info.OfferableEvents;
+
+    /// <summary>The property rows for the selected type, rebuilt when the type changes.</summary>
+    public IReadOnlyList<UiPropertyDescriptor> AvailableProperties => Info.Properties;
+
+    public string Describe => $"{Info.DisplayName}  \"{Key}\"";
+
+    partial void OnNodeTypeChanged(string value)
+    {
+        OnPropertyChanged(nameof(Info));
+        OnPropertyChanged(nameof(IsContainer));
+        OnPropertyChanged(nameof(IsReaderDerived));
+        OnPropertyChanged(nameof(OfferableEvents));
+        OnPropertyChanged(nameof(AvailableProperties));
+        SyncProperties();
+    }
+
+    partial void OnKeyChanged(string value) => OnPropertyChanged(nameof(Describe));
+
+    /// <summary>Rebuilds the property rows so they always match the selected type.</summary>
+    public void SyncProperties()
+    {
+        var wanted = Info.Properties.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var existing in Properties.Where(p => !wanted.Contains(p.PropertyName)).ToList())
+        {
+            Properties.Remove(existing);
+        }
+
+        foreach (var descriptor in Info.Properties)
+        {
+            if (Properties.All(p => p.PropertyName != descriptor.Name))
+            {
+                Properties.Add(new PropertyValue { PropertyName = descriptor.Name, Value = DefaultFor(descriptor) });
+            }
+        }
+
+        OnPropertyChanged(nameof(AvailableProperties));
+    }
+
+    private static string DefaultFor(UiPropertyDescriptor descriptor) => descriptor.Kind switch
+    {
+        UiPropertyKind.Flag => "false",
+        UiPropertyKind.Number or UiPropertyKind.ValueNumber => "0",
+        _ => string.Empty,
+    };
+
+    public DesignedNode ToModel(string? parentKey) => new()
+    {
+        Key = Key.Trim(),
+        NodeType = NodeType,
+        ParentKey = parentKey,
+        Text = Text,
+        Size = Size,
+        Background = Background,
+        Properties = Properties
+            .Where(p => !string.IsNullOrWhiteSpace(p.Value))
+            .ToDictionary(p => p.PropertyName, p => p.Value, StringComparer.Ordinal),
+        Events = Events.Select(e => new DesignedEvent
+        {
+            Name = e.EventName,
+            Body = e.Detail,
+            IsAsync = e.IsAsync,
+        }).ToList(),
+        Children = Children.Select(c => c.ToModel(Key.Trim())).ToList(),
+    };
 }
 
+/// <summary>One property row: a name from the catalog and the value the designer gave it.</summary>
+public partial class PropertyValue : ObservableObject
+{
+    [ObservableProperty]
+    private string _propertyName = "";
+
+    [ObservableProperty]
+    private string _value = "";
+}
+
+/// <summary>
+/// The widget designer. Collects a design and hands it to <see cref="WidgetGenerator"/>.
+/// </summary>
+/// <remarks>
+/// The rendering used to live here, which is why none of it could be tested: the project it
+/// generates for is a WPF application and this project's test project is not. Six defects
+/// survived in it for exactly that reason - five wrong namespaces, a call to a method that does
+/// not exist, two <c>Add</c> calls on init-only properties, a property typed as an array where
+/// the interface demands a list, and a session adapter implementing none of its interface.
+/// </remarks>
 public partial class WidgetDesignerViewModel : ObservableObject
 {
     private readonly WorkspaceManager _workspaces;
@@ -128,6 +230,12 @@ public partial class WidgetDesignerViewModel : ObservableObject
     private string _widgetName = "Gauge";
 
     [ObservableProperty]
+    private string _widgetDescription = "";
+
+    [ObservableProperty]
+    private string _providerName = "";
+
+    [ObservableProperty]
     private string _unit = "km/h";
 
     [ObservableProperty]
@@ -140,126 +248,198 @@ public partial class WidgetDesignerViewModel : ObservableObject
     private WidgetNode? _selectedNode;
 
     [ObservableProperty]
-    private SchemaProperty? _selectedSchemaProperty;
-
-    [ObservableProperty]
     private string _previewHtml = "";
 
     [ObservableProperty]
     private string _statusText = "";
 
-    /// <summary>False = widget surface region, true = config surface region.</summary>
+    /// <summary>Whether the config surface is being edited rather than the widget face.</summary>
     [ObservableProperty]
     private bool _editingConfigRegion;
 
     public ObservableCollection<WidgetNode> RootNodes { get; } = [];
 
-    /// <summary>Widget-config region nodes (the configuration view's tree).</summary>
-    public ObservableCollection<WidgetNode> ConfigNodes { get; } = [];
-
     public ObservableCollection<SchemaProperty> SchemaProperties { get; } = [];
 
+    public ObservableCollection<ButtonState> States { get; } = [];
+
+    /// <summary>Every node type, for the palette.</summary>
+    public static IReadOnlyList<UiNodeTypeInfo> NodeTypes => UiNodeCatalog.All;
+
+    /// <summary>Every event name, for the handler editor.</summary>
+    public static IReadOnlyList<string> EventNames => UiNodeCatalog.AllEvents;
+
+    /// <summary>The JSON Schema types a payload can use.</summary>
+    public static IReadOnlyList<string> SchemaTypes => SchemaProperty.SchemaTypes;
+
+    /// <summary>Which region the surface is being edited in.</summary>
     public static IReadOnlyList<string> RegionChoices { get; } = ["Widget", "Config"];
+
+    // Instance mirrors of the statics above. XAML binds these through
+    // {Binding DataContext.X, RelativeSource={RelativeSource AncestorType=Page}}, and a binding
+    // path resolves against an instance - a static property is invisible to it, which is why the
+    // three ComboBoxes that used them were permanently empty.
+
+    /// <summary>
+    /// The events the selected node advertises. A handler for an event the node does not
+    /// declare is never dispatched, so the picker must offer only its own.
+    /// </summary>
+    public IReadOnlyList<string> OfferableEvents => SelectedNode?.OfferableEvents ?? UiNodeCatalog.AllEvents;
+
+    /// <summary>Alias for <see cref="RootNodes"/>, which is what the tree binds to.</summary>
+    public ObservableCollection<WidgetNode> ConfigNodes => RootNodes;
+
+    /// <summary>Properties of the selected node's type, for the property grid.</summary>
+    public IReadOnlyList<UiPropertyDescriptor> AvailableProperties =>
+        SelectedNode?.AvailableProperties ?? [];
+
+    /// <summary>The selected node's property rows.</summary>
+    public ObservableCollection<PropertyValue> SelectedNodeProperties =>
+        SelectedNode?.Properties ?? [];
+
+    partial void OnSelectedNodeChanged(WidgetNode? value)
+    {
+        value?.SyncProperties();
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(OfferableEvents));
+        OnPropertyChanged(nameof(AvailableProperties));
+        OnPropertyChanged(nameof(SelectedNodeProperties));
+        UpdatePreview();
+    }
 
     public void Load() => HasWorkspace = _workspaces.Current is not null;
 
     public void RefreshOnNavigate() => Load();
 
-    private ObservableCollection<WidgetNode> ActiveRoots => EditingConfigRegion ? ConfigNodes : RootNodes;
+    partial void OnHasConfigurationChanged(bool value) => OnPropertyChanged(nameof(ShowsSchemaEditor));
 
-    partial void OnEditingConfigRegionChanged(bool value) => UpdatePreview();
+    /// <summary>True when the schema editor is meaningful, which is whenever configuration is on.</summary>
+    public bool ShowsSchemaEditor => HasConfiguration;
+
+    // ------------------------------------------------------------------ tree editing
 
     [RelayCommand]
-    private void AddNode(string nodeType)
+    private void AddNode(string? nodeType)
     {
+        var type = UiNodeCatalog.Find(nodeType) ?? UiNodeCatalog.All[1];
         var node = new WidgetNode
         {
-            NodeType = nodeType,
-            Key = $"{nodeType.Split('.').Last()}{ActiveRoots.Count + 1}",
-            Text = nodeType.Contains("text", StringComparison.Ordinal) ? "Hello" : "",
+            NodeType = type.WireType,
+            Key = NextKey(type.WireType),
         };
-        if (SelectedNode is not null && SelectedNode.NodeType.Contains("stack", StringComparison.Ordinal))
+
+        node.SyncProperties();
+
+        // A node nests under the selection when the selection can hold it. Previously the rule was
+        // "the type name contains stack", which made ui.layer children impossible even though the
+        // generated tree handled layer parenting.
+        var parent = SelectedNode;
+        if (parent is not null && parent.IsContainer)
         {
-            SelectedNode.Children.Add(node);
+            parent.Children.Add(node);
+            node.Parent = parent;
         }
         else
         {
-            ActiveRoots.Add(node);
+            RootNodes.Add(node);
         }
+
         SelectedNode = node;
         UpdatePreview();
     }
 
-    [RelayCommand]
-    private void RemoveNode(WidgetNode? node)
+    private string NextKey(string wireType)
     {
-        if (node is null)
+        var baseName = wireType.Split('.').Last();
+        var candidate = baseName;
+        var index = 1;
+        while (AllNodes().Any(n => n.Key == candidate))
         {
-            return;
+            candidate = baseName + (++index);
         }
-        RemoveRecursive(RootNodes, node);
-        RemoveRecursive(ConfigNodes, node);
-        if (SelectedNode == node)
-        {
-            SelectedNode = null;
-        }
-        UpdatePreview();
+
+        return candidate;
     }
 
-    private static void RemoveRecursive(ObservableCollection<WidgetNode> nodes, WidgetNode target)
+    private IEnumerable<WidgetNode> AllNodes()
     {
-        if (nodes.Remove(target))
+        foreach (var node in RootNodes)
         {
-            return;
-        }
-        foreach (var child in nodes)
-        {
-            RemoveRecursive(child.Children, target);
-        }
-    }
-
-    [RelayCommand]
-    private void MoveUp(WidgetNode? node) => Move(node, -1);
-
-    [RelayCommand]
-    private void MoveDown(WidgetNode? node) => Move(node, +1);
-
-    private void Move(WidgetNode? node, int delta)
-    {
-        if (node is null)
-        {
-            return;
-        }
-        var list = FindList(RootNodes, node) ?? FindList(ConfigNodes, node);
-        if (list is null)
-        {
-            return;
-        }
-        var index = list.IndexOf(node);
-        var target = index + delta;
-        if (target < 0 || target >= list.Count)
-        {
-            return;
-        }
-        list.Move(index, target);
-        UpdatePreview();
-    }
-
-    private static ObservableCollection<WidgetNode>? FindList(ObservableCollection<WidgetNode> nodes, WidgetNode target)
-    {
-        if (nodes.Contains(target))
-        {
-            return nodes;
-        }
-        foreach (var child in nodes)
-        {
-            var found = FindList(child.Children, target);
-            if (found is not null)
+            yield return node;
+            foreach (var child in Descendants(node))
             {
-                return found;
+                yield return child;
             }
         }
-        return null;
+    }
+
+    private static IEnumerable<WidgetNode> Descendants(WidgetNode node)
+    {
+        foreach (var child in node.Children)
+        {
+            yield return child;
+            foreach (var grandchild in Descendants(child))
+            {
+                yield return grandchild;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveNode()
+    {
+        if (SelectedNode is null)
+        {
+            return;
+        }
+
+        var target = SelectedNode;
+        if (target.Parent is { } parent)
+        {
+            parent.Children.Remove(target);
+            target.Parent = null;
+        }
+        else
+        {
+            RootNodes.Remove(target);
+        }
+
+        SelectedNode = target.Parent;
+        UpdatePreview();
+    }
+
+    [RelayCommand]
+    private void MoveUp()
+    {
+        if (SelectedNode is null)
+        {
+            return;
+        }
+
+        var siblings = SelectedNode.Parent?.Children ?? RootNodes;
+        var index = siblings.IndexOf(SelectedNode);
+        if (index > 0)
+        {
+            siblings.Move(index, index - 1);
+            UpdatePreview();
+        }
+    }
+
+    [RelayCommand]
+    private void MoveDown()
+    {
+        if (SelectedNode is null)
+        {
+            return;
+        }
+
+        var siblings = SelectedNode.Parent?.Children ?? RootNodes;
+        var index = siblings.IndexOf(SelectedNode);
+        if (index >= 0 && index < siblings.Count - 1)
+        {
+            siblings.Move(index, index + 1);
+            UpdatePreview();
+        }
     }
 
     [RelayCommand]
@@ -267,59 +447,42 @@ public partial class WidgetDesignerViewModel : ObservableObject
     {
         if (SelectedNode is null)
         {
-            StatusText = "Select a node first, then add its events.";
             return;
         }
-        SelectedNode.Events.Add(new NodeEvent
+
+        var names = SelectedNode.OfferableEvents;
+        if (names.Count == 0)
         {
-            EventName = SelectedNode.NodeType == "ui.button" ? "press" : "change",
-            Detail = $"{SelectedNode.Key} interacted",
-        });
-        UpdatePreview();
+            StatusText = $"{SelectedNode.Info.DisplayName} advertises no events.";
+            return;
+        }
+
+        SelectedNode.Events.Add(new NodeEvent { EventName = names[0] });
     }
 
     [RelayCommand]
-    private void RemoveNodeEvent(NodeEvent? nodeEvent)
+    private void RemoveNodeEvent(NodeEvent? handler)
     {
-        if (nodeEvent is not null && SelectedNode is not null)
+        if (handler is not null && SelectedNode is not null)
         {
-            SelectedNode.Events.Remove(nodeEvent);
+            SelectedNode.Events.Remove(handler);
         }
     }
 
     [RelayCommand]
-    private void AddButtonState()
-    {
-        if (SelectedNode is null || SelectedNode.NodeType != "ui.button")
-        {
-            StatusText = "Button states apply to a selected ui.button node.";
-            return;
-        }
-        SelectedNode.States.Add(new ButtonState
-        {
-            Name = $"state{SelectedNode.States.Count + 1}",
-        });
-    }
+    private void AddButtonState() => States.Add(new ButtonState());
 
     [RelayCommand]
     private void RemoveButtonState(ButtonState? state)
     {
-        if (state is not null && SelectedNode is not null)
+        if (state is not null)
         {
-            SelectedNode.States.Remove(state);
+            States.Remove(state);
         }
     }
 
     [RelayCommand]
-    private void AddSchemaProperty()
-    {
-        var property = new SchemaProperty
-        {
-            Name = $"prop{SchemaProperties.Count + 1}",
-        };
-        SchemaProperties.Add(property);
-        SelectedSchemaProperty = property;
-    }
+    private void AddSchemaProperty() => SchemaProperties.Add(new SchemaProperty());
 
     [RelayCommand]
     private void RemoveSchemaProperty(SchemaProperty? property)
@@ -330,44 +493,68 @@ public partial class WidgetDesignerViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedNodeChanged(WidgetNode? value)
-    {
-        if (value is not null)
-        {
-            UpdatePreview();
-        }
-    }
-
-    partial void OnUnitChanged(string value) => UpdatePreview();
+    // ------------------------------------------------------------------ preview
 
     private void UpdatePreview()
     {
-        var body = new StringBuilder();
-        body.Append("<div style='display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;font-family:Segoe UI,sans-serif;color:#fff'>");
-        var roots = EditingConfigRegion ? ConfigNodes : RootNodes;
-        if (EditingConfigRegion && roots.Count == 0)
-        {
-            body.Append("<div style='opacity:.6;font-size:12px'>Config region - add nodes</div>");
-        }
-        foreach (var node in roots)
-        {
-            body.Append(RenderNodeHtml(node));
-        }
-        body.Append("</div>");
-        PreviewHtml = Wrap(body.ToString());
+        var design = BuildDesign();
+        var nodes = design.Nodes.Count == 0
+            ? "<p class='empty'>No nodes yet - add one from the palette.</p>"
+            : string.Join(string.Empty, design.Nodes.Select(RenderPreview));
+
+        var unit = string.IsNullOrWhiteSpace(Unit) ? string.Empty : $"<span class='unit'>{WebEscape(Unit)}</span>";
+        PreviewHtml = $$"""
+            <!doctype html>
+            <html><head><meta charset="utf-8"><style>
+              body { margin:0; display:grid; place-items:center; height:144px; background:#1b1d24; color:#f2f4f8;
+                     font:12px/1.3 "Segoe UI", system-ui, sans-serif; }
+              .node { display:inline-block; padding:2px 4px; border-radius:3px; }
+              .unit { opacity:.6; font-size:10px; margin-left:3px; }
+              .empty { opacity:.45; }
+            </style></head>
+            <body>{{unit}}{{nodes}}</body></html>
+            """;
     }
 
-    private static string RenderNodeHtml(WidgetNode node) => node.NodeType switch
+    private string RenderPreview(DesignedNode node)
     {
-        "ui.button" => $"<div style='background:{node.Background};border-radius:12px;padding:14px 22px;font-size:{node.Size * 700:.0f}%'>{System.Security.SecurityElement.Escape(node.Text)}</div>",
-        "ui.text" => $"<div style='font-size:{node.Size * 700:.0f}%'>{System.Security.SecurityElement.Escape(node.Text)}</div>",
-        "ui.shape" => "<div style='width:70%;height:6px;background:rgba(255,255,255,.35);border-radius:3px'></div>",
-        "ui.gauge" => $"<div style='font-size:{node.Size * 500:.0f}%'>▶ 70</div>",
-        "macrodeck.progress-bar" => "<div style='width:80%;height:8px;background:rgba(255,255,255,.2);border-radius:4px'><div style='width:60%;height:100%;background:#4F8CFF;border-radius:4px'></div></div>",
-        _ => $"<div style='opacity:.8;font-size:12px'>{System.Security.SecurityElement.Escape(node.NodeType)}</div>",
+        var info = UiNodeCatalog.Find(node.NodeType);
+        var label = info?.DisplayName ?? node.NodeType;
+        var text = WebEscape(node.Text);
+        return $"<span class='node' title='{WebEscape(node.NodeType)}' style='background:{WebEscape(node.Background)}'>{label}{(text.Length > 0 ? ": " + text : string.Empty)}</span>";
+    }
+
+    private static string WebEscape(string? value) => (value ?? string.Empty)
+        .Replace("&", "&amp;", StringComparison.Ordinal)
+        .Replace("<", "&lt;", StringComparison.Ordinal)
+        .Replace(">", "&gt;", StringComparison.Ordinal)
+        .Replace("\"", "&quot;", StringComparison.Ordinal);
+
+
+
+    partial void OnUnitChanged(string value) => UpdatePreview();
+
+    /// <summary>True when a node is selected, so the property panel can be shown.</summary>
+    public bool HasSelection => SelectedNode is not null;
+
+    // ------------------------------------------------------------------ generation
+
+    /// <summary>Projects the designer state onto the generator's model.</summary>
+    public WidgetDesign BuildDesign() => new()
+    {
+        WidgetTypeId = WidgetTypeId.Trim(),
+        WidgetName = WidgetName,
+        WidgetDescription = WidgetDescription,
+        ProviderName = ProviderName,
+        HasConfiguration = HasConfiguration,
+        SupportsFlows = SupportsFlows,
+        Unit = Unit,
+        Surfaces = HasConfiguration ? ["widget", "config"] : ["widget"],
+        Nodes = [.. RootNodes.Select(r => r.ToModel(null))],
+        States = [.. States.Select(s => new DesignedState { Name = s.Name, Background = s.Background, Text = s.Text })],
+        SchemaProperties = [.. SchemaProperties.Select(p => p.ToModel())],
     };
 
-    /// <summary>Generates the widget-type provider file + resx keys.</summary>
     [RelayCommand]
     private void Generate()
     {
@@ -377,26 +564,35 @@ public partial class WidgetDesignerViewModel : ObservableObject
             StatusText = "Open a plugin first.";
             return;
         }
-        if (!Core.Utils.MacroDeckRules.IsValidLocalId(WidgetTypeId))
+
+        var design = BuildDesign();
+        var problems = design.Validate();
+        if (problems.Count > 0)
         {
-            StatusText = "Widget type id must be lowercase kebab-case (it is persisted).";
+            StatusText = string.Join(" ", problems);
+            return;
+        }
+
+        var path = Path.Combine(ws.PluginProjectDirectory, design.ClassName + ".cs");
+        if (File.Exists(path))
+        {
+            StatusText = $"{design.ClassName}.cs already exists - delete it first or change the widget type id.";
             return;
         }
 
         try
         {
-            var className = ToPascal(WidgetTypeId) + "WidgetProvider";
-            var source = RenderProvider(ws.ProjectName, className);
-            File.WriteAllText(Path.Combine(ws.PluginProjectDirectory, className + ".cs"), source);
+            File.WriteAllText(path, WidgetGenerator.Render(design, ws.ProjectName), new UTF8Encoding(false));
 
             var stringsPath = Path.Combine(ws.LocalizationDirectory, "Strings.resx");
-            _resx.AddKeys(stringsPath, new Dictionary<string, string>
-            {
-                [$"Widgets.{ToPascal(WidgetTypeId)}.Name"] = WidgetName,
-                [$"Widgets.{ToPascal(WidgetTypeId)}.Description"] = $"{WidgetName} widget generated by DeckForge.",
-            });
+            _resx.AddKeys(stringsPath, WidgetGenerator.BuildStrings(design));
 
-            StatusText = $"Generated {className}.cs: IWidgetTypeProvider + IUiProvider, {CountNodes(RootNodes)} widget nodes, {CountNodes(ConfigNodes)} config nodes, {SchemaProperties.Count} schema properties. Build, then test the tile in Macro Deck's developer preview.";
+            StatusText = $"Generated {design.ClassName}.cs with {CountNodes(design)} node(s). "
+                + "Register it on PluginIntegration by implementing IWidgetTypeProvider there.";
+        }
+        catch (GenerationException ex)
+        {
+            StatusText = $"Generation failed: {ex.Message}";
         }
         catch (Exception ex)
         {
@@ -404,289 +600,36 @@ public partial class WidgetDesignerViewModel : ObservableObject
         }
     }
 
-    private static int CountNodes(ObservableCollection<WidgetNode> nodes) =>
-        nodes.Count + nodes.Sum(n => CountNodes(n.Children));
-
-    private string RenderProvider(string projectName, string className)
+    private static int CountNodes(WidgetDesign design)
     {
-        var schemaJson = RenderSchemaJson();
-
-        // Non-interpolated raw template; tokens replaced below ($Name pattern).
-        var template = """
-            using System.Text.Json;
-            using MacroDeck.Localization;
-            using MacroDeck.Sdk;
-            using MacroDeck.Sdk.Ui;
-            using MacroDeck.Ui;
-            using MacroDeck.Ui.Model;
-            using Serilog;
-
-            namespace $Namespace;
-
-            /// <summary>
-            /// $WidgetName widget - generated by DeckForge Widget Designer v2.
-            /// Implements IWidgetTypeProvider (registration) and IUiProvider (drawing).
-            /// </summary>
-            public sealed class $ClassName : IWidgetTypeProvider, IUiProvider
+        var total = 0;
+        var pending = new Stack<DesignedNode>(design.Nodes);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            total++;
+            foreach (var child in node.Children)
             {
-                private static readonly ILogger Logger = Log.ForContext<$ClassName>();
-                private string? _widgetTypeId;
-
-                public string ProviderName => "$WidgetName";
-
-                public Task InitializeAsync(IWidgetTypeProviderContext context, CancellationToken cancellationToken = default)
-                {
-                    var registration = context.RegisterWidgetTypeAsync(
-                        new WidgetTypeDescriptor(
-                            "$WidgetTypeId",
-                            Strings.Widgets.$StringsKey.Name(),
-                            Strings.Widgets.$StringsKey.Description(),
-                            DefaultData: $DefaultData,
-                            DataSchema: $DataSchema,
-                            HasConfiguration: $HasConfiguration)
-                        {
-                            SupportsFlows = $SupportsFlows,
-                        },
-                        cancellationToken);
-                    _widgetTypeId = registration.Result.WidgetTypeId;
-                    return Task.CompletedTask;
-                }
-
-                public UiSurfaceDeclaration[] Surfaces { get; } =
-                [
-                    new() { Kind = UiSurfaceKinds.Widget, SessionMode = UiSessionModes.Shared },
-                    new() { Kind = UiSurfaceKinds.Preview, SessionMode = UiSessionModes.Shared },
-                    new() { Kind = UiSurfaceKinds.Config, SessionMode = UiSessionModes.Exclusive },
-                ];
-
-                public Task<IUiSession?> CreateSessionAsync(UiSessionRequest request, CancellationToken cancellationToken)
-                {
-                    var surface = request.Surface;
-                    UiElement? root = surface.Kind switch
-                    {
-                        UiSurfaceKinds.Widget or UiSurfaceKinds.Preview => BuildWidgetView(),
-                        UiSurfaceKinds.Config => BuildConfigView(),
-                        _ => null,
-                    };
-                    return Task.FromResult<IUiSession?>(root is null ? null : new ViewSession(new UiView(surface, root)));
-                }
-
-                /// <summary>Widget-surface tree, designed in DeckForge.</summary>
-                private static UiElement? BuildWidgetView() => BuildTree(DesignerData.WidgetNodes);
-
-                /// <summary>Config-surface tree (widget configuration view), designed in DeckForge.</summary>
-                private static UiElement? BuildConfigView() => BuildTree(DesignerData.ConfigNodes);
-
-                private static UiElement? BuildTree(IReadOnlyList<DesignedNode> designedNodes)
-                {
-                    if (designedNodes.Count == 0)
-                    {
-                        return null;
-                    }
-
-                    UiElement? root = null;
-                    var byKey = new Dictionary<string, UiElement>();
-                    foreach (var designed in designedNodes)
-                    {
-                        var element = ToElement(designed);
-                        byKey[designed.Key] = element;
-                        if (designed.ParentKey is null)
-                        {
-                            root = element;
-                        }
-                        else
-                        {
-                            switch (byKey[designed.ParentKey])
-                            {
-                                case UiButton button: button.Children.Add(element); break;
-                                case UiStack stack: stack.Children.Add(element); break;
-                                case UiLayer layer: layer.Children.Add(element); break;
-                            }
-                        }
-                    }
-                    return root;
-                }
-
-                private static UiElement ToElement(DesignedNode designed)
-                {
-                    UiElement element = designed.NodeType switch
-                    {
-                        "ui.button" => new UiButton { Key = designed.Key, Background = designed.Background ?? "#2C2C2E" },
-                        "ui.text" => new UiTextRun { Key = designed.Key, Text = UiText.FromFixed(designed.Text), Size = designed.Size },
-                        "ui.stack" => new UiStack { Key = designed.Key },
-                        "ui.layer" => new UiLayer { Key = designed.Key },
-                        _ => new UiTextRun { Key = designed.Key, Text = UiText.FromFixed(designed.Text) },
-                    };
-
-                    foreach (var handled in designed.Events)
-                    {
-                        AttachHandler(element, handled.EventName, handled.HandlerKind, designed.Key);
-                    }
-                    return element;
-                }
-
-                /// <summary>Declares one event; the lambda is a working stub - extend with real logic.</summary>
-                private static void AttachHandler(UiElement element, string eventName, string handlerKind, string nodeKey)
-                {
-                    var name = eventName switch
-                    {
-                        "long-press" => UiComponentEvents.LongPress,
-                        "press-start" => UiComponentEvents.PressStart,
-                        "press-end" => UiComponentEvents.PressEnd,
-                        "double-press" => UiComponentEvents.DoublePress,
-                        "change" => UiComponentEvents.Change,
-                        "adjust" => UiComponentEvents.Adjust,
-                        "tap" => UiComponentEvents.Tap,
-                        _ => UiComponentEvents.Press,
-                    };
-
-                    switch (handlerKind)
-                    {
-                        case "Log":
-                            element.Events.Add(UiEventHandler.On(name, () =>
-                                Logger.Information("{Key}: {Event}", nodeKey, eventName)));
-                            break;
-                        case "Publish event":
-                            // TODO: replace the log with context.Events.Publish(eventName, payload) -
-                            // keep a reference to IIntegrationContext.Events from InitializeAsync.
-                            element.Events.Add(UiEventHandler.On(name, () =>
-                                Logger.Information("{Key}: {Event} -> publish (wire up Events here)", nodeKey, eventName)));
-                            break;
-                        default:
-                            // TODO: implement the real behavior for {nodeKey} / {eventName}.
-                            element.Events.Add(UiEventHandler.On(name, () =>
-                                Logger.Debug("{Key}: {Event} TODO", nodeKey, eventName)));
-                            break;
-                    }
-                }
+                pending.Push(child);
             }
+        }
 
-            /// <summary>Adapter from UiView to the session contract.</summary>
-            public sealed class ViewSession : IUiSession
-            {
-                private readonly UiView _view;
-
-                public ViewSession(UiView view) => _view = view;
-
-                public UiView View => _view;
-
-                public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-            }
-
-            /// <summary>Designer output: the flattened node list with events, serialized once.</summary>
-            public static class DesignerData
-            {
-                public sealed record DesignedEvent(string EventName, string HandlerKind);
-
-                public sealed record DesignedNode(
-                    string Key,
-                    string NodeType,
-                    string Text,
-                    double Size,
-                    string? Background,
-                    string? ParentKey,
-                    DesignedEvent[] Events);
-
-                public static readonly DesignedNode[] WidgetNodes =
-                [
-            $WidgetNodes
-                ];
-
-                public static readonly DesignedNode[] ConfigNodes =
-                [
-            $ConfigNodes
-                ];
-            }
-            """;
-
-        return template
-            .Replace("$Namespace", projectName)
-            .Replace("$ClassName", className)
-            .Replace("$WidgetName", WidgetName)
-            .Replace("$WidgetTypeId", WidgetTypeId)
-            .Replace("$StringsKey", ToPascal(WidgetTypeId))
-            .Replace("$DefaultData", Json(JsonSerializer.Serialize(new Dictionary<string, object>
-            {
-                ["unit"] = Unit,
-                ["value"] = 0,
-            })))
-            .Replace("$DataSchema", Json(schemaJson))
-            .Replace("$HasConfiguration", HasConfiguration ? "true" : "false")
-            .Replace("$SupportsFlows", SupportsFlows ? "true" : "false")
-            .Replace("$WidgetNodes", RenderDesignedNodes(RootNodes))
-            .Replace("$ConfigNodes", RenderDesignedNodes(ConfigNodes));
+        return total;
     }
+}
 
-    private string RenderDesignedNodes(ObservableCollection<WidgetNode> nodes, string? parentKey = null)
+/// <summary>ObservableCollection index-aware move, which the tree editor needs and the BCL lacks.</summary>
+public static class ObservableCollectionExtensions
+{
+    public static void Move<T>(this ObservableCollection<T> collection, int from, int to)
     {
-        if (nodes.Count == 0)
+        if (from == to || from < 0 || from >= collection.Count)
         {
-            return "                    // (none designed)";
+            return;
         }
-        var sb = new StringBuilder();
-        foreach (var node in nodes)
-        {
-            var events = string.Join(", ", node.Events.Select(e =>
-                $"new({CSharpString(e.EventName)}, {CSharpString(e.HandlerKind)})"));
-            sb.AppendLine($"                    new({CSharpString(node.Key)}, {CSharpString(node.NodeType)}, {CSharpString(node.Text)}, {node.Size.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {CSharpStringOrNull(node.Background)}, {CSharpStringOrNull(parentKey)}, [{events}]),");
-            sb.Append(RenderDesignedNodes(node.Children, node.Key));
-        }
-        return sb.ToString().TrimEnd() + "\n";
+
+        var item = collection[from];
+        collection.RemoveAt(from);
+        collection.Insert(Math.Clamp(to, 0, collection.Count), item);
     }
-
-    private string RenderSchemaJson()
-    {
-        var properties = new Dictionary<string, object>();
-        foreach (var property in SchemaProperties)
-        {
-            var entry = new Dictionary<string, object>
-            {
-                ["type"] = property.SchemaType,
-            };
-            if (!string.IsNullOrWhiteSpace(property.Title))
-            {
-                entry["title"] = property.Title;
-            }
-            if (!string.IsNullOrWhiteSpace(property.DefaultValue))
-            {
-                entry["default"] = property.SchemaType is "number" && double.TryParse(property.DefaultValue, out var number)
-                    ? number
-                    : property.DefaultValue;
-            }
-            properties[property.Name] = entry;
-        }
-        if (SupportsFlows && !properties.ContainsKey("flows"))
-        {
-            properties["flows"] = new Dictionary<string, object> { ["type"] = "array" };
-        }
-
-        var schema = new Dictionary<string, object>
-        {
-            ["type"] = "object",
-            ["properties"] = properties,
-        };
-        var required = SchemaProperties.Where(p => p.Required).Select(p => p.Name).ToList();
-        if (required.Count > 0)
-        {
-            schema["required"] = required;
-        }
-        return JsonSerializer.Serialize(schema, new JsonSerializerOptions { WriteIndented = true });
-    }
-
-    private static string CSharpString(string value) =>
-        $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
-
-    private static string CSharpStringOrNull(string? value) => value is null ? "null" : CSharpString(value);
-
-    private static string Json(string schema) => "@\"" + schema.Replace("\"", "\"\"") + "\"";
-
-    private static string ToPascal(string kebab)
-    {
-        var parts = kebab.Split('-', StringSplitOptions.RemoveEmptyEntries);
-        return string.Concat(parts.Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
-    }
-
-    private static string Wrap(string body) =>
-        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"/><style>html,body{margin:0;height:100%;background:#1a1c22;overflow:hidden}</style></head><body>"
-        + body + "</body></html>";
 }

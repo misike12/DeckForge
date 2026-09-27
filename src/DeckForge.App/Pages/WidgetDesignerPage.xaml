@@ -163,7 +163,7 @@
                                             <ComboBox ItemsSource="{Binding DataContext.EventNames, RelativeSource={RelativeSource AncestorType=Page}}"
                                                       SelectedItem="{Binding EventName}" FontSize="11.5" />
                                             <ComboBox Grid.Column="1" Margin="4,0"
-                                                      ItemsSource="{Binding DataContext.HandlerKinds, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                      ItemsSource="{Binding DataContext.OfferableEvents, RelativeSource={RelativeSource AncestorType=Page}}"
                                                       SelectedItem="{Binding HandlerKind}" FontSize="11.5" />
                                             <ui:TextBox Grid.Column="2" Margin="4,0" Text="{Binding Detail, Mode=TwoWay}" PlaceholderText="detail" FontSize="11.5" />
                                             <ui:Button Grid.Column="3" Content="✕" Padding="4,0"

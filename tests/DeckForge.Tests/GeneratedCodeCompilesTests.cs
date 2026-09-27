@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using DeckForge.Core.Blocks;
 using DeckForge.Core.Code;
 using DeckForge.Core.Plugins;
+using DeckForge.Core.Widgets;
 using Microsoft.Extensions.Logging.Abstractions;
 using NUnit.Framework;
 
@@ -471,6 +472,209 @@ public class GeneratedCodeCompilesTests
             Assert.That(restored.Statements, Has.Count.EqualTo(1), kind.Id);
             Assert.That(restored.Statements[0].GetType(), Is.EqualTo(block.GetType()), kind.Id);
         }
+    }
+
+    // ---------------------------------------------------------------- widgets
+
+    /// <summary>
+    /// A widget view using every node type in the catalog, several levels deep, with events.
+    /// </summary>
+    [Test]
+    public void Every_ui_node_type_compiles()
+    {
+        if (Skip)
+        {
+            Assert.Ignore("DECKFORGE_SKIP_SLOW_TESTS=1");
+        }
+
+        var design = new WidgetDesign
+        {
+            WidgetTypeId = "kitchen-sink",
+            WidgetName = "Kitchen sink",
+            WidgetDescription = "Every node type.",
+            HasConfiguration = true,
+            SupportsFlows = true,
+            Nodes = [],
+            States = [new DesignedState { Name = "on", Background = "#4F8CFF", Text = "On" }],
+            SchemaProperties = [new DesignedSchemaProperty { Name = "value", Required = true, Title = "Value" }],
+        };
+
+        // A stack root, then every type the catalog knows, each given whatever properties it has.
+        var root = new DesignedNode { Key = "root", NodeType = "ui.stack", ParentKey = null };
+        design.Nodes.Add(root);
+
+        var index = 0;
+        foreach (var type in UiNodeCatalog.All.Where(t => t.WireType != "ui.stack"))
+        {
+            index++;
+            var node = new DesignedNode
+            {
+                Key = "n" + index,
+                NodeType = type.WireType,
+                ParentKey = "root",
+                Text = "Sample",
+                Size = 0.1,
+                Background = "#222222",
+            };
+
+            // Set every property the type declares, so a mistranscribed name is caught.
+            foreach (var property in type.Properties)
+            {
+                node.Properties[property.Name] = property.Kind switch
+                {
+                    UiPropertyKind.Flag => "true",
+                    UiPropertyKind.Number or UiPropertyKind.ValueNumber => "1",
+                    _ => property.Name switch
+                    {
+                        "points" => "0.1,0.5,0.9",
+                        "shape" => "rounded-rect",
+                        "direction" => "column",
+                        "weight" => "semibold",
+                        "interaction" => "drag",
+                        "transition" => "fade",
+                        "clip" => "rect",
+                        "format" => "time",
+                        "icon" => "Play",
+                        _ => "sample",
+                    },
+                };
+            }
+
+            if (type.Events.Count > 0)
+            {
+                node.Events.Add(new DesignedEvent { Name = type.Events[0], Body = "_logger.Information(\"handled\");" });
+            }
+
+            design.Nodes.Add(node);
+            root.Children.Add(node);
+        }
+
+        var options = Options();
+        var source = WidgetGenerator.Render(design, options.ProjectName!);
+        var (_, output) = WriteAndBuild(options, [($"{design.ClassName}.cs", source)]);
+        AssertNoCompilerErrors(output);
+    }
+
+    [Test]
+    public void Several_top_level_nodes_are_wrapped_rather_than_dropped()
+    {
+        if (Skip)
+        {
+            Assert.Ignore("DECKFORGE_SKIP_SLOW_TESTS=1");
+        }
+
+        var design = new WidgetDesign
+        {
+            WidgetTypeId = "multi-root",
+            WidgetName = "Multi root",
+            HasConfiguration = false,
+            Nodes =
+            [
+                new DesignedNode { Key = "a", NodeType = "ui.stack" },
+                new DesignedNode { Key = "b", NodeType = "ui.stack" },
+                new DesignedNode { Key = "c", NodeType = "ui.stack" },
+            ],
+        };
+
+        var source = WidgetGenerator.Render(design, "Probe");
+
+        // The previous BuildTree assigned root = element per parentless node, so only the last
+        // survived. Every one must appear.
+        Assert.Multiple(() =>
+        {
+            Assert.That(source, Does.Contain("\"a\""));
+            Assert.That(source, Does.Contain("\"b\""));
+            Assert.That(source, Does.Contain("\"c\""));
+            Assert.That(source, Does.Contain("Children = rootChildren"));
+        });
+    }
+
+    [Test]
+    public void A_configuration_surface_without_a_schema_is_refused()
+    {
+        var design = new WidgetDesign
+        {
+            WidgetTypeId = "no-schema",
+            WidgetName = "No schema",
+            HasConfiguration = true,
+            Nodes = [new DesignedNode { Key = "root", NodeType = "ui.stack" }],
+        };
+
+        Assert.That(
+            design.Validate().Any(p => p.Contains("schema", StringComparison.OrdinalIgnoreCase)),
+            Is.True,
+            "The host refuses a configuration surface with no schema, so the generator must too.");
+    }
+
+    [Test]
+    public void A_node_parented_to_a_leaf_is_refused()
+    {
+        var design = new WidgetDesign
+        {
+            WidgetTypeId = "bad-tree",
+            WidgetName = "Bad tree",
+            HasConfiguration = false,
+            Nodes =
+            [
+                new DesignedNode { Key = "leaf", NodeType = "ui.text" },
+                new DesignedNode { Key = "child", NodeType = "ui.text", ParentKey = "leaf" },
+            ],
+        };
+
+        Assert.That(design.Validate().Any(p => p.Contains("cannot contain", StringComparison.Ordinal)), Is.True);
+    }
+
+    [Test]
+    public void The_catalog_holds_exactly_the_twenty_four_component_types()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(UiNodeCatalog.All, Has.Count.EqualTo(24));
+            Assert.That(UiNodeCatalog.All.Count(t => t.WireType.StartsWith("ui.", StringComparison.Ordinal)), Is.EqualTo(20));
+            Assert.That(UiNodeCatalog.All.Count(t => t.WireType.StartsWith("macrodeck.", StringComparison.Ordinal)), Is.EqualTo(4));
+            Assert.That(UiNodeCatalog.All.Select(t => t.WireType).Distinct().Count(), Is.EqualTo(24));
+            Assert.That(UiNodeCatalog.All.Select(t => t.ClassName).Distinct().Count(), Is.EqualTo(24));
+        });
+    }
+
+    [Test]
+    public void Every_catalog_property_name_is_unique_within_its_type()
+    {
+        foreach (var type in UiNodeCatalog.All)
+        {
+            var duplicates = type.Properties
+                .GroupBy(p => p.Name, StringComparer.Ordinal)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+            Assert.That(duplicates, Is.Empty, $"{type.WireType}: {string.Join(", ", duplicates)}");
+        }
+    }
+
+    [Test]
+    public void A_widget_configuration_always_emits_a_data_schema()
+    {
+        var design = new WidgetDesign
+        {
+            WidgetTypeId = "with-schema",
+            WidgetName = "With schema",
+            HasConfiguration = true,
+            Nodes = [new DesignedNode { Key = "root", NodeType = "ui.stack" }],
+            SchemaProperties =
+            [
+                new DesignedSchemaProperty { Name = "level", SchemaType = "number", Title = "Level", Required = true, DefaultValue = "0" },
+            ],
+        };
+
+        var source = WidgetGenerator.Render(design, "Probe");
+        Assert.Multiple(() =>
+        {
+            Assert.That(source, Does.Contain("DataSchema:"));
+            Assert.That(source, Does.Contain("HasConfiguration: true"));
+            // The schema is a C# string literal, so its quotes are escaped in the source.
+            Assert.That(source, Does.Contain("\\\"" + "type\\\": \\\"object\\\""));
+            Assert.That(source, Does.Contain("IReadOnlyList<UiSurfaceDeclaration> Surfaces"));
+        });
     }
 
     [Test]

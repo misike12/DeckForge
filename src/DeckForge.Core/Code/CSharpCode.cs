@@ -105,6 +105,12 @@ public static class CSharpCode
             : text;
     }
 
+    /// <summary>A C# numeric literal for a value that is already a number.</summary>
+    public static string NumberLiteral(double value) => value.ToString("R", CultureInfo.InvariantCulture);
+
+    /// <summary>A C# numeric literal for an optional value, or <c>0</c> when absent.</summary>
+    public static string NumberLiteral(double? value) => value is { } v ? NumberLiteral(v) : "0";
+
     /// <summary>A C# <c>char</c> literal.</summary>
     public static string CharLiteral(char value) => $"'\\u{(int)value:x4}'";
 

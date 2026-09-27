@@ -10,8 +10,7 @@ public partial class WidgetDesignerPage : Page
     /// <summary>Exposed for XAML ItemsSource bindings inside data templates.</summary>
     public static System.Collections.Generic.IReadOnlyList<string> EventNames => NodeEvent.EventNames;
 
-    /// <summary>Exposed for XAML ItemsSource bindings inside data templates.</summary>
-    public static System.Collections.Generic.IReadOnlyList<string> HandlerKinds => NodeEvent.HandlerKinds;
+
 
     /// <summary>Exposed for XAML ItemsSource bindings inside data templates.</summary>
     public static System.Collections.Generic.IReadOnlyList<string> SchemaTypes => SchemaProperty.SchemaTypes;
@@ -25,12 +24,13 @@ public partial class WidgetDesignerPage : Page
         _vm = vm;
         DataContext = vm;
 
-        foreach (var type in WidgetNode.NodeTypes)
+        foreach (var type in WidgetDesignerViewModel.NodeTypes)
         {
             var button = new Wpf.Ui.Controls.Button
             {
-                Content = type.Split('.').Last(),
-                Tag = type,
+                Content = type.DisplayName,
+                ToolTip = type.Summary,
+                Tag = type.WireType,
                 Margin = new Thickness(0, 0, 6, 6),
                 Padding = new Thickness(10, 5, 10, 5),
             };
@@ -76,7 +76,8 @@ public partial class WidgetDesignerPage : Page
     {
         if (sender is FrameworkElement { Tag: WidgetNode node })
         {
-            _vm.RemoveNodeCommand.Execute(node);
+            _vm.SelectedNode = node;
+            _vm.RemoveNodeCommand.Execute(null);
         }
     }
 
@@ -84,7 +85,8 @@ public partial class WidgetDesignerPage : Page
     {
         if (sender is FrameworkElement { Tag: WidgetNode node })
         {
-            _vm.MoveUpCommand.Execute(node);
+            _vm.SelectedNode = node;
+            _vm.MoveUpCommand.Execute(null);
         }
     }
 
@@ -92,7 +94,8 @@ public partial class WidgetDesignerPage : Page
     {
         if (sender is FrameworkElement { Tag: WidgetNode node })
         {
-            _vm.MoveDownCommand.Execute(node);
+            _vm.SelectedNode = node;
+            _vm.MoveDownCommand.Execute(null);
         }
     }
 
