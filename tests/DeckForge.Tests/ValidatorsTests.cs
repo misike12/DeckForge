@@ -87,14 +87,14 @@ public class ManifestValidatorTests
     public void Rejects_underscored_id()
     {
         var result = ManifestValidator.Validate(ValidManifest.Replace("com.example.hue-lights", "com.example.hue_lights"));
-        Assert.That(result.Issues.Any(i => i.Code == "invalid-id"), Is.True);
+        Assert.That(result.Issues.Any(i => i.Code == "invalid-plugin-id"), Is.True);
     }
 
     [Test]
     public void Rejects_script_entrypoint()
     {
         var result = ManifestValidator.Validate(ValidManifest.Replace("runtimes/win-x64/HueLights.dll", "run.sh"));
-        Assert.That(result.Issues.Any(i => i.Code == "entrypoint-script"), Is.True);
+        Assert.That(result.Issues.Any(i => i.Code == "schema:not"), Is.True);
     }
 
     [Test]
@@ -104,24 +104,32 @@ public class ManifestValidatorTests
             "\"compatibility\"",
             "\"permissions\": [\"host:variables\", \"host:variables\", \"not:a:perm\"], \"compatibility\"");
         var result = ManifestValidator.Validate(withPerms);
-        Assert.That(result.Issues.Any(i => i.Code == "duplicate-permission" && i.Severity == ValidationSeverity.Error), Is.True);
+        Assert.That(result.Issues.Any(i => i.Code == "schema:uniqueItems" && i.Severity == ValidationSeverity.Error), Is.True);
         Assert.That(result.Issues.Any(i => i.Code == "unknown-permission" && i.Severity == ValidationSeverity.Warning), Is.True);
     }
 
     [Test]
-    public void Warns_on_template_placeholder_repository()
+    public void Accepts_the_template_repository_placeholder()
     {
+        // An earlier version invented a rule rejecting this URL. Verified against the real tool:
+        // it checks the shape, ^https?://, and accepts the placeholder. The Store refuses a
+        // placeholder at upload, which is a later gate with different information.
         var result = ManifestValidator.Validate(ValidManifest.Replace(
             "https://github.com/example/hue-lights",
-            "https://github.com/example/my-plugin"));
-        Assert.That(result.Issues.Any(i => i.Code == "publication-metadata-missing"), Is.True);
+            "https://github.com/example/my-plugin"),
+            ManifestValidationLevel.Publication);
+
+        Assert.That(
+            result.Issues.Any(i => i.Message.Contains("placeholder", StringComparison.OrdinalIgnoreCase)),
+            Is.False,
+            string.Join("\n", result.Issues.Select(i => i.Message)));
     }
 
     [Test]
     public void Flags_framework_dependent_dll_rule()
     {
         var result = ManifestValidator.Validate(ValidManifest.Replace("FrameworkDependent", "SelfContained"));
-        Assert.That(result.Issues.Any(i => i.Code == "entrypoint-layout-invalid"), Is.True);
+        Assert.That(result.Issues.Any(i => i.Code == "invalid-entrypoint-runtime"), Is.True);
     }
 }
 
