@@ -50,7 +50,21 @@ public sealed partial class DocsSnapshotService
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "DeckForge", "docs");
 
-    /// <summary>Directory of the currently newest snapshot, or null when none exists.</summary>
+    /// <summary>
+    /// Directory of the currently newest snapshot, or null when there is no usable one.
+    /// </summary>
+    /// <remarks>
+    /// A directory only counts when it holds a non-empty manifest, and directories that do not are
+    /// skipped rather than deleted.
+    ///
+    /// It used to return the newest directory by name, full stop. A snapshot is named for the day it
+    /// was taken, so a leftover directory whose name sorts higher - a future date, or a stray folder -
+    /// won permanently and was reported as the current snapshot. That is what happened here: three
+    /// directories left behind by an earlier version of the test suite (which wrote to the real
+    /// %LOCALAPPDATA% store before <see cref="RootOverride"/> existed) were the only ones present, the
+    /// newest was <c>2099.01.04</c>, and the docs page reported "Offline snapshot 2099.01.04 available
+    /// (0 pages indexed)" for a store that had never successfully downloaded anything.
+    /// </remarks>
     public string? CurrentDirectory
     {
         get
@@ -62,9 +76,15 @@ public sealed partial class DocsSnapshotService
 
             return Directory.GetDirectories(Root)
                 .OrderByDescending(d => d, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
+                .FirstOrDefault(IsUsableSnapshot);
         }
     }
+
+    /// <summary>
+    /// Whether a snapshot directory holds a readable manifest naming at least one page.
+    /// </summary>
+    private static bool IsUsableSnapshot(string directory) =>
+        LoadManifestFrom(directory) is { Count: > 0 };
 
     /// <summary>Version string of the newest snapshot ("2026.09.27"), or null.</summary>
     public string? CurrentVersion => CurrentDirectory is null ? null : Path.GetFileName(CurrentDirectory);
@@ -133,11 +153,12 @@ public sealed partial class DocsSnapshotService
     public Dictionary<string, string>? LoadManifest()
     {
         var dir = CurrentDirectory;
-        if (dir is null)
-        {
-            return null;
-        }
+        return dir is null ? null : LoadManifestFrom(dir);
+    }
 
+    /// <summary>Loads the manifest of one specific snapshot directory, or null.</summary>
+    private static Dictionary<string, string>? LoadManifestFrom(string dir)
+    {
         var manifestPath = Path.Combine(dir, ManifestFileName);
         if (!File.Exists(manifestPath))
         {
@@ -235,7 +256,11 @@ public sealed partial class DocsSnapshotService
                 }
             }
 
-            manifest["/" + pathPart] = fileName;
+            // The index is stored as index.html but is keyed by its URL path, which is empty. Keying it
+            // "/index" instead meant the one page the app opens on had no manifest entry, so
+            // navigating to it fell through to the "not in the snapshot" message.
+            var manifestKey = pathPart == "index" ? "/" : "/" + pathPart;
+            manifest[manifestKey] = fileName;
         }
 
         // 3. Static assets the pages reference. Single or double quoted, with or without a query
@@ -317,11 +342,26 @@ public sealed partial class DocsSnapshotService
 
     public sealed record DocsSnapshotResult(string Version, int PageCount, int FilesDownloaded, List<string> Failures);
 
-    /// <summary>True when the URL is on the docs origin, which is the only thing downloaded.</summary>
+    /// <summary>
+    /// True when the URL is on the docs origin, which is the only thing downloaded.
+    /// </summary>
+    /// <remarks>
+    /// The bare origin counts as being on the origin, because that is the site's index page. The
+    /// sitemap entries were trimmed of their trailing slash, so the root page arrives here as exactly
+    /// <c>https://docs.macro-deck.app</c> with no path - and requiring a trailing slash rejected it.
+    /// The index is the one page the app opens on, so a snapshot without it was a snapshot that
+    /// resolved to <c>ERR_FILE_NOT_FOUND</c> the moment offline mode was switched on, while reporting
+    /// 124 pages downloaded and no failures.
+    ///
+    /// The prefix check is what keeps a look-alike host out: <c>docs.macro-deck.evil.com</c> does not
+    /// start with the origin followed by a slash or end of string.
+    /// </remarks>
     private static bool IsDocsUrl(string url) =>
-        url.StartsWith(DocsOrigin + "/", StringComparison.OrdinalIgnoreCase);
+        url.Equals(DocsOrigin, StringComparison.OrdinalIgnoreCase)
+        || url.StartsWith(DocsOrigin + "/", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The URL's path under the docs origin, or null when it is not one.</summary>
+    /// <remarks>The origin itself maps to <c>index</c>, which becomes <c>index.html</c> on disk.</remarks>
     private static string? RelativePathOf(string url)
     {
         if (!IsDocsUrl(url))
@@ -329,7 +369,7 @@ public sealed partial class DocsSnapshotService
             return null;
         }
 
-        var path = url[DocsOrigin.Length..].Trim('/');
+        var path = url.Length <= DocsOrigin.Length ? string.Empty : url[DocsOrigin.Length..].Trim('/');
         return path.Length == 0 ? "index" : path;
     }
 
@@ -437,11 +477,32 @@ public sealed partial class DocsSnapshotService
         return index;
     }
 
-    private static string UrlPathOf(string file, string dir)
+    private static string UrlPathOf(string file, string dir) =>
+        UrlPathForTest(Path.GetRelativePath(dir, file));
+
+    /// <summary>
+    /// A snapshot-relative file name back to the URL path it was fetched from.
+    /// </summary>
+    /// <remarks>
+    /// Public so the index-to-manifest key mapping can be pinned by a test. The index is stored as
+    /// <c>index.html</c> but its URL path is empty, so the two sides of the manifest have to agree on
+    /// that or the page the app opens on cannot be resolved.
+    /// </remarks>
+    public static string UrlPathForTest(string relativeFileName)
     {
-        var relative = Path.GetRelativePath(dir, file).Replace('\\', '/');
+        var relative = relativeFileName.Replace('\\', '/');
         return "/" + (relative == "index.html" ? "" : relative[..^".html".Length]);
     }
+
+    /// <summary>
+    /// The docs-relative path of a URL on the docs origin, or null when it is not on it.
+    /// </summary>
+    /// <remarks>
+    /// Public so the origin check can be pinned by a test. It decides what gets downloaded, and
+    /// getting it wrong is silent: a page that is not in the snapshot is a page the user later
+    /// searches for and cannot find.
+    /// </remarks>
+    public static string? RelativePathForTest(string url) => RelativePathOf(url);
 
     public static string StripHtml(string html)
     {

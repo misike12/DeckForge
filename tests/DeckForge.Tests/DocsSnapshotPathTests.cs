@@ -108,8 +108,7 @@ public sealed class DocsSnapshotPathTests
         var service = CreateService();
         var root = service.Root;
         var version = "2099.01.01";
-        Directory.CreateDirectory(Path.Combine(root, version));
-
+        WriteSnapshot(root, version, "/Features/Actions", "features/variables");
         File.WriteAllText(
             Path.Combine(root, version, "snapshot.json"),
             JsonSerializer.Serialize(new Dictionary<string, string>
@@ -121,10 +120,13 @@ public sealed class DocsSnapshotPathTests
         var manifest = service.LoadManifest();
 
         Assert.That(manifest, Is.Not.Null);
-        Assert.That(manifest!["/features/actions"], Is.EqualTo("Features/Actions.html"),
-            "A case-differing key missed, so the page fell through to the network.");
-        Assert.That(manifest["/features/variables"], Is.EqualTo("features/variables.html"),
-            "A key without a leading slash was not found.");
+        Assert.Multiple(() =>
+        {
+            Assert.That(manifest!["/features/actions"], Is.EqualTo("Features/Actions.html"),
+                "A case-differing key missed, so the page fell through to the network.");
+            Assert.That(manifest["/features/variables"], Is.EqualTo("features/variables.html"),
+                "A key without a leading slash was not found.");
+        });
     }
 
     [Test]
@@ -147,7 +149,7 @@ public sealed class DocsSnapshotPathTests
         var service = CreateService();
         var root = service.Root;
         var version = "2099.01.03";
-        Directory.CreateDirectory(Path.Combine(root, version));
+        WriteSnapshot(root, version, "/index");
         File.WriteAllText(
             Path.Combine(root, version, "meta.json"),
             JsonSerializer.Serialize(new
@@ -184,6 +186,113 @@ public sealed class DocsSnapshotPathTests
     }
 
     [Test]
+    public void A_directory_that_is_not_a_snapshot_is_not_reported_as_the_current_one()
+    {
+        // The real %LOCALAPPDATA% store had three directories in it, all left by an earlier version
+        // of this suite (which wrote to the real store before RootOverride existed): 2099.01.02 with
+        // a hand-written manifest, and 2099.01.03 and 2099.01.04 with only a meta.json - one of them
+        // deliberately corrupt. Version selection took the newest directory by name, so 2099.01.04 won
+        // and the docs page reported "Offline snapshot 2099.01.04 available (0 pages indexed)" for a
+        // store that had never downloaded anything.
+        var service = CreateService();
+        var root = service.Root;
+
+        // Sorts highest by name, but holds no manifest at all.
+        WriteMetaOnly(root, "2099.01.04", "2099.01.04");
+        // Sorts second, and its manifest is corrupt rather than merely empty.
+        var corrupt = Path.Combine(root, "2099.01.03");
+        Directory.CreateDirectory(corrupt);
+        File.WriteAllText(Path.Combine(corrupt, "snapshot.json"), "{ not json");
+        File.WriteAllText(Path.Combine(corrupt, "meta.json"), "{ truncated");
+        // Sorts lowest, and is a real snapshot.
+        var real = Path.Combine(root, "2026.09.28");
+        Directory.CreateDirectory(real);
+        File.WriteAllText(
+            Path.Combine(real, "snapshot.json"),
+            JsonSerializer.Serialize(new Dictionary<string, string> { ["/index"] = "index.html" }));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(service.CurrentVersion, Is.EqualTo("2026.09.28"),
+                "A higher-sorting directory with nothing usable in it was reported as the snapshot.");
+            Assert.That(service.CurrentDirectory, Is.EqualTo(real));
+        });
+
+        static void WriteMetaOnly(string root, string version, string body)
+        {
+            var dir = Path.Combine(root, version);
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(Path.Combine(dir, "meta.json"), body);
+        }
+    }
+
+    [Test]
+    public void An_empty_manifest_does_not_count_as_a_snapshot()
+    {
+        // A download that was interrupted before the first page is written leaves the directory and
+        // an empty manifest behind. Reporting that as an available snapshot would promise offline
+        // docs that resolve to nothing.
+        var service = CreateService();
+        var dir = Path.Combine(service.Root, "2026.09.28");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "snapshot.json"), "{}");
+
+        Assert.That(service.CurrentDirectory, Is.Null);
+        Assert.That(service.CurrentVersion, Is.Null);
+    }
+
+    [Test]
+    public void No_snapshot_at_all_leaves_the_current_version_unset()
+    {
+        var service = CreateService();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(service.CurrentDirectory, Is.Null);
+            Assert.That(service.CurrentVersion, Is.Null);
+            Assert.That(service.HasSnapshot, Is.False);
+        });
+    }
+
+    [Test]
+    public void The_bare_origin_is_the_index_page_and_belongs_to_the_docs()
+    {
+        // The sitemap entries were trimmed of their trailing slash, so the root page reached the
+        // origin check as exactly "https://docs.macro-deck.app" with no path. Requiring a trailing
+        // slash rejected it, so the index was the one page never downloaded: the snapshot reported 124
+        // pages and no failures, and switching to offline mode gave ERR_FILE_NOT_FOUND because
+        // index.html was not in it.
+        //
+        // A look-alike host must still be rejected, which is what the prefix check is for.
+        Assert.Multiple(() =>
+        {
+            Assert.That(DocsSnapshotService.RelativePathForTest("https://docs.macro-deck.app"),
+                Is.EqualTo("index"));
+            Assert.That(DocsSnapshotService.RelativePathForTest("https://docs.macro-deck.app/"),
+                Is.EqualTo("index"));
+            Assert.That(DocsSnapshotService.RelativePathForTest("https://docs.macro-deck.app/features/actions"),
+                Is.EqualTo("features/actions"));
+
+            Assert.That(DocsSnapshotService.RelativePathForTest("https://docs.macro-deck.evil.com"),
+                Is.Null);
+            Assert.That(DocsSnapshotService.RelativePathForTest("https://docs.macro-deck.evil.com/steal"),
+                Is.Null);
+            Assert.That(DocsSnapshotService.RelativePathForTest("https://evil.example.com/steal"),
+                Is.Null);
+        });
+    }
+
+    [Test]
+    public void The_index_page_is_stored_as_index_html_and_keyed_by_its_url_path()
+    {
+        // The manifest is keyed by URL path, and the index's path is empty. Keying it "/index"
+        // instead meant the page the app opens on had no entry to resolve against.
+        Assert.That(DocsSnapshotService.ToSnapshotFileName("index", ".html"), Is.EqualTo("index.html"));
+        Assert.That(DocsSnapshotService.UrlPathForTest("index.html"), Is.EqualTo("/"));
+        Assert.That(DocsSnapshotService.UrlPathForTest("features/actions.html"), Is.EqualTo("/features/actions"));
+    }
+
+    [Test]
     public void Stripping_html_leaves_readable_text()
     {
         var html = """
@@ -216,20 +325,7 @@ public sealed class DocsSnapshotPathTests
         });
     }
 
-    private static string? RelativePath(string url) => RelativePathOf(url);
-
-    /// <summary>Mirror of the private helper, reached through the public sanitiser's contract.</summary>
-    private static string? RelativePathOf(string url)
-    {
-        const string origin = "https://docs.macro-deck.app";
-        if (!url.StartsWith(origin + "/", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var path = url[origin.Length..].Trim('/');
-        return path.Length == 0 ? "index" : path;
-    }
+    private static string? RelativePath(string url) => DocsSnapshotService.RelativePathForTest(url);
 
     /// <summary>A service with its own store, so these tests never touch %LOCALAPPDATA%.</summary>
     private string _root = "";
@@ -251,4 +347,14 @@ public sealed class DocsSnapshotPathTests
     }
 
     private DocsSnapshotService CreateService() => new() { RootOverride = _root };
+
+    /// <summary>Writes a directory that is a real snapshot, so version selection accepts it.</summary>
+    private static void WriteSnapshot(string root, string version, params string[] pages)
+    {
+        var dir = Path.Combine(root, version);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(
+            Path.Combine(dir, "snapshot.json"),
+            JsonSerializer.Serialize(pages.ToDictionary(page => page, page => page.TrimStart('/') + ".html")));
+    }
 }

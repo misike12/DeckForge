@@ -114,6 +114,42 @@ public sealed class DoctorCheckFixHintToVisibilityConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>
+/// Shows a check's install button only when DeckForge can actually act on it.
+/// </summary>
+/// <remarks>
+/// A button that appears and then says it cannot help is worse than no button, so this is decided
+/// from the check itself rather than from the page: it has to be failing, and it has to either
+/// carry an install command or be the Macro Deck download.
+/// </remarks>
+public sealed class DoctorCheckInstallableToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is DoctorCheck { Ok: false } check
+            && (check.InstallCommand is { Length: > 0 } || check.Id == "macrodeck-host")
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// A non-empty string to Visibility, so an empty status line takes no space.
+/// </summary>
+/// <remarks>
+/// Not a <c>BooleanToVisibilityConverter</c>, because there is no boolean here - the binding is a
+/// string, and a converter bound to the wrong type fails at load rather than degrading.
+/// </remarks>
+public sealed class StringToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is string text && !string.IsNullOrWhiteSpace(text) ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>bool -> inverted Visibility (true = collapsed); same as Inverse, aliased for readability.</summary>
 public sealed class BoolToInverseVisibilityConverter : IValueConverter
 {

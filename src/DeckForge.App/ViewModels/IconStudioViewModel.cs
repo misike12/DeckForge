@@ -105,6 +105,18 @@ public partial class IconStudioViewModel : ObservableObject
             .Replace("$Text", System.Security.SecurityElement.Escape(IconText is "" ? "D" : IconText));
     }
 
+    /// <summary>
+    /// The complete <c>Assets/icon.svg</c> document for the current template and colours.
+    /// </summary>
+    /// <remarks>
+    /// This is the one place the root element is added. It used to live only in the save path, so the
+    /// preview on the page was handed a bare list of <c>&lt;circle&gt;</c> and <c>&lt;path&gt;</c>
+    /// elements with no enclosing <c>&lt;svg&gt;</c> - the browser had nothing to render them into and
+    /// both preview tiles stayed blank. The preview and the saved file now come from the same string,
+    /// so they cannot disagree about the root element either.
+    /// </remarks>
+    public string SvgDocument => Wrap();
+
     [RelayCommand]
     private void SaveToWorkspace()
     {

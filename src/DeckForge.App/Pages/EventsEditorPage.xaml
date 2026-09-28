@@ -80,23 +80,38 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="110" />
-                                            <ColumnDefinition Width="110" />
-                                            <ColumnDefinition Width="150" />
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="name" />
-                                        <ComboBox Grid.Column="1" Margin="6,0"
-                                                  ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                  SelectedItem="{Binding EditorType, Mode=TwoWay}" />
-                                        <ui:TextBox Grid.Column="2" Margin="0,0,6,0" Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
-                                        <CheckBox Grid.Column="3" Content="Required" IsChecked="{Binding Required}" VerticalAlignment="Center" />
-                                        <ui:TextBox Grid.Column="4" Text="{Binding DefaultValue, Mode=TwoWay}" PlaceholderText="Default (optional)" />
-                                    </Grid>
+                                    <!--
+                                        Two wrapping lines instead of one five-column row. The row needed
+                                        460px of fixed columns before the default value got any space, and
+                                        was clipped from there down.
+                                    -->
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1.2*" MinWidth="90" />
+                                                <ColumnDefinition Width="1*" MinWidth="80" />
+                                                <ColumnDefinition Width="*" MinWidth="90" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="name" />
+                                            <ComboBox Grid.Column="1" Margin="6,0"
+                                                      ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                      SelectedItem="{Binding EditorType, Mode=TwoWay}" />
+                                            <CheckBox Grid.Column="2" Content="Required" Margin="8,0,0,0"
+                                                      IsChecked="{Binding Required}" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Grid Margin="0,6,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" MinWidth="100" />
+                                                <ColumnDefinition Width="*" MinWidth="100" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:TextBox Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
+                                            <ui:TextBox Grid.Column="1" Margin="6,0,0,0"
+                                                       Text="{Binding DefaultValue, Mode=TwoWay}"
+                                                       PlaceholderText="Default (optional)" />
+                                        </Grid>
+                                    </StackPanel>
                                     <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="8,0,0,0"
+                                               VerticalAlignment="Center"
                                                Command="{Binding DataContext.RemoveConfigurationParameterCommand, RelativeSource={RelativeSource AncestorType=Page}}"
                                                CommandParameter="{Binding}" />
                                 </Grid>
@@ -121,23 +136,34 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="110" />
-                                            <ColumnDefinition Width="110" />
-                                            <ColumnDefinition Width="150" />
-                                            <ColumnDefinition Width="90" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="name" />
-                                        <ComboBox Grid.Column="1" Margin="6,0"
-                                                  ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                  SelectedItem="{Binding EditorType, Mode=TwoWay}" />
-                                        <ui:TextBox Grid.Column="2" Margin="0,0,6,0" Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
-                                        <CheckBox Grid.Column="3" Content="Required" IsChecked="{Binding Required}" VerticalAlignment="Center" />
-                                        <ui:TextBox Grid.Column="4" Text="{Binding DefaultValue, Mode=TwoWay}" PlaceholderText="Default (optional)" />
-                                    </Grid>
+                                    <!-- Wrapping layout, matching the configuration-parameter rows above. -->
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="1.2*" MinWidth="90" />
+                                                <ColumnDefinition Width="1*" MinWidth="80" />
+                                                <ColumnDefinition Width="*" MinWidth="90" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="name" />
+                                            <ComboBox Grid.Column="1" Margin="6,0"
+                                                      ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                      SelectedItem="{Binding EditorType, Mode=TwoWay}" />
+                                            <CheckBox Grid.Column="2" Content="Required" Margin="8,0,0,0"
+                                                      IsChecked="{Binding Required}" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <Grid Margin="0,6,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" MinWidth="100" />
+                                                <ColumnDefinition Width="*" MinWidth="100" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:TextBox Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
+                                            <ui:TextBox Grid.Column="1" Margin="6,0,0,0"
+                                                       Text="{Binding DefaultValue, Mode=TwoWay}"
+                                                       PlaceholderText="Default (optional)" />
+                                        </Grid>
+                                    </StackPanel>
                                     <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="8,0,0,0"
+                                               VerticalAlignment="Center"
                                                Command="{Binding DataContext.RemovePayloadParameterCommand, RelativeSource={RelativeSource AncestorType=Page}}"
                                                CommandParameter="{Binding}" />
                                 </Grid>

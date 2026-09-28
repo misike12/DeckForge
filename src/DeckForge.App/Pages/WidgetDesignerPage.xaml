@@ -5,7 +5,7 @@
       xmlns:vm="clr-namespace:DeckForge.App.ViewModels"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
 
-    <Grid Margin="40,24,40,24">
+    <Grid Margin="28,20,28,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -31,16 +31,24 @@
         </StackPanel>
 
         <Grid Grid.Row="1">
+            <!--
+                Five columns, all proportional with a MinWidth.
+
+                These were five fixed widths totalling 1080px plus the 80px page margin, so anything
+                under a 1200px window pushed the right-hand preview and the Generate button off the
+                right edge with no way to scroll to them. Proportional columns shrink toward their
+                MinWidth first, and every column below wraps or scrolls internally.
+            -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="230" />
+                <ColumnDefinition Width="0.85*" MinWidth="190" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="270" />
+                <ColumnDefinition Width="1*" MinWidth="220" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1.05*" MinWidth="230" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="290" />
+                <ColumnDefinition Width="1.05*" MinWidth="240" />
                 <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="250" />
+                <ColumnDefinition Width="0.95*" MinWidth="210" />
             </Grid.ColumnDefinitions>
 
             <!-- Palette + identity -->
@@ -262,11 +270,28 @@
                 <Border Style="{StaticResource LiquidCard}">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="Tile preview" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <Border Width="144" Height="144" CornerRadius="14"
-                                Background="#1A1C22" BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1"
-                                HorizontalAlignment="Left" ClipToBounds="True">
-                            <wv2:WebView2 x:Name="Preview" DefaultBackgroundColor="Transparent" />
-                        </Border>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <!--
+                                The tile scales to the space the column has rather than sitting at a
+                                fixed 144px in the top-left of a card that could be 300px wide, which
+                                left a large empty area beside it and made the generated widget look
+                                broken. MaxWidth keeps it from ballooning on a wide monitor.
+                            -->
+                            <Border MaxWidth="200" MaxHeight="200" CornerRadius="14"
+                                    Background="#1A1C22" BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    ClipToBounds="True">
+                                <wv2:WebView2 x:Name="Preview" DefaultBackgroundColor="Transparent" />
+                            </Border>
+                            <TextBlock Grid.Row="1" TextWrapping="Wrap" TextAlignment="Center"
+                                       FontSize="11" Margin="0,10,0,0"
+                                       Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                       Text="The rendered widget appears here after you add nodes." />
+                        </Grid>
                     </DockPanel>
                 </Border>
                 <ui:Button Grid.Row="2" Content="Generate widget provider" Appearance="Primary"

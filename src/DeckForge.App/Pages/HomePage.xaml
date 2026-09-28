@@ -78,40 +78,67 @@
                     The checks used to run once, on first load, and never again - so a machine that
                     gained the .NET SDK or the CLI while DeckForge was open kept reporting both
                     missing until a restart.
+
+                    The install buttons are here because the doctor already knew the command that
+                    fixes each item and nothing ran it: the command was shown as text, so repairing
+                    a machine meant copying it into a terminal by hand.
                 -->
-                <ui:Button Grid.Column="2" Content="Re-check" Padding="10,4"
-                           Command="{Binding RefreshEnvironmentCommand}"
-                           IsEnabled="{Binding IsCheckingEnvironment, Converter={StaticResource InverseBoolConverter}}" />
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <ui:Button Content="Install missing" Appearance="Primary" Padding="10,4"
+                               Margin="0,0,8,0"
+                               Command="{Binding InstallMissingPrerequisitesCommand}"
+                               IsEnabled="{Binding HasInstallablePrerequisites}"
+                               ToolTip="Installs everything DeckForge can install unattended, in dependency order" />
+                    <ui:Button Content="Re-check" Padding="10,4"
+                               Command="{Binding RefreshEnvironmentCommand}"
+                               IsEnabled="{Binding IsCheckingEnvironment, Converter={StaticResource InverseBoolConverter}}" />
+                </StackPanel>
             </Grid>
             <Border Style="{DynamicResource LiquidCard}">
-                <ItemsControl ItemsSource="{Binding EnvironmentChecks}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Width="10" Height="10" Margin="0,0,10,0"
-                                         Fill="{Binding Converter={StaticResource DoctorCheckToStatusColorConverter}}" />
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="{Binding Title}" FontWeight="Medium" />
-                                    <TextBlock Text="{Binding Detail}"
-                                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
-                                               FontSize="12"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{Binding FixHint}"
-                                           Foreground="{DynamicResource Liquid.WarningBrush}"
-                                           FontSize="12"
-                                           MaxWidth="260" TextWrapping="Wrap"
-                                           VerticalAlignment="Center"
-                                           Visibility="{Binding Converter={StaticResource DoctorCheckFixHintToVisibilityConverter}}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding EnvironmentChecks}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Width="10" Height="10" Margin="0,0,10,0"
+                                             Fill="{Binding Converter={StaticResource DoctorCheckToStatusColorConverter}}" />
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Title}" FontWeight="Medium" />
+                                        <TextBlock Text="{Binding Detail}"
+                                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding FixHint}"
+                                                   Foreground="{DynamicResource Liquid.WarningBrush}"
+                                                   FontSize="12"
+                                                   MaxWidth="240" TextWrapping="Wrap"
+                                                   Margin="0,0,8,0"
+                                                   Visibility="{Binding Converter={StaticResource DoctorCheckFixHintToVisibilityConverter}}" />
+                                        <!-- One install button per item, for the case where installing
+                                             everything is more than the user wants done. -->
+                                        <ui:Button Content="{Binding DataContext.InstallActionLabel, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                   Padding="8,3"
+                                                   Command="{Binding DataContext.InstallPrerequisiteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                   CommandParameter="{Binding}"
+                                                   Visibility="{Binding Converter={StaticResource DoctorCheckInstallableToVisibilityConverter}}"
+                                                   ToolTip="Install this one now" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding EnvironmentStatus}"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                               Visibility="{Binding EnvironmentStatus, Converter={StaticResource StringToVisibilityConverter}}" />
+                </StackPanel>
             </Border>
 
             <!-- Recents -->

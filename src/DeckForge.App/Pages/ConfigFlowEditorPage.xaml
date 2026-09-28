@@ -29,12 +29,17 @@
         </StackPanel>
 
         <Grid Grid.Row="1">
+            <!--
+                Proportional with MinWidths: the two fixed side columns plus a 300px middle column
+                left nothing for the step detail on a narrow window, and the detail is where the
+                form fields are edited.
+            -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="250" />
+                <ColumnDefinition Width="0.85*" MinWidth="200" />
                 <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="0.95*" MinWidth="230" />
                 <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1.4*" MinWidth="280" />
             </Grid.ColumnDefinitions>
 
             <!-- Steps list + flow identity -->
@@ -136,11 +141,12 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <StackPanel>
+                                            <!-- Proportional MinWidths so the row compresses instead of clipping. -->
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="120" />
-                                                    <ColumnDefinition Width="120" />
-                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="1.1*" MinWidth="80" />
+                                                    <ColumnDefinition Width="1*" MinWidth="80" />
+                                                    <ColumnDefinition Width="*" MinWidth="90" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <ui:TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="field_name" />
@@ -148,21 +154,22 @@
                                                           ItemsSource="{Binding DataContext.EditorTypes, RelativeSource={RelativeSource AncestorType=Page}}"
                                                           SelectedItem="{Binding EditorType, Mode=TwoWay}" />
                                                 <ui:TextBox Grid.Column="2" Margin="0,0,6,0" Text="{Binding Label, Mode=TwoWay}" PlaceholderText="Label" />
-                                                <CheckBox Grid.Column="3" Content="Required" IsChecked="{Binding Required}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <CheckBox Grid.Column="3" Content="Required" IsChecked="{Binding Required}" VerticalAlignment="Center" Margin="0,0,4,0" />
                                             </Grid>
                                             <Grid Margin="0,6,0,0">
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" MinWidth="80" />
+                                                    <ColumnDefinition Width="*" MinWidth="90" />
+                                                    <ColumnDefinition Width="Auto" MinWidth="60" />
                                                 </Grid.ColumnDefinitions>
                                                 <ui:TextBox Text="{Binding Placeholder, Mode=TwoWay}" PlaceholderText="Placeholder (optional)" />
                                                 <ui:TextBox Grid.Column="1" Margin="6,0"
                                                             Text="{Binding OnlyWhenParameter, Mode=TwoWay}" PlaceholderText="OnlyWhen field (optional)" />
-                                                <ui:TextBox Grid.Column="2" Text="{Binding OnlyWhenValue, Mode=TwoWay}" PlaceholderText="value" />
+                                                <ui:TextBox Grid.Column="2" Margin="6,0,0,0" Text="{Binding OnlyWhenValue, Mode=TwoWay}" PlaceholderText="value" />
                                             </Grid>
                                         </StackPanel>
                                         <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="8,0,0,0"
+                                                   VerticalAlignment="Center"
                                                    Command="{Binding DataContext.RemoveFieldCommand, RelativeSource={RelativeSource AncestorType=Page}}"
                                                    CommandParameter="{Binding}" />
                                     </Grid>

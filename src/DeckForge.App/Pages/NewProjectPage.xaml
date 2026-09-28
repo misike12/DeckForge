@@ -108,7 +108,10 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <CheckBox Content="{Binding}" IsChecked="{Binding IsChecked}" MinWidth="110" Margin="0,0,12,4" />
+                        <CheckBox Content="{Binding DisplayName}"
+                                  ToolTip="{Binding CultureTag}"
+                                  IsChecked="{Binding IsChecked}"
+                                  Padding="8,4" Margin="0,0,8,4" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

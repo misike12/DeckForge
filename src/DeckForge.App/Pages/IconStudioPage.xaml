@@ -47,7 +47,7 @@
                                  Background="Transparent" BorderThickness="0">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding Name}" FontSize="13" Padding="4,2" />
+                                    <TextBlock Text="{Binding Name}" FontSize="13" />
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>

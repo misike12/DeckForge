@@ -3,231 +3,351 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
 
-    <Grid Margin="40,24,40,24">
+    <Page.Resources>
+        <Style x:Key="BlockFieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Margin" Value="0,10,0,3" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource Liquid.TextSecondaryBrush}" />
+        </Style>
+        <Style x:Key="BlockGroupTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,2,0,2" />
+        </Style>
+        <Style x:Key="BlockPairColumn" TargetType="ColumnDefinition">
+            <Setter Property="Width" Value="*" />
+        </Style>
+    </Page.Resources>
+
+    <Grid Margin="32,20,32,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,12">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock Text="Blocks" FontSize="26" FontWeight="SemiBold" />
-                    <TextBlock Text="Compose the action executor from statement blocks. Save writes real C# into LogMessageAction.cs inside macrodeck-blocks markers - your hand-written code outside stays untouched."
-                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
-                    <ui:Button Content="Docs → Actions" Icon="{ui:SymbolIcon Book24}" Margin="0,0,8,0"
-                               Click="OpenDocs_Click" ToolTip="Open the Macro Deck actions documentation" />
-                    <ui:Button Content="Docs → Notifications" Click="OpenNotifyDocs_Click"
-                               ToolTip="Open the user-notifications documentation" />
-                </StackPanel>
-            </Grid>
-            <TextBlock Text="{Binding StatusText}" FontSize="12"
-                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" Margin="0,4,0,0" />
-        </StackPanel>
+        <!-- Header -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="Blocks" FontSize="26" FontWeight="SemiBold" />
+                <TextBlock TextWrapping="Wrap" MaxWidth="820" HorizontalAlignment="Left"
+                           Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                           Text="Compose the action executor from statement blocks. Save writes real C# into LogMessageAction.cs inside macrodeck-blocks markers, so your hand-written code outside them stays untouched." />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
+                <ui:Button Content="Docs - Actions" Icon="{ui:SymbolIcon Book24}" Margin="0,0,8,0"
+                           Click="OpenDocs_Click" ToolTip="Open the Macro Deck actions documentation" />
+                <ui:Button Content="Docs - Notifications" Click="OpenNotifyDocs_Click"
+                           ToolTip="Open the user-notifications documentation" />
+            </StackPanel>
+        </Grid>
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300" />
+                <ColumnDefinition Width="340" MinWidth="300" />
                 <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1*" MinWidth="280" />
                 <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="1.2*" />
+                <ColumnDefinition Width="1.2*" MinWidth="300" />
             </Grid.ColumnDefinitions>
 
-            <!-- Palette -->
+            <!-- Palette, one tab per group so the column is never a 18-field tower -->
             <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Text="Add statement" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4" />
-                        <TextBlock Text="Every block the compiler supports, grouped by what it touches."
-                                   FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,10"
-                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Add a statement"
+                               FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TabControl Background="Transparent" BorderThickness="0">
+                        <TabItem Header="Values">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,10,4,0">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Text="Log a message" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Template, with {name} holes filled from the action's parameters." />
+                                    <ui:TextBox Text="{Binding NewLogTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ui:Button Content="Add log" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                               Command="{Binding AddLogCommand}" />
 
-                        <TextBlock Text="Values" FontSize="12" FontWeight="SemiBold" Margin="0,4,0,6" />
-                        <TextBlock Text="Log template" FontSize="11.5" />
-                        <ui:TextBox Text="{Binding NewLogTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                        <ui:Button Content="Log" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddLogCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Read a parameter" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Pulls one of the action's parameters into a typed local." />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Margin="0,8,0,3"
+                                               Text="Local name" />
+                                    <ui:TextBox Text="{Binding NewVariableName, Mode=TwoWay}" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Style="{StaticResource BlockPairColumn}" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Style="{StaticResource BlockPairColumn}" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <StackPanel Grid.Row="0" Grid.Column="0">
+                                            <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                                       Text="Parameter name" />
+                                            <ui:TextBox Text="{Binding NewParameterName, Mode=TwoWay}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="0" Grid.Column="2">
+                                            <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Type" />
+                                            <ComboBox ItemsSource="{Binding ParameterTypes}"
+                                                      SelectedItem="{Binding SelectedParameterType, Mode=TwoWay}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <ui:Button Content="Add set-variable" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddVariableCommand}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
 
-                        <TextBlock Text="Variable name / parameter / type" FontSize="11.5" Margin="0,14,0,0" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="6" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition />
-                                <RowDefinition />
-                            </Grid.RowDefinitions>
-                            <ui:TextBox Grid.Row="0" Grid.Column="0" Text="{Binding NewVariableName, Mode=TwoWay}" />
-                            <ui:TextBox Grid.Row="0" Grid.Column="2" Text="{Binding NewParameterName, Mode=TwoWay}" />
-                            <ComboBox Grid.Row="1" Grid.Column="0" Margin="0,6,0,0"
-                                      ItemsSource="{Binding ParameterTypes}"
-                                      SelectedItem="{Binding SelectedParameterType, Mode=TwoWay}" />
-                        </Grid>
-                        <ui:Button Content="Read parameter" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddVariableCommand}" />
+                        <TabItem Header="Flow">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,10,4,0">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Text="Conditional" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Both branch bodies start empty; there is no place yet to put statements inside a branch." />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Left variable" />
+                                    <ui:TextBox Text="{Binding NewIfLeftVariable, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Operator" />
+                                    <ComboBox ItemsSource="{Binding IfOperators}"
+                                              SelectedItem="{Binding SelectedIfOperator, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Right value" />
+                                    <ui:TextBox Text="{Binding NewIfRightLiteral, Mode=TwoWay}" />
+                                    <ui:Button Content="Add if" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                               Command="{Binding AddIfCommand}" />
 
-                        <Separator Margin="0,14,0,10" />
-                        <TextBlock Text="Flow" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <TextBlock Text="If variable / operator / value" FontSize="11.5" />
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="6" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition />
-                                <RowDefinition />
-                            </Grid.RowDefinitions>
-                            <ui:TextBox Grid.Row="0" Grid.Column="0" Text="{Binding NewIfLeftVariable, Mode=TwoWay}" />
-                            <ComboBox Grid.Row="0" Grid.Column="2"
-                                      ItemsSource="{Binding IfOperators}"
-                                      SelectedItem="{Binding SelectedIfOperator, Mode=TwoWay}" />
-                            <ui:TextBox Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0"
-                                        Text="{Binding NewIfRightLiteral, Mode=TwoWay}" />
-                        </Grid>
-                        <ui:Button Content="Add If" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddIfCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Wait" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Milliseconds to pause before the next statement." />
+                                    <ui:TextBox Text="{Binding NewDelayMs, Mode=TwoWay}" />
+                                    <ui:Button Content="Add wait" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddDelayCommand}" />
 
-                        <TextBlock Text="Delay ms" FontSize="11.5" Margin="0,12,0,0" />
-                        <ui:TextBox Text="{Binding NewDelayMs, Mode=TwoWay}" />
-                        <ui:Button Content="Wait" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddDelayCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Finish early" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Stop the executor with a result. Return success, return failed, or raise." />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Message the failure reports" />
+                                    <ui:TextBox Text="{Binding NewThrowMessage, Mode=TwoWay}" />
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <ui:Button Content="Return success" Appearance="Success"
+                                                   Margin="0,0,6,6" Command="{Binding AddSuccessCommand}" />
+                                        <ui:Button Content="Return failed" Appearance="Danger"
+                                                   Margin="0,0,6,6" Command="{Binding AddFailureCommand}" />
+                                        <ui:Button Content="Throw" Margin="0,0,6,6"
+                                                   Command="{Binding AddThrowCommand}" />
+                                    </WrapPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
 
-                        <TextBlock Text="Message the throw reports" FontSize="11.5" Margin="0,12,0,0" />
-                        <ui:TextBox Text="{Binding NewThrowMessage, Mode=TwoWay}" />
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                            <ui:Button Content="Return Success" Appearance="Success" Margin="0,0,8,0"
-                                       Command="{Binding AddSuccessCommand}" />
-                            <ui:Button Content="Return Failed" Appearance="Danger" Margin="0,0,8,0"
-                                       Command="{Binding AddFailureCommand}" />
-                            <ui:Button Content="Throw" Command="{Binding AddThrowCommand}" />
-                        </StackPanel>
+                        <TabItem Header="Host">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,10,4,0">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Margin="0,0,0,6"
+                                               Text="These need the plugin's host context. DeckForge wires it in on save." />
 
-                        <Separator Margin="0,14,0,10" />
-                        <TextBlock Text="The host" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4" />
-                        <TextBlock Text="These need the plugin's host context. DeckForge wires it in on save."
-                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
-                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Text="Navigate" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Folder id" />
+                                    <ui:TextBox Text="{Binding NewFolderId, Mode=TwoWay}" />
+                                    <ui:Button Content="Open folder" Margin="0,8,0,6"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddNavigateCommand}" />
+                                    <WrapPanel>
+                                        <ui:Button Content="Parent" Margin="0,0,6,6"
+                                                   Command="{Binding AddGoToParentCommand}" />
+                                        <ui:Button Content="Back" Margin="0,0,6,6"
+                                                   Command="{Binding AddGoBackCommand}" />
+                                    </WrapPanel>
 
-                        <TextBlock Text="Folder id / profile id" FontSize="11.5" />
-                        <ui:TextBox Text="{Binding NewFolderId, Mode=TwoWay}" />
-                        <ui:TextBox Text="{Binding NewProfileId, Mode=TwoWay}" Margin="0,4,0,0" />
-                        <WrapPanel Margin="0,6,0,0">
-                            <ui:Button Content="Open folder" Margin="0,0,6,6"
-                                       Command="{Binding AddNavigateCommand}" />
-                            <ui:Button Content="Parent" Margin="0,0,6,6"
-                                       Command="{Binding AddGoToParentCommand}" />
-                            <ui:Button Content="Back" Margin="0,0,6,6"
-                                       Command="{Binding AddGoBackCommand}" />
-                            <ui:Button Content="Switch profile"
-                                       Command="{Binding AddChangeProfileCommand}" />
-                        </WrapPanel>
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,14,0,0"
+                                               Text="Switch profile" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Profile id" />
+                                    <ui:TextBox Text="{Binding NewProfileId, Mode=TwoWay}" />
+                                    <ui:Button Content="Add switch-profile" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddChangeProfileCommand}" />
 
-                        <TextBlock Text="Notification title / message" FontSize="11.5" Margin="0,6,0,0" />
-                        <ui:TextBox Text="{Binding NewNotifyTitle, Mode=TwoWay}" />
-                        <ui:TextBox Text="{Binding NewNotifyMessage, Mode=TwoWay}" Margin="0,4,0,0" />
-                        <ui:Button Content="Notify user" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddNotifyCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Notify" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Title" />
+                                    <ui:TextBox Text="{Binding NewNotifyTitle, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Message" />
+                                    <ui:TextBox Text="{Binding NewNotifyMessage, Mode=TwoWay}" />
+                                    <ui:Button Content="Add notify" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddNotifyCommand}" />
 
-                        <TextBlock Text="Variable name / value" FontSize="11.5" Margin="0,12,0,0" />
-                        <ui:TextBox Text="{Binding NewHostVariable, Mode=TwoWay}" />
-                        <ui:TextBox Text="{Binding NewHostValue, Mode=TwoWay}" Margin="0,4,0,0" />
-                        <WrapPanel Margin="0,6,0,0">
-                            <ui:Button Content="Read" Margin="0,0,6,6"
-                                       Command="{Binding AddReadVariableCommand}" />
-                            <ui:Button Content="Write"
-                                       Command="{Binding AddSetVariableValueCommand}" />
-                        </WrapPanel>
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Host variables" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Variable name" />
+                                    <ui:TextBox Text="{Binding NewHostVariable, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Value, for writing" />
+                                    <ui:TextBox Text="{Binding NewHostValue, Mode=TwoWay}" />
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <ui:Button Content="Add read" Margin="0,0,6,6"
+                                                   Command="{Binding AddReadVariableCommand}" />
+                                        <ui:Button Content="Add write" Margin="0,0,6,6"
+                                                   Command="{Binding AddSetVariableValueCommand}" />
+                                    </WrapPanel>
 
-                        <TextBlock Text="Event id / payload (name=value per line)" FontSize="11.5" Margin="0,6,0,0" />
-                        <ui:TextBox Text="{Binding NewEventId, Mode=TwoWay}" />
-                        <ui:TextBox Text="{Binding NewEventPayload, Mode=TwoWay}" Margin="0,4,0,0" />
-                        <ui:Button Content="Publish event" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddPublishEventCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,14,0,0"
+                                               Text="Publish an event" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Event id" />
+                                    <ui:TextBox Text="{Binding NewEventId, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Payload, one name=value per line" />
+                                    <ui:TextBox Text="{Binding NewEventPayload, Mode=TwoWay}" />
+                                    <ui:Button Content="Add publish-event" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddPublishEventCommand}" />
 
-                        <TextBlock Text="Script id / inputs (input=parameter per line)" FontSize="11.5" Margin="0,12,0,0" />
-                        <ui:TextBox Text="{Binding NewScriptId, Mode=TwoWay}" />
-                        <ui:TextBox Text="{Binding NewScriptInputs, Mode=TwoWay}" Margin="0,4,0,0" />
-                        <ui:Button Content="Run script" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddRunScriptCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Run a script" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Script id" />
+                                    <ui:TextBox Text="{Binding NewScriptId, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Inputs, one input=parameter per line" />
+                                    <ui:TextBox Text="{Binding NewScriptInputs, Mode=TwoWay}" />
+                                    <ui:Button Content="Add run-script" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddRunScriptCommand}" />
 
-                        <TextBlock Text="View id / title / data (name=value per line)" FontSize="11.5" Margin="0,12,0,0" />
-                        <ui:TextBox Text="{Binding NewModalViewId, Mode=TwoWay}" />
-                        <ui:TextBox Text="{Binding NewModalTitle, Mode=TwoWay}" Margin="0,4,0,0" />
-                        <ui:TextBox Text="{Binding NewModalData, Mode=TwoWay}" Margin="0,4,0,0" />
-                        <ui:Button Content="Show modal" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddShowModalCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Show a modal view" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="View id" />
+                                    <ui:TextBox Text="{Binding NewModalViewId, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="Title" />
+                                    <ui:TextBox Text="{Binding NewModalTitle, Mode=TwoWay}" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Data, one name=value per line" />
+                                    <ui:TextBox Text="{Binding NewModalData, Mode=TwoWay}" />
+                                    <ui:Button Content="Add show-modal" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddShowModalCommand}" />
 
-                        <TextBlock Text="Action id whose icon to refresh" FontSize="11.5" Margin="0,12,0,0" />
-                        <ui:TextBox Text="{Binding NewIconActionId, Mode=TwoWay}" />
-                        <ui:Button Content="Invalidate icon" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddInvalidateIconCommand}" />
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Margin="0,16,0,0"
+                                               Text="Invalidate an icon" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Action id whose icon should refresh" />
+                                    <ui:TextBox Text="{Binding NewIconActionId, Mode=TwoWay}" />
+                                    <ui:Button Content="Add invalidate-icon" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddInvalidateIconCommand}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
 
-                        <Separator Margin="0,14,0,10" />
-                        <TextBlock Text="Network" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <TextBlock Text="URL" FontSize="11.5" />
-                        <ui:TextBox Text="{Binding NewUrl, Mode=TwoWay}" />
-                        <ui:Button Content="HTTP GET" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddHttpCommand}" />
-
-                        <ui:Button Content="Clear all" Margin="0,16,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding ClearCommand}" />
-                    </StackPanel>
-                </ScrollViewer>
+                        <TabItem Header="Network">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,10,4,0">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource BlockGroupTitle}" Text="HTTP GET" />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}"
+                                               Text="Fetches a URL and stores the body in a local called response." />
+                                    <TextBlock Style="{StaticResource BlockFieldLabel}" Text="URL" />
+                                    <ui:TextBox Text="{Binding NewUrl, Mode=TwoWay}" />
+                                    <ui:Button Content="Add http-request" Margin="0,8,0,0"
+                                               HorizontalAlignment="Left"
+                                               Command="{Binding AddHttpCommand}" />
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+                    </TabControl>
+                </DockPanel>
             </Border>
 
-            <!-- Statement list -->
+            <!-- Program -->
             <Border Grid.Column="2" Style="{StaticResource LiquidCard}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Program" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10" />
-                    <ListBox ItemsSource="{Binding Statements}"
-                             Background="Transparent" BorderThickness="0"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="2">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Background="{DynamicResource Liquid.AccentWashBrush}"
-                                            CornerRadius="6" Padding="8,5">
-                                        <TextBlock Text="{Binding Describe()}" FontSize="12.5" />
-                                    </Border>
-                                    <ui:Button Grid.Column="1" Content="✕" Padding="6,2" Margin="6,0,0,0"
-                                               Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=Page}}"
-                                               CommandParameter="{Binding}" />
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Program" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock FontSize="11.5" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                       Text="{Binding StatementCount, StringFormat='{}{0} statement(s), run top to bottom.'}" />
+                        </StackPanel>
+                        <ui:Button Grid.Column="1" Content="Clear all" VerticalAlignment="Top"
+                                   Command="{Binding ClearCommand}"
+                                   ToolTip="Empty the canvas. Nothing is written until you save." />
+                    </Grid>
+                    <Grid>
+                        <ListBox ItemsSource="{Binding Statements}"
+                                 Background="Transparent" BorderThickness="0"
+                                 Visibility="{Binding HasStatements, Converter={StaticResource BoolToVisibilityConverter}}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Background="{DynamicResource Liquid.AccentWashBrush}"
+                                                CornerRadius="6" Padding="9,6" Grid.ColumnSpan="2">
+                                            <TextBlock Text="{Binding Describe()}" FontSize="12.5"
+                                                       TextWrapping="Wrap" />
+                                        </Border>
+                                        <ui:Button Grid.Column="2" Content="Remove"
+                                                   Padding="8,3" Margin="8,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                   CommandParameter="{Binding}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <TextBlock TextWrapping="Wrap" TextAlignment="Center"
+                                   VerticalAlignment="Center" Margin="20,0"
+                                   FontSize="12.5"
+                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                   Visibility="{Binding HasStatements, Converter={StaticResource InverseBoolToVisibilityConverter}}"
+                                   Text="No statements yet. Pick a block from the palette on the left; the C# on the right updates as you go." />
+                    </Grid>
                 </DockPanel>
             </Border>
 
             <!-- Compiled preview -->
             <Border Grid.Column="4" Style="{StaticResource LiquidCard}">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
-                        <TextBlock Text="Generated C#" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <ui:Button Content="Save into action" Appearance="Primary" Padding="10,4"
-                                   Margin="12,0,0,0" Command="{Binding SaveIntoActionCommand}" />
-                    </StackPanel>
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Generated C#" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock FontSize="11.5" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                       Text="This is the code Save writes into your action." />
+                        </StackPanel>
+                        <ui:Button Grid.Column="1" Content="Save into action" Appearance="Primary"
+                                   Padding="12,6" VerticalAlignment="Center"
+                                   Command="{Binding SaveIntoActionCommand}" />
+                    </Grid>
+                    <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,10,0,0"
+                               Foreground="{DynamicResource Liquid.AccentStrongBrush}" />
                     <Border Background="#16000000" CornerRadius="8" Padding="10">
                         <TextBox Text="{Binding CompiledPreview, Mode=OneWay}"
                                  FontFamily="Cascadia Mono, Consolas" FontSize="12"
                                  IsReadOnly="True" Background="Transparent"
-                                 BorderThickness="0" TextWrapping="Wrap"
+                                 BorderThickness="0"
+                                 TextWrapping="NoWrap"
+                                 AcceptsReturn="True"
                                  VerticalScrollBarVisibility="Auto"
                                  HorizontalScrollBarVisibility="Auto" />
                     </Border>

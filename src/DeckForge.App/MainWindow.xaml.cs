@@ -134,14 +134,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     /// Supports deep links: "docs::features/actions" opens the embedded docs browser.</summary>
     public void NavigateTo(string tag)
     {
-        string? docsPath = null;
-        if (tag.StartsWith("docs::", StringComparison.Ordinal))
-        {
-            docsPath = tag[6..];
-            tag = "docs";
-        }
+        var (pageTag, docsPath) = SplitDeepLink(tag);
 
-        if (PageRegistry.Create(tag) is not { } page)
+        if (PageRegistry.Create(pageTag) is not { } page)
         {
             return;
         }
@@ -153,18 +148,44 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             refreshable.RefreshOnNavigate();
         }
 
+        PageHost.Navigate(page);
+
+        // After the navigation, not before. The path used to be delivered while the page was still
+        // detached from the tree, which left the page to queue it for its own Loaded handler - and the
+        // queue was the wrong place for it, because the load that consumed it was not necessarily the
+        // load that displayed it.
         if (docsPath is not null && page is INavigateWithin within)
         {
             within.NavigateWithin(docsPath);
         }
 
-        PageHost.Navigate(page);
-
         foreach (var item in RootNavigation.MenuItems.OfType<Wpf.Ui.Controls.NavigationViewItem>()
                      .Concat(RootNavigation.FooterMenuItems.OfType<Wpf.Ui.Controls.NavigationViewItem>()))
         {
-            item.IsActive = Equals(item.Tag, tag);
+            item.IsActive = Equals(item.Tag, pageTag);
         }
+    }
+
+    /// <summary>
+    /// Splits a navigation tag into the page to show and the docs path it asks for.
+    /// </summary>
+    /// <param name="tag">A page tag, optionally prefixed with <c>docs::</c> and a path.</param>
+    /// <returns>
+    /// The page tag, and the docs path or null when the tag did not name one. A bare <c>docs</c> and
+    /// <c>docs::</c> both mean the docs index, so the second is treated as no path rather than as the
+    /// empty string - an empty path is indistinguishable from "not specified" further down, and the
+    /// difference shows up as a deep link that quietly opens the wrong page.
+    /// </returns>
+    public static (string PageTag, string? DocsPath) SplitDeepLink(string tag)
+    {
+        const string prefix = "docs::";
+        if (!tag.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return (tag, null);
+        }
+
+        var path = tag[prefix.Length..].Trim('/');
+        return ("docs", path.Length == 0 ? null : path);
     }
 
     /// <summary>

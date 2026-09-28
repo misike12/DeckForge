@@ -143,12 +143,17 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
             InstallCommand: matchesExpected ? null : installCommand));
 
         var macroDeck = FindMacroDeckInstall();
+        var macroDeckRunning = FindRunningMacroDeck();
         checks.Add(new DoctorCheck(
             "macrodeck-host",
             "Macro Deck desktop app",
-            macroDeck is not null,
-            macroDeck ?? "not detected - the bundled stub host runs without it",
-            macroDeck is null
+            macroDeck is not null || macroDeckRunning is not null,
+            macroDeckRunning is not null
+                ? $"running ({macroDeckRunning})"
+                : macroDeck is not null
+                    ? $"installed at {macroDeck}"
+                    : "not detected - the bundled stub host runs without it",
+            macroDeck is null && macroDeckRunning is null
                 ? "Optional: install Macro Deck from https://macro-deck.app/ to test against the real host"
                 : null,
             Severity: DoctorSeverity.Optional));
@@ -249,13 +254,72 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
     }
 
     /// <summary>
-    /// Looks for a Macro Deck install.
+    /// Looks for a running Macro Deck process, and returns its executable path.
     /// </summary>
     /// <remarks>
-    /// The three candidates disagreed about the product's own name - one said <c>MacroDeck</c> and
-    /// two said <c>Macro Deck</c> - so it could only ever be found in one of those spellings
-    /// depending on how it was installed. Both are now tried, and the per-user and Start Menu
-    /// locations that a normal installer uses are included.
+    /// A running process is the strongest possible evidence that Macro Deck is installed and usable,
+    /// and it is the question the user is actually asking - "is Macro Deck running?" - so it is
+    /// checked first. Scanning the filesystem for the executable missed it entirely on the machine
+    /// this was written on, because the install folder is versioned: the app lives in
+    /// <c>%LOCALAPPDATA%\Macro Deck 3\</c>, which no fixed candidate name matches.
+    /// </remarks>
+    public static string? FindRunningMacroDeck()
+    {
+        try
+        {
+            foreach (var process in System.Diagnostics.Process.GetProcessesByName("MacroDeck"))
+            {
+                using (process)
+                {
+                    var path = SafeMainModulePath(process);
+                    if (path is not null)
+                    {
+                        return path;
+                    }
+
+                    // The process is there but its path is unreadable, which happens when the app
+                    // runs at a higher integrity level than the shell. That is still a "yes".
+                    return "MacroDeck (running)";
+                }
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // A process list we cannot read is not evidence of absence.
+        }
+
+        return null;
+    }
+
+    private static string? SafeMainModulePath(System.Diagnostics.Process process)
+    {
+        try
+        {
+            return process.MainModule?.FileName;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException
+                                       or System.ComponentModel.Win32Exception
+                                       or NotSupportedException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Looks for a Macro Deck install on disk.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The candidates used to be the two literal folder names <c>MacroDeck</c> and <c>Macro Deck</c>,
+    /// and they missed every real install. The product ships as <c>Macro Deck 3</c>, so the folder
+    /// carries a version, and a hardcoded name list can never keep up with that.
+    /// </para>
+    /// <para>
+    /// So the local app-data root is searched for a matching executable instead, at a shallow
+    /// depth - which is where a per-user installer puts itself, and shallow enough that it is not a
+    /// full-disk scan. The Start Menu shortcut is still checked, because that is the only trace a
+    /// system-wide install leaves for a user without read access to Program Files.
+    /// </para>
     /// </remarks>
     public static string? FindMacroDeckInstall()
     {
@@ -265,8 +329,19 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
         var startMenu = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu);
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
+        // 1. A per-user install, found by searching rather than by guessing the folder name.
+        foreach (var root in new[] { local })
+        {
+            var found = SearchForInstall(root, 2);
+            if (found is not null)
+            {
+                return found;
+            }
+        }
+
+        // 2. The documented names, in case one is ever right again.
         var candidates = new List<string>();
-        foreach (var folder in new[] { local, programFiles, programFilesX86 })
+        foreach (var folder in new[] { programFiles, programFilesX86 })
         {
             foreach (var name in ProductFolderNames)
             {
@@ -277,6 +352,7 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
             }
         }
 
+        // 3. A Start Menu shortcut, which is the only trace a system-wide install leaves.
         foreach (var root in new[] { local, startMenu, appData })
         {
             if (string.IsNullOrEmpty(root))
@@ -284,9 +360,6 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
                 continue;
             }
 
-            // Programs\ is where a per-user installer puts itself; the Start Menu is where a
-            // system-wide one leaves a shortcut. Both are searched for the .lnk so a machine that
-            // only has a shortcut still counts as having it.
             foreach (var relative in new[] { "Programs", @"Microsoft\Windows\Start Menu\Programs" })
             {
                 var directory = Path.Combine(root, relative);
@@ -309,6 +382,76 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
         }
 
         return candidates.FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>
+    /// Looks for <c>MacroDeck.exe</c> or <c>Macro Deck.exe</c> under <paramref name="root"/>, within
+    /// <paramref name="depth"/> directory levels.
+    /// </summary>
+    private static string? SearchForInstall(string root, int depth)
+    {
+        if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+        {
+            return null;
+        }
+
+        try
+        {
+            // The executables sit directly in a versioned folder - "%LOCALAPPDATA%\Macro Deck 3".
+            // Matching the directory name against the product name is what finds that, and it avoids
+            // walking unrelated trees the way a recursive file search would.
+            foreach (var directory in SafeEnumerateDirectories(root, depth))
+            {
+                var name = Path.GetFileNameWithoutExtension(directory);
+                if (name.StartsWith("MacroDeck", StringComparison.OrdinalIgnoreCase)
+                    || name.StartsWith("Macro Deck", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var exe in new[] { "MacroDeck.exe", "Macro Deck.exe" })
+                    {
+                        var candidate = Path.Combine(directory, exe);
+                        if (File.Exists(candidate))
+                        {
+                            return candidate;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> SafeEnumerateDirectories(string root, int depth)
+    {
+        var level = new List<string> { root };
+        for (var i = 0; i < depth; i++)
+        {
+            var next = new List<string>();
+            foreach (var directory in level)
+            {
+                string[] children;
+                try
+                {
+                    children = Directory.GetDirectories(directory);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    continue;
+                }
+
+                next.AddRange(children);
+            }
+
+            foreach (var child in next)
+            {
+                yield return child;
+            }
+
+            level = next;
+        }
     }
 
     /// <summary>Both spellings of the product folder, because the installer picks one of them.</summary>

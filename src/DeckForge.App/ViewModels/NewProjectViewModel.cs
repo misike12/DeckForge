@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -293,10 +294,41 @@ public partial class NewProjectViewModel : ObservableObject
     }
 }
 
-/// <summary>One culture tag in the wizard's language picker.</summary>
-public sealed partial class LanguageToggle(string cultureTag) : ObservableObject
+/// <summary>
+/// One culture tag in the wizard's language picker.
+/// </summary>
+/// <remarks>
+/// The picker used to bind <c>Content="{Binding}"</c> straight to this object, which printed the type
+/// name once per row - the same string six times. It carries a display name for the row and the raw
+/// tag for the tooltip and for scaffolding, which is what the generated resx files are named after.
+/// </remarks>
+public sealed partial class LanguageToggle : ObservableObject
 {
-    public string CultureTag { get; } = cultureTag;
+    private readonly string _cultureTag;
+
+    public LanguageToggle(string cultureTag)
+    {
+        _cultureTag = cultureTag;
+    }
+
+    /// <summary>The culture tag the generated <c>Strings.&lt;tag&gt;.resx</c> is named after.</summary>
+    public string CultureTag => _cultureTag;
+
+    /// <summary>The culture's own endonym, falling back to the tag when unknown.</summary>
+    public string DisplayName
+    {
+        get
+        {
+            try
+            {
+                return CultureInfo.GetCultureInfo(_cultureTag).NativeName;
+            }
+            catch (CultureNotFoundException)
+            {
+                return _cultureTag;
+            }
+        }
+    }
 
     [ObservableProperty]
     private bool _isChecked;

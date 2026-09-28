@@ -104,4 +104,96 @@ public sealed class XamlMarkupTests
 
         Assert.That(icons, Is.GreaterThan(0), "No SymbolIcon usages were found; the check is vacuous.");
     }
+
+    /// <summary>
+    /// Total fixed column widths that still fit beside a minimum-width window, with the page margin
+    /// and the navigation rail taken off. A row over this pushes its right-hand content off the edge
+    /// with no way to scroll to it.
+    /// </summary>
+    private const int FixedColumnBudget = 900;
+
+    [Test]
+    public void No_row_of_columns_is_wider_than_a_small_window()
+    {
+        // Fixed columns out to 460px inside a 340px card (the action and event parameter rows), and
+        // 1080px of page columns on the widget designer. All of it rendered off the right edge at
+        // ordinary window sizes, and what overflowed was the part the user edits: parameter rows, form
+        // fields, and the Generate button. Nothing in the app scrolls horizontally, so the overflow was
+        // simply unreachable.
+        //
+        // Every row is checked, not just the page's own columns: a nested row is the common case, and
+        // it is the one that overflows a narrow card while looking fine in the page-level numbers.
+        var tooWide = new List<string>();
+
+        foreach (var file in MarkupFiles())
+        {
+            foreach (var (columns, total) in FixedColumnRows(file))
+            {
+                if (total > FixedColumnBudget)
+                {
+                    tooWide.Add(
+                        $"{Path.GetFileName(file)}: {total}px across {columns} fixed columns, over the "
+                        + $"{FixedColumnBudget}px budget");
+                }
+            }
+        }
+
+        Assert.That(
+            tooWide,
+            Is.Empty,
+            "These rows are wider than a small window, so their right-hand content is pushed off the "
+            + "edge with nothing to scroll to it. Use proportional columns with MinWidth and let the "
+            + "contents wrap:" + Environment.NewLine
+            + string.Join(Environment.NewLine, tooWide));
+    }
+
+    [Test]
+    public void The_column_budget_check_is_actually_looking_at_column_rows()
+    {
+        // Same reason as the icon check above: a pattern that matches nothing passes for the wrong reason.
+        var rows = MarkupFiles().SelectMany(FixedColumnRows).ToList();
+
+        Assert.That(rows, Is.Not.Empty, "No column definitions were found to check.");
+        Assert.That(rows.Sum(row => row.Total), Is.GreaterThan(FixedColumnBudget),
+            "Nothing came close to the budget, so the check would not notice a wide row.");
+    }
+
+    /// <summary>
+    /// Every row of fixed-width columns declared in a markup file, with its total.
+    /// </summary>
+    /// <remarks>
+    /// Star and auto widths are ignored: they absorb the space that is left, which is the property
+    /// that makes a layout survive a narrow window. Only a run of fixed pixels can push content past
+    /// the edge, and it does so regardless of how much room the row actually has.
+    /// </remarks>
+    private static IEnumerable<(int Columns, int Total)> FixedColumnRows(string file)
+    {
+        var text = File.ReadAllText(file);
+        foreach (Match block in Regex.Matches(
+            text,
+            @"<Grid\.ColumnDefinitions>(?<cols>.*?)</Grid\.ColumnDefinitions>",
+            RegexOptions.Singleline))
+        {
+            var total = 0;
+            var count = 0;
+            foreach (Match column in Regex.Matches(
+                block.Groups["cols"].Value,
+                @"<ColumnDefinition\s+Width=""(\d+(?:\.\d+)?)"""))
+            {
+                if (double.TryParse(
+                        column.Groups[1].Value,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var width))
+                {
+                    total += (int)width;
+                    count++;
+                }
+            }
+
+            if (count > 0)
+            {
+                yield return (count, total);
+            }
+        }
+    }
 }

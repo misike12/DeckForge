@@ -43,6 +43,25 @@ public partial class BlockActionViewModel : ObservableObject
 
     public ObservableCollection<BlockStatement> Statements { get; } = [];
 
+    /// <summary>
+    /// Whether the canvas has any statements, so the page can show a real empty state instead of
+    /// an unexplained blank list.
+    /// </summary>
+    public bool HasStatements
+    {
+        get => Statements.Count > 0;
+        set
+        {
+            if (!value)
+            {
+                Statements.Clear();
+            }
+        }
+    }
+
+    /// <summary>Statement count, shown in the program header.</summary>
+    public int StatementCount => Statements.Count;
+
     // New-statement form state.
     [ObservableProperty]
     private string _newLogTemplate = "Hello from my plugin";
@@ -141,9 +160,12 @@ public partial class BlockActionViewModel : ObservableObject
         // closed, so leaving it on screen let the user save one workspace's blocks into another,
         // or press Save with no workspace and read a confusing message.
         Statements.Clear();
+        StatusText = "";
         if (ws is null)
         {
             CompiledPreview = "Open a workspace to compose its blocks.";
+            OnPropertyChanged(nameof(HasStatements));
+            OnPropertyChanged(nameof(StatementCount));
             return;
         }
 
@@ -169,6 +191,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new LogBlock { Template = NewLogTemplate });
         Recompile();
+        NoteAdded("log block");
     }
 
     [RelayCommand]
@@ -181,6 +204,7 @@ public partial class BlockActionViewModel : ObservableObject
             Type = SelectedParameterType,
         });
         Recompile();
+        NoteAdded("set-variable block");
     }
 
     [RelayCommand]
@@ -188,6 +212,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new DelayBlock { Milliseconds = NewDelayMs });
         Recompile();
+        NoteAdded("wait block");
     }
 
     [RelayCommand]
@@ -195,6 +220,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new ReturnResultBlock { Outcome = "success" });
         Recompile();
+        NoteAdded("return-success block");
     }
 
     [RelayCommand]
@@ -207,6 +233,7 @@ public partial class BlockActionViewModel : ObservableObject
             Message = NewThrowMessage,
         });
         Recompile();
+        NoteAdded("return-failed block");
     }
 
     [RelayCommand]
@@ -214,6 +241,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new HttpRequestBlock { Url = NewUrl, IntoVariable = "response" });
         Recompile();
+        NoteAdded("HTTP GET block");
     }
 
     [RelayCommand]
@@ -221,6 +249,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new NotifyBlock { Title = NewNotifyTitle, Message = NewNotifyMessage });
         Recompile();
+        NoteAdded("notify block");
     }
 
     /// <summary>
@@ -241,6 +270,7 @@ public partial class BlockActionViewModel : ObservableObject
             RightLiteral = SelectedIfOperator is "isEmpty" or "isNotEmpty" ? null : NewIfRightLiteral,
         });
         Recompile();
+        NoteAdded("if block");
     }
 
     [RelayCommand]
@@ -254,6 +284,7 @@ public partial class BlockActionViewModel : ObservableObject
 
         Statements.Add(new NavigateBlock { FolderId = NewFolderId.Trim() });
         Recompile();
+        NoteAdded("open-folder block");
     }
 
     [RelayCommand]
@@ -261,6 +292,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new GoToParentBlock());
         Recompile();
+        NoteAdded("parent-folder block");
     }
 
     [RelayCommand]
@@ -268,6 +300,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new GoBackBlock());
         Recompile();
+        NoteAdded("back block");
     }
 
     [RelayCommand]
@@ -281,6 +314,7 @@ public partial class BlockActionViewModel : ObservableObject
 
         Statements.Add(new ChangeProfileBlock { ProfileId = NewProfileId.Trim() });
         Recompile();
+        NoteAdded("switch-profile block");
     }
 
     [RelayCommand]
@@ -294,6 +328,7 @@ public partial class BlockActionViewModel : ObservableObject
 
         Statements.Add(new RunScriptBlock { ScriptId = NewScriptId.Trim(), Inputs = NewScriptInputs });
         Recompile();
+        NoteAdded("run-script block");
     }
 
     [RelayCommand]
@@ -307,6 +342,7 @@ public partial class BlockActionViewModel : ObservableObject
 
         Statements.Add(new PublishEventBlock { EventId = NewEventId.Trim(), Payload = NewEventPayload });
         Recompile();
+        NoteAdded("publish-event block");
     }
 
     [RelayCommand]
@@ -320,6 +356,7 @@ public partial class BlockActionViewModel : ObservableObject
 
         Statements.Add(new ReadVariableBlock { VariableName = NewHostVariable.Trim(), IntoVariable = "hostValue" });
         Recompile();
+        NoteAdded("read-variable block");
     }
 
     [RelayCommand]
@@ -333,6 +370,7 @@ public partial class BlockActionViewModel : ObservableObject
 
         Statements.Add(new SetVariableValueBlock { VariableName = NewHostVariable.Trim(), Value = NewHostValue });
         Recompile();
+        NoteAdded("write-variable block");
     }
 
     [RelayCommand]
@@ -351,6 +389,7 @@ public partial class BlockActionViewModel : ObservableObject
             Data = NewModalData,
         });
         Recompile();
+        NoteAdded("show-modal block");
     }
 
     [RelayCommand]
@@ -364,6 +403,7 @@ public partial class BlockActionViewModel : ObservableObject
 
         Statements.Add(new InvalidateIconBlock { ActionId = NewIconActionId.Trim() });
         Recompile();
+        NoteAdded("invalidate-icon block");
     }
 
     [RelayCommand]
@@ -371,6 +411,7 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Add(new ThrowBlock { Message = NewThrowMessage });
         Recompile();
+        NoteAdded("throw block");
     }
 
     [RelayCommand]
@@ -380,6 +421,7 @@ public partial class BlockActionViewModel : ObservableObject
         {
             Statements.Remove(statement);
             Recompile();
+            StatusText = $"Removed {statement.Describe()}. {StatementCount} statement{Plural(StatementCount)} left.";
         }
     }
 
@@ -388,9 +430,37 @@ public partial class BlockActionViewModel : ObservableObject
     {
         Statements.Clear();
         Recompile();
+        StatusText = "Canvas cleared. Nothing is written until you save.";
     }
 
-    private void Recompile() => CompiledPreview = BlockCompiler.Compile(Program());
+    /// <summary>
+    /// Recompiles the preview and refreshes the properties the header and empty state bind to.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="HasStatements"/> and <see cref="StatementCount"/> are derived from the collection,
+    /// so they are recomputed here rather than stored: any add, remove, clear, or load has to
+    /// re-raise them, and the collection itself does not.
+    /// </remarks>
+    private void Recompile()
+    {
+        CompiledPreview = BlockCompiler.Compile(Program());
+        OnPropertyChanged(nameof(HasStatements));
+        OnPropertyChanged(nameof(StatementCount));
+    }
+
+    /// <summary>
+    /// Records that a block was added, and drops any stale error left on the status line.
+    /// </summary>
+    /// <remarks>
+    /// The status line used to only ever be written on failure or save. Once an error was shown it
+    /// stayed there for the rest of the session, so a later successful add still read as failed.
+    /// </remarks>
+    private void NoteAdded(string blockName)
+    {
+        StatusText = $"Added {blockName}. {StatementCount} statement{Plural(StatementCount)}.";
+    }
+
+    private static string Plural(int count) => count == 1 ? string.Empty : "s";
 
     /// <summary>The sidecar the canvas is persisted to, alongside the action it edits.</summary>
     private string? SidecarPath()

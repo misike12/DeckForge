@@ -15,7 +15,17 @@ public partial class DocsPage : Page, INavigateWithin
     private readonly DocsSnapshotService _snapshots;
     private readonly DocsSearchService _search;
     private bool _offline;
-    private string? _pendingOfflinePath;
+
+    /// <summary>
+    /// The docs path a deep link asked for, consumed by the first navigation it causes.
+    /// </summary>
+    private string? _requestedPath;
+
+    /// <summary>Whether <c>Loaded</c> has run, so a deep link can tell if it is too early to navigate.</summary>
+    private bool _loaded;
+
+    /// <summary>Whether the embedded browser has been created and given a page to show.</summary>
+    private bool _browserReady;
 
     public DocsPage(DocsSnapshotService snapshots, DocsSearchService search)
     {
@@ -26,6 +36,7 @@ public partial class DocsPage : Page, INavigateWithin
 
         Loaded += async (_, _) =>
         {
+            _loaded = true;
             AddressBox.Text = DocsHome;
             OfflineToggle.IsChecked = _snapshots.HasSnapshot && !_snapshots.LoadManifest().IsNullOrEmptyEquivalent();
             await InitializeBrowserAsync();
@@ -37,6 +48,9 @@ public partial class DocsPage : Page, INavigateWithin
         var version = _snapshots.CurrentVersion;
         if (version is null)
         {
+            // Anything left in the store that is not a real snapshot - a leftover directory from a
+            // failed or interrupted download, a stray folder - is no longer reported as one, so this
+            // is the message the user actually needs: nothing is stored yet.
             StatusLine.Text =
                 "No offline snapshot yet - use 'Download snapshot' to store the full docs inside "
                 + "the app (once, a few MB).";
@@ -54,8 +68,25 @@ public partial class DocsPage : Page, INavigateWithin
               + (meta.Failures.Count > 0 ? $" Not stored: {meta.Failures.Count} page(s)." : "");
     }
 
+    /// <summary>
+    /// Creates the embedded browser and shows a page, once per page instance.
+    /// </summary>
+    /// <remarks>
+    /// The flag is claimed before the first <c>await</c>, not after. Two callers reach this method
+    /// routinely - <c>Loaded</c> calls it, and setting the offline toggle from <c>Loaded</c> raises
+    /// <c>Checked</c>, which calls it again - and both were getting past a flag that was only set once
+    /// the browser existed. The first consumed the requested deep-link page and the second then found
+    /// nothing left and put the docs index back, so every "Docs -&gt; ..." button opened the index.
+    /// A later <c>Loaded</c> is a no-op for the same reason.
+    /// </remarks>
     private async System.Threading.Tasks.Task InitializeBrowserAsync()
     {
+        if (_browserReady)
+        {
+            return;
+        }
+
+        _browserReady = true;
         try
         {
             await Browser.EnsureCoreWebView2Async();
@@ -63,18 +94,16 @@ public partial class DocsPage : Page, INavigateWithin
             if (OfflineToggle.IsChecked == true)
             {
                 ApplyVirtualHostMapping();
-                if (_pendingOfflinePath is not null)
-                {
-                    NavigateOffline(_pendingOfflinePath);
-                }
-                else
-                {
-                    NavigateOffline("/");
-                }
+
+                // A deep link asked for a specific page; the snapshot root is only the default.
+                var target = _requestedPath ?? "/";
+                _requestedPath = null;
+                NavigateOffline(target);
             }
         }
         catch (Exception)
         {
+            _browserReady = false;
             AddressBox.Text = "WebView2 runtime missing - install 'Evergreen WebView2 Runtime'.";
         }
     }
@@ -132,14 +161,27 @@ public partial class DocsPage : Page, INavigateWithin
     public void NavigateWithin(string path)
     {
         UpdateStatusLine();
+
+        // Kept until it is actually used. Every place that consumes it clears it, so a path that is
+        // never consumed - because the page is not on screen yet - survives until the load that
+        // shows it. Clearing it eagerly here is what made every deep link open the index: the request
+        // arrived before Loaded had run, so the path was dropped on the floor and the load that
+        // followed had nothing but the root to show.
+        _requestedPath = path;
+
+        if (!_loaded)
+        {
+            // The Frame raises Loaded later, not inside Navigate, so at this point the page has no
+            // browser and the offline toggle is still at its default. Navigating now would start a
+            // second, competing navigation; leaving it to Loaded makes the order irrelevant.
+            return;
+        }
+
         if (_offline || OfflineToggle.IsChecked == true)
         {
-            _pendingOfflinePath = path;
-            if (Browser.CoreWebView2 is not null)
-            {
-                ApplyVirtualHostMapping();
-                NavigateOffline(path);
-            }
+            ApplyVirtualHostMapping();
+            NavigateOffline(path);
+            _requestedPath = null;
             return;
         }
 
@@ -148,6 +190,7 @@ public partial class DocsPage : Page, INavigateWithin
             : DocsHome + path.TrimStart('/') + "/";
         AddressBox.Text = url;
         _ = EnsureAndNavigate(url);
+        _requestedPath = null;
     }
 
     private async System.Threading.Tasks.Task EnsureAndNavigate(string url)

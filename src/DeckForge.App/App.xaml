@@ -18,6 +18,8 @@
             <conv:BoolToStatusColorConverter x:Key="BoolToStatusColorConverter" />
             <conv:DoctorCheckToStatusColorConverter x:Key="DoctorCheckToStatusColorConverter" />
             <conv:DoctorCheckFixHintToVisibilityConverter x:Key="DoctorCheckFixHintToVisibilityConverter" />
+            <conv:DoctorCheckInstallableToVisibilityConverter x:Key="DoctorCheckInstallableToVisibilityConverter" />
+            <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
             <conv:EnumToAppThemeConverter x:Key="EnumToAppThemeConverter" />
             <conv:IntToVisibilityConverter x:Key="IntToVisibilityConverter" />
             <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter" />
@@ -35,6 +37,61 @@
             <Style TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{DynamicResource Liquid.TextBrush}" />
             </Style>
+
+            <!--
+                Selectable list row.
+
+                Selection is drawn as an accent wash plus an accent edge, so a selected row still looks
+                like part of the liquid surface. Referenced implicitly just below; also available by
+                key for a page that needs to restate it explicitly.
+            -->
+            <Style x:Key="LiquidSelectableItem" TargetType="ListBoxItem">
+                <Setter Property="Padding" Value="10,7" />
+                <Setter Property="Margin" Value="0,1" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="Foreground" Value="{DynamicResource Liquid.TextBrush}" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Row"
+                                    Background="Transparent"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0,0,0,0"
+                                    CornerRadius="8"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Row" Property="Background"
+                                            Value="{DynamicResource Liquid.AccentWashBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Row" Property="Background"
+                                            Value="{DynamicResource Liquid.AccentWashBrush}" />
+                                    <Setter TargetName="Row" Property="BorderBrush"
+                                            Value="{DynamicResource Liquid.AccentBrush}" />
+                                    <Setter TargetName="Row" Property="BorderThickness" Value="1" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <!--
+                Selectable list row, applied implicitly so every list in the app matches.
+
+                The bare WPF ListBoxItem template fills the whole selected row with the system accent
+                and paints the row with hard default chrome, which read as a solid blue slab sitting
+                on the liquid surface. This draws selection as an accent wash plus an accent edge, so
+                a selected row still looks like part of the app.
+
+                It is implicit rather than opt-in because the mismatch was not local: the same slab
+                appeared on the icon templates, the block program, the docs tree, and every editor
+                list. Individual pages can still override ItemContainerStyle where they need to.
+            -->
+            <Style TargetType="ListBoxItem" BasedOn="{StaticResource LiquidSelectableItem}" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

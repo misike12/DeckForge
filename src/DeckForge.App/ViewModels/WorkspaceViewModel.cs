@@ -19,15 +19,18 @@ public partial class WorkspaceViewModel : ObservableObject
     private readonly WorkspaceManager _manager;
     private readonly SettingsService _settings;
     private readonly CliAdapter.EnvironmentDoctor _doctor;
+    private readonly CliAdapter.Tools.PrerequisiteInstaller _installer;
 
     public WorkspaceViewModel(
         WorkspaceManager manager,
         SettingsService settings,
-        CliAdapter.EnvironmentDoctor doctor)
+        CliAdapter.EnvironmentDoctor doctor,
+        CliAdapter.Tools.PrerequisiteInstaller installer)
     {
         _manager = manager;
         _settings = settings;
         _doctor = doctor;
+        _installer = installer;
         RefreshRecents();
 
         ShellMessenger.WorkspaceChanged += _ => RefreshFromManager();
@@ -43,6 +46,115 @@ public partial class WorkspaceViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isCheckingEnvironment;
+
+    /// <summary>True while a prerequisite is being installed, so the buttons can be disabled.</summary>
+    [ObservableProperty]
+    private bool _isInstallingPrerequisite;
+
+    /// <summary>
+    /// True when at least one missing prerequisite DeckForge can act on.
+    /// </summary>
+    public bool HasInstallablePrerequisites =>
+        !IsInstallingPrerequisite && EnvironmentChecks.Any(_installer.CanInstall);
+
+    /// <summary>How many missing prerequisites there are, for the button's caption.</summary>
+    public int MissingPrerequisiteCount => _installer.Pending(EnvironmentChecks).Count;
+
+    /// <summary>
+    /// Installs every missing prerequisite, in dependency order, and re-checks afterwards.
+    /// </summary>
+    /// <remarks>
+    /// Installing the CLI before the SDK cannot work - it is a dotnet global tool - so the order is
+    /// the installer's, not the order the checks happen to be discovered in. And the sequence stops
+    /// at the first failure, because continuing would produce a second error that is really just a
+    /// consequence of the first.
+    /// </remarks>
+    [RelayCommand]
+    private async Task InstallMissingPrerequisitesAsync()
+    {
+        if (IsInstallingPrerequisite)
+        {
+            return;
+        }
+
+        var pending = _installer.Pending(EnvironmentChecks);
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        IsInstallingPrerequisite = true;
+        EnvironmentStatus = $"Installing {pending.Count} prerequisite(s)...";
+        try
+        {
+            var results = await _installer.InstallAllAsync(
+                pending,
+                line => EnvironmentStatus = line);
+
+            EnvironmentStatus = string.Join(
+                Environment.NewLine,
+                results.Select(r => (r.Ok ? "OK   " : "FAIL ") + r.Message));
+
+            await RefreshEnvironmentAsync(CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            EnvironmentStatus = "Cancelled.";
+        }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception)
+        {
+            EnvironmentStatus = $"Could not install: {ex.Message}";
+        }
+        finally
+        {
+            IsInstallingPrerequisite = false;
+            OnPropertyChanged(nameof(HasInstallablePrerequisites));
+            OnPropertyChanged(nameof(MissingPrerequisiteCount));
+        }
+    }
+
+    /// <summary>Installs one prerequisite, then re-checks.</summary>
+    [RelayCommand]
+    private async Task InstallPrerequisiteAsync(CliAdapter.DoctorCheck? check)
+    {
+        if (check is null || IsInstallingPrerequisite)
+        {
+            return;
+        }
+
+        IsInstallingPrerequisite = true;
+        EnvironmentStatus = $"Installing {check.Title}...";
+        try
+        {
+            var result = await _installer.InstallAsync(check, line => EnvironmentStatus = line);
+            EnvironmentStatus = result.Message;
+            await RefreshEnvironmentAsync(CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            EnvironmentStatus = "Cancelled.";
+        }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception)
+        {
+            EnvironmentStatus = $"Could not install: {ex.Message}";
+        }
+        finally
+        {
+            IsInstallingPrerequisite = false;
+            OnPropertyChanged(nameof(HasInstallablePrerequisites));
+            OnPropertyChanged(nameof(MissingPrerequisiteCount));
+        }
+    }
+
+    /// <summary>The install action's caption for one check, or null when there is nothing to do.</summary>
+    public string? InstallActionLabel(CliAdapter.DoctorCheck check) =>
+        _installer.CanInstall(check)
+            ? check.Id == "macrodeck-host" ? "Get Macro Deck" : "Install"
+            : null;
+
+    /// <summary>Progress or result of the last install, shown under the checklist.</summary>
+    [ObservableProperty]
+    private string _environmentStatus = "";
 
     /// <summary>Re-runs the environment checks. Safe to call at any time.</summary>
     [RelayCommand]
@@ -82,6 +194,8 @@ public partial class WorkspaceViewModel : ObservableObject
         finally
         {
             IsCheckingEnvironment = false;
+            OnPropertyChanged(nameof(HasInstallablePrerequisites));
+            OnPropertyChanged(nameof(MissingPrerequisiteCount));
         }
     }
 

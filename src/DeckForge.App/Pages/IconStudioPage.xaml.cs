@@ -32,7 +32,13 @@ public partial class IconStudioPage : Page, IRefreshOnNavigate
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(IconStudioViewModel.Svg))
+        // Any of these three changes the document. Watching Svg alone was enough for correctness only
+        // by accident: Refresh reassigns Svg on every one of them, but Svg is also assigned in the
+        // constructor before this page exists, so the first render has to be driven by Loaded.
+        if (e.PropertyName is nameof(IconStudioViewModel.Svg)
+            or nameof(IconStudioViewModel.ShapeColor)
+            or nameof(IconStudioViewModel.AccentColor)
+            or nameof(IconStudioViewModel.IconText))
         {
             _ = RenderPreviewsAsync();
         }
@@ -44,23 +50,25 @@ public partial class IconStudioPage : Page, IRefreshOnNavigate
         {
             return;
         }
-        var html = Wrap(_vm.Svg);
+
+        // The document, not the bare shape list: the templates hold only the inner elements, and
+        // handing those to a browser produced two blank tiles.
+        var html = PreviewHtml.Wrap(_vm.SvgDocument);
         try
         {
             await PreviewLarge.EnsureCoreWebView2Async();
             await PreviewSmall.EnsureCoreWebView2Async();
             PreviewLarge.NavigateToString(html);
             PreviewSmall.NavigateToString(html);
+            _vm.StatusText = "";
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Preview unavailable without the runtime; editing still works.
+            // Reported rather than swallowed. The catch used to discard the exception, so a preview
+            // that never rendered looked identical to one that had nothing to show - the page just
+            // showed two empty tiles and gave no hint why. Editing still works without the runtime;
+            // it is the preview that is unavailable, and the message says so.
+            _vm.StatusText = $"Live preview unavailable: {ex.GetType().Name}: {ex.Message}. The SVG is still saved correctly.";
         }
     }
-
-    private static string Wrap(string svg) =>
-        "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\" />\n<style>\n" +
-        "  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }\n" +
-        "  svg { width: 100%; height: 100%; }\n" +
-        "</style>\n</head>\n<body>" + svg + "</body>\n</html>";
 }
