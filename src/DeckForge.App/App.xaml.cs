@@ -131,6 +131,8 @@ public partial class App : Application
         var window = new MainWindow();
         MainWindow = window;
         window.Show();
+        _mainWindowShown = true;
+
 
         // CheckForUpdatesOnStart had nothing to switch on: the check lived in the Settings page's
         // click handler. It runs after the window is up, so a slow network never delays startup.
@@ -212,6 +214,8 @@ public partial class App : Application
     }
 
     private int _crashGuard;
+    private bool _mainWindowShown;
+
 
     /// <summary>How large the crash log may grow before it is rotated.</summary>
     /// <remarks>
@@ -253,6 +257,21 @@ public partial class App : Application
 
         Log.LogError(e.Exception, "Unhandled exception on the UI thread (occurrence {Count})", _crashGuard);
 
+        // A failure before the window is up cannot be survived: there is nowhere to show the
+        // banner the handler would otherwise use, so swallowing it leaves a process that is alive,
+        // responsive to Task Manager, and showing the user nothing at all. That is a far worse
+        // failure than a crash, because there is no symptom to report and no way to tell that the
+        // app even started. Say what happened, then exit non-zero so a launcher or script sees it.
+        //
+        // It happened once: a `ui:SymbolIcon` in the navigation named a SymbolRegular member that
+        // does not exist, so MainWindow's XAML failed to parse during OnStartup.
+        if (!_mainWindowShown)
+        {
+            ReportStartupFailure(e.Exception);
+            e.Handled = false;
+            Environment.Exit(71);
+        }
+
         if (_crashGuard <= 3)
         {
             // Survive it, but say so. The first three were swallowed with nothing on screen: the
@@ -267,5 +286,39 @@ public partial class App : Application
         // editing. Exit so the next launch starts clean.
         e.Handled = false;
         Environment.Exit(70);
+    }
+
+    /// <summary>
+    /// Puts a startup failure in front of the user, since there is no window to show it in.
+    /// </summary>
+    /// <remarks>
+    /// A native message box rather than a WPF one: the WPF resources may be exactly what failed to
+    /// load, and a dialog that cannot be constructed turns a diagnosable crash back into a silent
+    /// one. The crash log has the full stack; this is the one line a user can report.
+    /// </remarks>
+    private void ReportStartupFailure(Exception exception)
+    {
+        var message =
+            $"DeckForge could not start.{Environment.NewLine}{Environment.NewLine}"
+            + $"{exception.GetType().Name}: {exception.Message}{Environment.NewLine}{Environment.NewLine}"
+            + "The full details are in:" + Environment.NewLine
+            + System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DeckForge", "crash.log");
+
+        try
+        {
+            System.Windows.MessageBox.Show(
+                message,
+                "DeckForge",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+        }
+        catch (Exception dialogFailure)
+        {
+            // Nothing left to report through, so fall back to the one channel that always works.
+            System.Diagnostics.Debug.WriteLine($"Could not show the startup error: {dialogFailure.Message}");
+            Console.Error.WriteLine(message);
+        }
     }
 }

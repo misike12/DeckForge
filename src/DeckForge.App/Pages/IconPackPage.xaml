@@ -70,7 +70,10 @@
                     -->
                     <TextBlock DockPanel.Dock="Top" FontSize="12" Margin="0,0,0,8"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}">
-                        <Run Text="{Binding TotalBytes, StringFormat='{}{0} bytes uncompressed', FallbackValue='0 bytes'}" />
+                        <!-- OneWay explicitly. Run.Text is one of the properties WPF binds two-way by
+                             default, and TotalBytes is computed and read-only, so the default mode
+                             threw on every layout pass. -->
+                        <Run Text="{Binding TotalBytes, Mode=OneWay, StringFormat='{}{0} bytes uncompressed', FallbackValue='0 bytes'}" />
                     </TextBlock>
                     <ListBox ItemsSource="{Binding Icons}" Background="Transparent" BorderThickness="0">
                         <ListBox.ItemTemplate>

@@ -24,6 +24,19 @@ look like, and the SDK is the ground truth for what that code may contain.
 - **A running DeckForge process holds build outputs.** If a build fails with `MSB3021`/`MSB3027`
   "being used by another process", kill `DeckForge.exe` and retry. That is a stale process, not a
   bug.
+- **`Process.Responding` does not mean the app started.** A WPF application whose `OnStartup`
+  threw still has a live dispatcher, so it reports `Responding = True` with no window on screen.
+  It is not a smoke test. To check that a window appeared, enumerate top-level visible windows for
+  the process (`EnumWindows` + `IsWindowVisible`), or just look. This cost a real bug: a
+  `ui:SymbolIcon` naming a `SymbolRegular` member that does not exist made `MainWindow`'s XAML throw
+  during startup, the crash handler swallowed it, and the result was a process in Task Manager and
+  nothing else - which was then reported as a passing smoke test.
+- **A `ui:SymbolIcon` name is an enum member the compiler cannot check.** `XamlMarkupTests` verifies
+  every one against the real `SymbolRegular` enum. If you add an icon, that test has to pass.
+- **A UI-thread exception before the window is shown is fatal, not survivable.** There is nowhere to
+  show the banner the crash handler would use, so `App` now shows a native message box and exits
+  with 71. Swallowing it produces a process with no window and no symptom, which is worse than a
+  crash.
 - `macrodeck-plugin test`'s conformance check **MDC0604 is flaky** - a 15 s shutdown assertion. The
   same binary passed, failed and passed across three consecutive runs. Do not chase it.
 
@@ -54,8 +67,18 @@ Note `validate --manifest` against `src/<Name>/manifest.json` always reports
 exists after `macrodeck-plugin build`. Validate the artifact, or the build output, not the source
 tree.
 
-Current state: **293 tests pass, 0 fail.** Template parity: no unexpected differences. A generated
+Current state: **295 tests pass, 0 fail.** Template parity: no unexpected differences. A generated
 project builds, packs, validates at publication level, and passes 25/25 conformance checks.
+
+To confirm the application actually opens, start the built exe and check for a visible top-level
+window - not `Process.Responding`:
+
+```
+src\DeckForge.App\bin\Debug\net10.0-windows\DeckForge.exe
+```
+
+If it starts and shows nothing, `%LOCALAPPDATA%\DeckForge\crash.log` has the reason; since the
+startup handler was hardened, a failure now also produces a message box and exit code 71.
 
 ## Architecture notes
 
