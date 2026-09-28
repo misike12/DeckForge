@@ -281,14 +281,21 @@ public partial class IconPackDesignerViewModel : ObservableObject
         var packDirectory = Path.Combine(ws.ArtifactsDirectory, "icon-packs");
         Directory.CreateDirectory(packDirectory);
         var packFile = Path.Combine(packDirectory, PackId + ".macroDeckIconPack");
-        ExportTo(packFile);
 
         StatusText = "Bundling via macrodeck-plugin icon-pack add...";
+        var bundled = false;
         try
         {
+            // Inside the try. ExportTo writes a zip and reads every icon file, so a path the user
+            // has since deleted or a full disk threw out of it - and that escaped as an
+            // unhandled exception from a command, after the status line had already said the
+            // bundling had begun.
+            ExportTo(packFile);
+
             // The pack path is positional and the project is --source; --project/--pack were both
             // rejected as unrecognized arguments.
             var result = await _cli.IconPackAddAsync(packFile, ws.PluginProjectDirectory, key: null, copy: true, force: true, ct);
+            bundled = result.Succeeded;
             StatusText = result.Succeeded
                 ? "Bundled into the plugin - macrodeck-plugin build will carry it."
                 : $"icon-pack add failed ({result.ExitCode}): {CliAdapter.Tools.MacroDeckCli.ExplainExitCode(result.ExitCode)}";
@@ -300,6 +307,36 @@ public partial class IconPackDesignerViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             StatusText = "Bundling cancelled.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText = $"Could not write the pack: {ex.Message}";
+        }
+        finally
+        {
+            // The pack was a means to an end. Left behind on success, it accumulated a copy per
+            // bundle - and the CLI copies it into the plugin, so the workspace held two of
+            // everything. Kept on failure, where it is the only thing the user can inspect.
+            if (bundled)
+            {
+                TryDelete(packFile);
+            }
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A leftover artifact is untidy, not broken. The CLI is holding the file on a slow
+            // delete, most likely, and retrying here would just race it.
         }
     }
 

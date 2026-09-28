@@ -19,8 +19,8 @@ public sealed class ProjectContentBuilder
     public ProjectContentBuilder(NewProjectOptions options)
     {
         Options = options;
-        ProjectName = options.ProjectName ?? options.PluginName.Replace(" ", "");
-        RootNamespace = ProjectName;
+        ProjectName = options.EffectiveProjectName;
+        RootNamespace = options.RootNamespace;
     }
 
     /// <summary>All files relative to the solution root ('/' separators, no leading slash).</summary>

@@ -362,10 +362,30 @@ public static class IntegrationPatcher
         }
 
         var before = source[..close].TrimEnd();
-        var indentation = IndentOf(source, open);
-        var insertion = Environment.NewLine + Environment.NewLine + CSharpCode.Indent(memberCode, indentation);
+        var insertion = Environment.NewLine + Environment.NewLine + CSharpCode.Indent(memberCode, MemberIndentOf(source, classIndex));
         var updated = before + insertion + Environment.NewLine + source[close..];
         return new SourcePatch(PatchOutcome.Patched, updated, "Member added to the integration.");
+    }
+
+    /// <summary>
+    /// The indentation a member of this class body should have: the class declaration's own
+    /// indentation plus one level, in whichever style the file already uses.
+    /// </summary>
+    /// <remarks>
+    /// The obvious implementation asks for the indentation of the opening brace, which is the
+    /// class declaration's column - so members were inserted at column zero, at the same level as
+    /// the class itself. And the level has to be a tab, not four spaces: the official template is
+    /// tab-indented, so adding members with spaces left a plugin with two indentation styles in one
+    /// class.
+    /// </remarks>
+    private static string MemberIndentOf(string source, int classIndex)
+    {
+        var declarationIndent = IndentOf(source, classIndex);
+
+        // One level in whichever style the file already indents with. A file that uses spaces
+        // gets a space level, so a hand-written project keeps its own style.
+        var level = source.Contains("\n\t", StringComparison.Ordinal) ? "\t" : "    ";
+        return declarationIndent + level;
     }
 
     /// <summary>Replaces or adds the body of the integration's InitializeAsync.</summary>

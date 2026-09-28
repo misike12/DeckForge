@@ -394,16 +394,11 @@ public class GeneratedCodeCompilesTests
         var actionSource = File.ReadAllText(actionPath);
 
         // The block region needs a captured IIntegrationContext, which the stock example action
-        // does not have. Add the field and constructor plumbing, exactly as a real edit would.
-        actionSource = actionSource
-            .Replace(
-                "    private readonly ILogger _logger;",
-                "    private readonly ILogger _logger;\n    private readonly MacroDeck.Sdk.IIntegrationContext? _integration;",
-                StringComparison.Ordinal)
-            .Replace(
-                "    public LogMessageAction(ILogger logger) => _logger = logger.ForContext<LogMessageAction>();",
-                "    public LogMessageAction(ILogger logger, MacroDeck.Sdk.IIntegrationContext? integration = null)\n    {\n        _logger = logger.ForContext<LogMessageAction>();\n        _integration = integration;\n    }",
-                StringComparison.Ordinal);
+        // does not have. The production helper adds the plumbing in the file's own indentation.
+        var wired = BlockCompiler.EnsureIntegrationContext(actionSource);
+        Assert.That(wired.Success, Is.True, wired.Message);
+        actionSource = wired.Content;
+        Assert.That(actionSource, Does.Contain("_integration"), "The integration field was not added.");
 
         var spliced = BlockCompiler.Splice(actionSource, compiled, "public Task<ActionResult> ExecuteAsync(ActionExecutionContext context)")
             ?? throw new InvalidOperationException("Could not splice the block region.");

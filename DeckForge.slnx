@@ -5,4 +5,5 @@
   <Project Path="src/DeckForge.CliAdapter/DeckForge.CliAdapter.csproj" />
   <Project Path="src/DeckForge.App/DeckForge.App.csproj" />
   <Project Path="tests/DeckForge.Tests/DeckForge.Tests.csproj" />
+  <Project Path="tools/TemplateParity/TemplateParity.csproj" />
 </Solution>

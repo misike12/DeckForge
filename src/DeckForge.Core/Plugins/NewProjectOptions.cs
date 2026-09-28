@@ -27,6 +27,16 @@ public sealed record NewProjectOptions
     /// <summary>Description shown in the Store listing.</summary>
     public string Description { get; init; } = "";
 
+    /// <summary>
+    /// The plugin's version, which the manifest declares.
+    /// </summary>
+    /// <remarks>
+    /// It was hardcoded to 1.0.0 in the template, so a project generated for a 2.0 plugin shipped a
+    /// manifest claiming 1.0.0 - and the version is part of the artifact's identity, so
+    /// <c>macrodeck-plugin</c> and the Creator Portal both see the wrong one.
+    /// </remarks>
+    public string Version { get; init; } = "1.0.0";
+
     /// <summary>Absolute https URL of the plugin repository (publication-required).</summary>
     public string? Repository { get; init; }
 
@@ -58,9 +68,19 @@ public sealed record NewProjectOptions
     /// <summary>Create a git repository with an initial commit.</summary>
     public bool InitGit { get; init; } = true;
 
-    /// <summary>Project folder name; defaults to ProjectName.</summary>
-    public string FolderName => ProjectName ?? PluginName.Replace(" ", "");
+    /// <summary>
+    /// The project name when one was given, otherwise the plugin name with its spaces removed.
+    /// </summary>
+    /// <remarks>
+    /// This expression was written out in four places - here twice, once on the content builder
+    /// and once in the template factory - so a fifth caller could easily have picked a different
+    /// derivation and produced a folder name that did not match its namespace or its assembly.
+    /// </remarks>
+    public string EffectiveProjectName => ProjectName ?? PluginName.Replace(" ", "");
+
+    /// <summary>Project folder name; defaults to the project name.</summary>
+    public string FolderName => EffectiveProjectName;
 
     /// <summary>Namespace root = project name.</summary>
-    public string RootNamespace => ProjectName ?? PluginName.Replace(" ", "");
+    public string RootNamespace => EffectiveProjectName;
 }

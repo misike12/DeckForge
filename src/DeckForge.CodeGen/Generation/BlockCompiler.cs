@@ -152,6 +152,30 @@ public static partial class BlockCompiler
     }
 
     /// <summary>
+    /// Adds the <c>_integration</c> field and constructor parameter that host-calling blocks need.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A block region can navigate folders, invalidate widget icons, notify and read variables, and
+    /// none of those live on <c>ActionExecutionContext</c> - they are on
+    /// <c>IIntegrationContext</c>, reached through the <c>_integration</c> field that
+    /// <see cref="ActionGenerator"/> emits into a generated action. The stock example action has no
+    /// such field, so a canvas dropped into it produces code that does not compile, with eight
+    /// <c>CS0103</c>s naming a field nobody declared.
+    /// </para>
+    /// <para>
+    /// Callers used to fix this by hand with a <see cref="string.Replace(string, string, StringComparison)"/>
+    /// that assumed four-space indentation. The official template is tab-indented, so the replace
+    /// matched nothing, changed nothing, and failed silently - the defect only surfaced as a
+    /// compiler error far from its cause.
+    /// </para>
+    /// </remarks>
+    /// <returns>The rewritten source, the source unchanged if it is already wired, or null when the
+    /// action's shape was not recognised.</returns>
+    public static SourcePatch EnsureIntegrationContext(string source) =>
+        ActionContextPatcher.PatchAction(source);
+
+    /// <summary>
     /// Splices a compiled region into <paramref name="source"/>, replacing an existing region or
     /// inserting at <paramref name="anchor"/>.
     /// </summary>
@@ -161,15 +185,25 @@ public static partial class BlockCompiler
     /// The method signature to insert after when no region exists yet, matched by
     /// <paramref name="anchor"/>.
     /// </param>
-    /// <param name="indent">Indent applied to every line of the inserted region.</param>
+    /// <param name="indent">
+    /// Indent applied to every line of the inserted region, in spaces. Ignored when the file
+    /// indents with tabs, which the official template does: there a tab is one level, and a
+    /// space-counted region would land at the wrong depth and leave two styles in one method.
+    /// </param>
     /// <returns>The rewritten source, or null when no anchor could be found.</returns>
     public static string? Splice(string source, string compiled, string anchor, int indent = 8)
     {
+        var tabbed = source.Contains("\n\t", StringComparison.Ordinal);
+        string Apply(string text) => tabbed
+            ? string.Join('\n', text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Select(l => l.Length == 0 ? l : "\t" + l))
+            : CSharpCode.Indent(text, indent);
+        var join = source.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+
         var begin = source.IndexOf(BeginMarker, StringComparison.Ordinal);
         var end = source.IndexOf(EndMarker, StringComparison.Ordinal);
         if (begin >= 0 && end > begin)
         {
-            var replacement = CSharpCode.Indent(compiled, indent);
+            var replacement = Apply(compiled);
             return string.Concat(
                 source.AsSpan(0, begin),
                 replacement.TrimEnd(),
@@ -188,7 +222,9 @@ public static partial class BlockCompiler
             return null;
         }
 
-        var insertion = "\n" + CSharpCode.Indent(compiled, indent) + "\n" + new string(' ', indent);
+        // The closing line has to line up with the method signature, in the file's own style.
+        var closingIndent = IntegrationPatcher.IndentOf(source, anchorIndex) + (tabbed ? "\t" : new string(' ', indent));
+        var insertion = join + Apply(compiled) + join + closingIndent;
         return source.Insert(brace + 1, insertion);
     }
 
