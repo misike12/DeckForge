@@ -21,6 +21,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="Docs" FontSize="26" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
             <ToggleButton Grid.Column="1" x:Name="OfflineToggle" Content="Offline"
@@ -32,7 +33,14 @@
             <ui:Button Grid.Column="4" Content="Open externally" Margin="8,0,0,0" Click="OpenExternal_Click" />
             <ui:Button Grid.Column="5" Content="Download snapshot" Margin="8,0,0,0" Click="DownloadSnapshot_Click"
                        ToolTip="Download the full docs.macro-deck.app into the app for offline reading and search" />
-            <ui:Button Grid.Column="6" Content="Search" Margin="8,0,0,0" Click="SearchToggle_Click"
+            <!--
+                Distinct from Download, not a duplicate of it. Download skips files it already
+                has, which is right for a first fetch and wrong for picking up docs that have
+                changed since - the whole reason to refresh.
+            -->
+            <ui:Button Grid.Column="6" Content="Refresh snapshot" Margin="8,0,0,0" Click="RefreshSnapshot_Click"
+                       ToolTip="Re-download every page, replacing today's copy. Use this after the docs site changes." />
+            <ui:Button Grid.Column="7" Content="Search" Margin="8,0,0,0" Click="SearchToggle_Click"
                        ToolTip="Full-text search (Ctrl+F in offline mode)" />
         </Grid>
 

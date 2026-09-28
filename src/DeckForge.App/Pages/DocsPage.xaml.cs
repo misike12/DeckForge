@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using DeckForge.App.Services;
+using DeckForge.Core.Services;
 using Microsoft.Web.WebView2.Core;
 
 namespace DeckForge.App.Pages;
@@ -33,9 +34,24 @@ public partial class DocsPage : Page, INavigateWithin
 
     private void UpdateStatusLine()
     {
-        StatusLine.Text = _snapshots.CurrentVersion is { } version
-            ? $"Offline snapshot {version} available ({_search.PageCount} pages indexed). Offline mode reads it; online mode opens docs.macro-deck.app."
-            : "No offline snapshot yet - use 'Download snapshot' to store the full docs inside the app (once, ~a few MB).";
+        var version = _snapshots.CurrentVersion;
+        if (version is null)
+        {
+            StatusLine.Text =
+                "No offline snapshot yet - use 'Download snapshot' to store the full docs inside "
+                + "the app (once, a few MB).";
+            return;
+        }
+
+        // The meta.json written by every download was never read, so the page count and the list of
+        // pages that could not be fetched were recorded and then thrown away.
+        var meta = _snapshots.CurrentMeta();
+        StatusLine.Text = meta is null
+            ? $"Offline snapshot {version} available ({_search.PageCount} pages indexed). "
+              + "Offline mode reads it; online mode opens docs.macro-deck.app."
+            : $"Offline snapshot {meta.Summary} Offline mode reads it; online mode opens "
+              + "docs.macro-deck.app."
+              + (meta.Failures.Count > 0 ? $" Not stored: {meta.Failures.Count} page(s)." : "");
     }
 
     private async System.Threading.Tasks.Task InitializeBrowserAsync()
@@ -175,18 +191,38 @@ public partial class DocsPage : Page, INavigateWithin
         return text.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? text : DocsHome;
     }
 
-    private async void DownloadSnapshot_Click(object sender, RoutedEventArgs e)
+    private async void DownloadSnapshot_Click(object sender, RoutedEventArgs e) =>
+        await DownloadAsync(force: false, sender as Wpf.Ui.Controls.Button);
+
+    /// <summary>
+    /// Re-downloads every file, overwriting what is there.
+    /// </summary>
+    /// <remarks>
+    /// This button did not exist: the only download call passed <c>force: false</c>, so the
+    /// <c>force</c> parameter was unreachable and the UI's promise to "refresh today's snapshot"
+    /// could not be kept. The docs site changing under a cached copy is the whole reason to
+    /// refresh, and skipping existing files is exactly wrong for that.
+    /// </remarks>
+    private async void RefreshSnapshot_Click(object sender, RoutedEventArgs e) =>
+        await DownloadAsync(force: true, sender as Wpf.Ui.Controls.Button);
+
+    private async Task DownloadAsync(bool force, Wpf.Ui.Controls.Button? button)
     {
-        if (sender is Wpf.Ui.Controls.Button button)
+        if (button is not null)
         {
             button.IsEnabled = false;
         }
-        StatusLine.Text = "Downloading the docs snapshot (one-time, a few MB)...";
+
+        StatusLine.Text = force
+            ? "Re-downloading the docs snapshot, replacing today's copy..."
+            : "Downloading the docs snapshot (one-time, a few MB)...";
+
         try
         {
-            var result = await _snapshots.DownloadAsync(force: false);
+            var result = await _snapshots.DownloadAsync(force);
             StatusLine.Text = $"Snapshot {result.Version} stored: {result.PageCount} pages, {result.FilesDownloaded} files."
-                + (result.Failures.Count > 0 ? $" {result.Failures.Count} pages failed (shown online instead)." : "");
+                + (result.Failures.Count > 0 ? $" {result.Failures.Count} could not be fetched." : "");
+
             if (OfflineToggle.IsChecked != true)
             {
                 OfflineToggle.IsChecked = true;
@@ -198,14 +234,18 @@ public partial class DocsPage : Page, INavigateWithin
         }
         catch (Exception ex)
         {
+            // A failed refresh must not take the existing snapshot with it. The versioned
+            // directory is untouched until the new one is complete, so offline reading still works.
             StatusLine.Text = $"Snapshot download failed: {ex.Message} - the docs stay available online.";
         }
         finally
         {
-            if (sender is Wpf.Ui.Controls.Button reenabled)
+            if (button is not null)
             {
-                reenabled.IsEnabled = true;
+                button.IsEnabled = true;
             }
+
+            UpdateStatusLine();
         }
     }
 

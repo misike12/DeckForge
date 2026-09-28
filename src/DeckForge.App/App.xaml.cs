@@ -86,8 +86,8 @@ public partial class App : Application
         services.AddSingleton<ViewModels.LocalizationManagerViewModel>();
         services.AddSingleton<Pages.WidgetDesignerPage>();
         services.AddSingleton<ViewModels.WidgetDesignerViewModel>();
-        services.AddSingleton<Services.DocsSnapshotService>();
-        services.AddSingleton<Services.DocsSearchService>();
+        services.AddSingleton<Core.Services.DocsSnapshotService>();
+        services.AddSingleton<Core.Services.DocsSearchService>();
         services.AddSingleton<Services.VelopackPackagingService>();
         services.AddSingleton<Pages.IconPackPage>();
         services.AddSingleton<ViewModels.IconPackDesignerViewModel>();
