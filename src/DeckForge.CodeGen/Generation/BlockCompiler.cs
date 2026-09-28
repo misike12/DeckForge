@@ -107,6 +107,64 @@ public static partial class BlockCompiler
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown block kind."),
     };
 
+    /// <summary>
+    /// The block-local names a program declares that already exist in the method it will be
+    /// spliced into.
+    /// </summary>
+    /// <param name="program">The canvas to check.</param>
+    /// <param name="reservedNames">
+    /// Identifiers already declared in the target method's body.
+    /// </param>
+    /// <returns>
+    /// The colliding names, in the order the canvas declares them.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// A block's local is emitted into a method the user already wrote, so a name chosen on the
+    /// canvas can collide with one already there - the stock example action declares
+    /// <c>var message</c>, and naming a variable <c>message</c> on the canvas is entirely reasonable.
+    /// That is a CS0128 in the user's plugin.
+    /// </para>
+    /// <para>
+    /// The compiler could rename the declaration, and it already does that for two blocks in the
+    /// same canvas. Renaming across the boundary is not safe: an <c>If</c> refers to the variable by
+    /// name, so a declaration renamed to <c>message1</c> leaves every reference still reading
+    /// <c>message</c> - which resolves to the host's local, and the conditional silently tests the
+    /// wrong value. A wrong answer is worse than a refused save, so this reports instead.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> LocalNameConflicts(
+        BlockProgram program,
+        IEnumerable<string> reservedNames)
+    {
+        var reserved = new HashSet<string>(reservedNames, StringComparer.Ordinal);
+        if (reserved.Count == 0)
+        {
+            return [];
+        }
+
+        var declared = new HashSet<string>(StringComparer.Ordinal);
+        var conflicts = new List<string>();
+
+        foreach (var statement in program.Statements)
+        {
+            if (statement is not SetVariableBlock set)
+            {
+                continue;
+            }
+
+            var name = CSharpCode.Identifier(set.VariableName);
+            if (name.Length == 0 || !reserved.Contains(name) || !declared.Add(name))
+            {
+                continue;
+            }
+
+            conflicts.Add(name);
+        }
+
+        return conflicts;
+    }
+
     /// <summary>Compiles the whole program, markers included.</summary>
     public static string Compile(BlockProgram program)
     {
@@ -442,6 +500,7 @@ public static partial class BlockCompiler
                 break;
 
             case NotifyBlock notify:
+                EmitGuard(sb, state, pad);
                 EmitNotify(notify, sb, pad);
                 break;
 
@@ -486,6 +545,10 @@ public static partial class BlockCompiler
                 break;
 
             case ShowModalBlock modal:
+                // A modal opens through context.Ui, which is null until the session is established,
+                // exactly like the other host surfaces - so it needs the same guard. It was the one
+                // host block without one, and the omission surfaced as a CS8602 in the user's plugin.
+                EmitGuard(sb, state, pad);
                 EmitShowModal(modal, sb, state, pad);
                 break;
 
@@ -743,7 +806,12 @@ public static partial class BlockCompiler
     {
         var level = NotificationLevels.Contains(notify.Level, StringComparer.Ordinal) ? notify.Level : "Info";
         var body = new System.Text.StringBuilder();
-        body.Append("new UserNotificationRequest { ");
+
+        // Fully qualified, because the region is spliced into the middle of a method: a `using`
+        // directive is only legal at the top of a file, so the compiler cannot add one. Naming the
+        // namespace here is the only way the type resolves, and getting it wrong is a CS0246 in the
+        // user's plugin rather than anything a test here would notice.
+        body.Append("new MacroDeck.Sdk.Notifications.UserNotificationRequest { ");
         body.Append($"Title = {CSharpCode.StringLiteral(notify.Title)}");
         if (!string.IsNullOrEmpty(notify.Message))
         {
@@ -835,7 +903,7 @@ public static partial class BlockCompiler
     {
         var index = state.Next();
         var body = new StringBuilder();
-        body.Append("new ModalDefinition { ");
+        body.Append("new MacroDeck.Sdk.Ui.ModalDefinition { ");
         body.Append($"ViewId = {CSharpCode.StringLiteral(modal.ViewId)}");
         if (!string.IsNullOrEmpty(modal.Title))
         {

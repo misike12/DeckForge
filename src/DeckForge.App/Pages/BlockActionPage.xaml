@@ -45,14 +45,18 @@
             <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="Add statement" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10" />
+                        <TextBlock Text="Add statement" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBlock Text="Every block the compiler supports, grouped by what it touches."
+                                   FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,10"
+                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
 
-                        <TextBlock Text="Log template" FontSize="12" />
+                        <TextBlock Text="Values" FontSize="12" FontWeight="SemiBold" Margin="0,4,0,6" />
+                        <TextBlock Text="Log template" FontSize="11.5" />
                         <ui:TextBox Text="{Binding NewLogTemplate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         <ui:Button Content="Log" Margin="0,6,0,0" HorizontalAlignment="Left"
                                    Command="{Binding AddLogCommand}" />
 
-                        <TextBlock Text="Variable name / parameter / type" FontSize="12" Margin="0,14,0,0" />
+                        <TextBlock Text="Variable name / parameter / type" FontSize="11.5" Margin="0,14,0,0" />
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -72,30 +76,112 @@
                         <ui:Button Content="Read parameter" Margin="0,6,0,0" HorizontalAlignment="Left"
                                    Command="{Binding AddVariableCommand}" />
 
-                        <TextBlock Text="Delay ms" FontSize="12" Margin="0,14,0,0" />
+                        <Separator Margin="0,14,0,10" />
+                        <TextBlock Text="Flow" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="If variable / operator / value" FontSize="11.5" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="6" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition />
+                                <RowDefinition />
+                            </Grid.RowDefinitions>
+                            <ui:TextBox Grid.Row="0" Grid.Column="0" Text="{Binding NewIfLeftVariable, Mode=TwoWay}" />
+                            <ComboBox Grid.Row="0" Grid.Column="2"
+                                      ItemsSource="{Binding IfOperators}"
+                                      SelectedItem="{Binding SelectedIfOperator, Mode=TwoWay}" />
+                            <ui:TextBox Grid.Row="1" Grid.ColumnSpan="2" Margin="0,6,0,0"
+                                        Text="{Binding NewIfRightLiteral, Mode=TwoWay}" />
+                        </Grid>
+                        <ui:Button Content="Add If" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddIfCommand}" />
+
+                        <TextBlock Text="Delay ms" FontSize="11.5" Margin="0,12,0,0" />
                         <ui:TextBox Text="{Binding NewDelayMs, Mode=TwoWay}" />
                         <ui:Button Content="Wait" Margin="0,6,0,0" HorizontalAlignment="Left"
                                    Command="{Binding AddDelayCommand}" />
 
-                        <TextBlock Text="URL" FontSize="12" Margin="0,14,0,0" />
-                        <ui:TextBox Text="{Binding NewUrl, Mode=TwoWay}" />
-                        <ui:Button Content="HTTP GET" Margin="0,6,0,0" HorizontalAlignment="Left"
-                                   Command="{Binding AddHttpCommand}" />
+                        <TextBlock Text="Message the throw reports" FontSize="11.5" Margin="0,12,0,0" />
+                        <ui:TextBox Text="{Binding NewThrowMessage, Mode=TwoWay}" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <ui:Button Content="Return Success" Appearance="Success" Margin="0,0,8,0"
+                                       Command="{Binding AddSuccessCommand}" />
+                            <ui:Button Content="Return Failed" Appearance="Danger" Margin="0,0,8,0"
+                                       Command="{Binding AddFailureCommand}" />
+                            <ui:Button Content="Throw" Command="{Binding AddThrowCommand}" />
+                        </StackPanel>
 
-                        <TextBlock Text="Notification title / message" FontSize="12" Margin="0,14,0,0" />
+                        <Separator Margin="0,14,0,10" />
+                        <TextBlock Text="The host" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBlock Text="These need the plugin's host context. DeckForge wires it in on save."
+                                   FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                        <TextBlock Text="Folder id / profile id" FontSize="11.5" />
+                        <ui:TextBox Text="{Binding NewFolderId, Mode=TwoWay}" />
+                        <ui:TextBox Text="{Binding NewProfileId, Mode=TwoWay}" Margin="0,4,0,0" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <ui:Button Content="Open folder" Margin="0,0,6,6"
+                                       Command="{Binding AddNavigateCommand}" />
+                            <ui:Button Content="Parent" Margin="0,0,6,6"
+                                       Command="{Binding AddGoToParentCommand}" />
+                            <ui:Button Content="Back" Margin="0,0,6,6"
+                                       Command="{Binding AddGoBackCommand}" />
+                            <ui:Button Content="Switch profile"
+                                       Command="{Binding AddChangeProfileCommand}" />
+                        </WrapPanel>
+
+                        <TextBlock Text="Notification title / message" FontSize="11.5" Margin="0,6,0,0" />
                         <ui:TextBox Text="{Binding NewNotifyTitle, Mode=TwoWay}" />
                         <ui:TextBox Text="{Binding NewNotifyMessage, Mode=TwoWay}" Margin="0,4,0,0" />
                         <ui:Button Content="Notify user" Margin="0,6,0,0" HorizontalAlignment="Left"
                                    Command="{Binding AddNotifyCommand}" />
 
+                        <TextBlock Text="Variable name / value" FontSize="11.5" Margin="0,12,0,0" />
+                        <ui:TextBox Text="{Binding NewHostVariable, Mode=TwoWay}" />
+                        <ui:TextBox Text="{Binding NewHostValue, Mode=TwoWay}" Margin="0,4,0,0" />
+                        <WrapPanel Margin="0,6,0,0">
+                            <ui:Button Content="Read" Margin="0,0,6,6"
+                                       Command="{Binding AddReadVariableCommand}" />
+                            <ui:Button Content="Write"
+                                       Command="{Binding AddSetVariableValueCommand}" />
+                        </WrapPanel>
+
+                        <TextBlock Text="Event id / payload (name=value per line)" FontSize="11.5" Margin="0,6,0,0" />
+                        <ui:TextBox Text="{Binding NewEventId, Mode=TwoWay}" />
+                        <ui:TextBox Text="{Binding NewEventPayload, Mode=TwoWay}" Margin="0,4,0,0" />
+                        <ui:Button Content="Publish event" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddPublishEventCommand}" />
+
+                        <TextBlock Text="Script id / inputs (input=parameter per line)" FontSize="11.5" Margin="0,12,0,0" />
+                        <ui:TextBox Text="{Binding NewScriptId, Mode=TwoWay}" />
+                        <ui:TextBox Text="{Binding NewScriptInputs, Mode=TwoWay}" Margin="0,4,0,0" />
+                        <ui:Button Content="Run script" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddRunScriptCommand}" />
+
+                        <TextBlock Text="View id / title / data (name=value per line)" FontSize="11.5" Margin="0,12,0,0" />
+                        <ui:TextBox Text="{Binding NewModalViewId, Mode=TwoWay}" />
+                        <ui:TextBox Text="{Binding NewModalTitle, Mode=TwoWay}" Margin="0,4,0,0" />
+                        <ui:TextBox Text="{Binding NewModalData, Mode=TwoWay}" Margin="0,4,0,0" />
+                        <ui:Button Content="Show modal" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddShowModalCommand}" />
+
+                        <TextBlock Text="Action id whose icon to refresh" FontSize="11.5" Margin="0,12,0,0" />
+                        <ui:TextBox Text="{Binding NewIconActionId, Mode=TwoWay}" />
+                        <ui:Button Content="Invalidate icon" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddInvalidateIconCommand}" />
+
                         <Separator Margin="0,14,0,10" />
-                        <StackPanel Orientation="Horizontal">
-                            <ui:Button Content="Return Success" Appearance="Success" Margin="0,0,8,0"
-                                       Command="{Binding AddSuccessCommand}" />
-                            <ui:Button Content="Return Failed" Appearance="Danger"
-                                       Command="{Binding AddFailureCommand}" />
-                        </StackPanel>
-                        <ui:Button Content="Clear all" Margin="0,12,0,0" HorizontalAlignment="Left"
+                        <TextBlock Text="Network" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <TextBlock Text="URL" FontSize="11.5" />
+                        <ui:TextBox Text="{Binding NewUrl, Mode=TwoWay}" />
+                        <ui:Button Content="HTTP GET" Margin="0,6,0,0" HorizontalAlignment="Left"
+                                   Command="{Binding AddHttpCommand}" />
+
+                        <ui:Button Content="Clear all" Margin="0,16,0,0" HorizontalAlignment="Left"
                                    Command="{Binding ClearCommand}" />
                     </StackPanel>
                 </ScrollViewer>

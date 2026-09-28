@@ -8,8 +8,22 @@ using DeckForge.Core.Workspace;
 
 namespace DeckForge.App.ViewModels;
 
+/// <summary>
+/// The block canvas: compose a program from blocks, see the C# it compiles to, and write it into
+/// the target action.
+/// </summary>
 public partial class BlockActionViewModel : ObservableObject
 {
+    /// <summary>
+    /// The action the canvas edits.
+    /// </summary>
+    /// <remarks>
+    /// It used to be written <c>generated</c> when previewing and <c>log-message</c> when saving.
+    /// The id reaches the generated code - it is the action's log label - so the preview a user
+    /// read was not the code they got. One constant, used by both.
+    /// </remarks>
+    private const string TargetActionId = "log-message";
+
     private readonly WorkspaceManager _workspaces;
 
     public BlockActionViewModel(WorkspaceManager workspaces)
@@ -42,7 +56,7 @@ public partial class BlockActionViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedParameterType = "string";
 
-    public string[] ParameterTypes { get; } = ["string", "number", "bool"];
+    public string[] ParameterTypes { get; } = BlockCompiler.VariableTypes.ToArray();
 
     [ObservableProperty]
     private int _newDelayMs = 500;
@@ -56,6 +70,68 @@ public partial class BlockActionViewModel : ObservableObject
     [ObservableProperty]
     private string _newNotifyMessage = "The action finished.";
 
+    // Host navigation. The ids are whatever the host reports; Macro Deck's folder and profile ids
+    // are user-chosen strings, so these are free text rather than a closed list.
+    [ObservableProperty]
+    private string _newFolderId = "";
+
+    [ObservableProperty]
+    private string _newProfileId = "";
+
+    [ObservableProperty]
+    private string _newTargetFolder = "Parent";
+
+    [ObservableProperty]
+    private string _newTargetProfile = "Profile 1";
+
+    // Conditional.
+    [ObservableProperty]
+    private string _newIfLeftVariable = "message";
+
+    [ObservableProperty]
+    private string _newIfRightLiteral = "b";
+
+    [ObservableProperty]
+    private string _selectedIfOperator = "contains";
+
+    public string[] IfOperators { get; } = BlockCompiler.ComparisonOperators.ToArray();
+
+    // Script, event, host variable.
+    [ObservableProperty]
+    private string _newScriptId = "";
+
+    [ObservableProperty]
+    private string _newScriptInputs = "";
+
+    [ObservableProperty]
+    private string _newEventId = "";
+
+    [ObservableProperty]
+    private string _newEventPayload = "";
+
+    [ObservableProperty]
+    private string _newHostVariable = "my-variable";
+
+    [ObservableProperty]
+    private string _newHostValue = "";
+
+    [ObservableProperty]
+    private string _newIconActionId = TargetActionId;
+
+    [ObservableProperty]
+    private string _newModalViewId = "my-plugin.view";
+
+    [ObservableProperty]
+    private string _newModalTitle = "Something happened";
+
+    [ObservableProperty]
+    private string _newModalData = "";
+
+    [ObservableProperty]
+    private string _newThrowMessage = "The action could not run.";
+
+    public string[] ErrorCodes { get; } = BlockCompiler.ErrorCodes.ToArray();
+
     public void Load()
     {
         var ws = _workspaces.Current;
@@ -64,11 +140,26 @@ public partial class BlockActionViewModel : ObservableObject
         {
             return;
         }
+
+        // The canvas has to start from what is already in the action, or a save is a one-way trip
+        // that silently discards every block the user cannot see.
+        Statements.Clear();
+        foreach (var statement in ReadPersisted()?.Statements ?? [])
+        {
+            Statements.Add(statement);
+        }
+
         Recompile();
     }
 
     /// <summary>Shell hook.</summary>
     public void RefreshOnNavigate() => Load();
+
+    private BlockProgram Program() => new()
+    {
+        TargetActionId = TargetActionId,
+        Statements = [.. Statements],
+    };
 
     [RelayCommand]
     private void AddLog()
@@ -109,8 +200,8 @@ public partial class BlockActionViewModel : ObservableObject
         Statements.Add(new ReturnResultBlock
         {
             Outcome = "failed",
-            ErrorCode = "InvalidParameter",
-            Message = "The action could not run.",
+            ErrorCode = BlockCompiler.ErrorCodes.Contains("InvalidParameter") ? "InvalidParameter" : BlockCompiler.ErrorCodes[0],
+            Message = NewThrowMessage,
         });
         Recompile();
     }
@@ -126,6 +217,156 @@ public partial class BlockActionViewModel : ObservableObject
     private void AddNotify()
     {
         Statements.Add(new NotifyBlock { Title = NewNotifyTitle, Message = NewNotifyMessage });
+        Recompile();
+    }
+
+    /// <summary>
+    /// Adds a conditional.
+    /// </summary>
+    /// <remarks>
+    /// The branch bodies start empty. A branch with nothing in it compiles to an empty block, which
+    /// is honest - and the canvas's statement list is flat, so there is nowhere yet to put the
+    /// statements that belong inside a branch.
+    /// </remarks>
+    [RelayCommand]
+    private void AddIf()
+    {
+        Statements.Add(new IfBlock
+        {
+            LeftVariable = NewIfLeftVariable,
+            Operator = SelectedIfOperator,
+            RightLiteral = SelectedIfOperator is "isEmpty" or "isNotEmpty" ? null : NewIfRightLiteral,
+        });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddNavigate()
+    {
+        if (string.IsNullOrWhiteSpace(NewFolderId))
+        {
+            StatusText = "A folder id is required: the host navigates by id, not by name.";
+            return;
+        }
+
+        Statements.Add(new NavigateBlock { FolderId = NewFolderId.Trim() });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddGoToParent()
+    {
+        Statements.Add(new GoToParentBlock());
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddGoBack()
+    {
+        Statements.Add(new GoBackBlock());
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddChangeProfile()
+    {
+        if (string.IsNullOrWhiteSpace(NewProfileId))
+        {
+            StatusText = "A profile id is required: the host switches by id, not by name.";
+            return;
+        }
+
+        Statements.Add(new ChangeProfileBlock { ProfileId = NewProfileId.Trim() });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddRunScript()
+    {
+        if (string.IsNullOrWhiteSpace(NewScriptId))
+        {
+            StatusText = "A script id is required: the host runs scripts by id.";
+            return;
+        }
+
+        Statements.Add(new RunScriptBlock { ScriptId = NewScriptId.Trim(), Inputs = NewScriptInputs });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddPublishEvent()
+    {
+        if (string.IsNullOrWhiteSpace(NewEventId))
+        {
+            StatusText = "An event id is required: the host publishes occurrences by id.";
+            return;
+        }
+
+        Statements.Add(new PublishEventBlock { EventId = NewEventId.Trim(), Payload = NewEventPayload });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddReadVariable()
+    {
+        if (string.IsNullOrWhiteSpace(NewHostVariable))
+        {
+            StatusText = "A variable name is required.";
+            return;
+        }
+
+        Statements.Add(new ReadVariableBlock { VariableName = NewHostVariable.Trim(), IntoVariable = "hostValue" });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddSetVariableValue()
+    {
+        if (string.IsNullOrWhiteSpace(NewHostVariable))
+        {
+            StatusText = "A variable name is required.";
+            return;
+        }
+
+        Statements.Add(new SetVariableValueBlock { VariableName = NewHostVariable.Trim(), Value = NewHostValue });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddShowModal()
+    {
+        if (string.IsNullOrWhiteSpace(NewModalViewId))
+        {
+            StatusText = "A view id is required: the plugin has to serve the view it asks for.";
+            return;
+        }
+
+        Statements.Add(new ShowModalBlock
+        {
+            ViewId = NewModalViewId.Trim(),
+            Title = NewModalTitle,
+            Data = NewModalData,
+        });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddInvalidateIcon()
+    {
+        if (string.IsNullOrWhiteSpace(NewIconActionId))
+        {
+            StatusText = "An action id is required: that is whose icon is being invalidated.";
+            return;
+        }
+
+        Statements.Add(new InvalidateIconBlock { ActionId = NewIconActionId.Trim() });
+        Recompile();
+    }
+
+    [RelayCommand]
+    private void AddThrow()
+    {
+        Statements.Add(new ThrowBlock { Message = NewThrowMessage });
         Recompile();
     }
 
@@ -146,17 +387,51 @@ public partial class BlockActionViewModel : ObservableObject
         Recompile();
     }
 
-    private void Recompile() =>
-        CompiledPreview = BlockCompiler.Compile(new BlockProgram
-        {
-            TargetActionId = "generated",
-            Statements = [.. Statements],
-        });
+    private void Recompile() => CompiledPreview = BlockCompiler.Compile(Program());
+
+    /// <summary>The sidecar the canvas is persisted to, alongside the action it edits.</summary>
+    private string? SidecarPath()
+    {
+        var ws = _workspaces.Current;
+        return ws is null ? null : Path.Combine(ws.PluginProjectDirectory, BlockProgramJson.FileNameFor(Program()));
+    }
 
     /// <summary>
-    /// Writes the compiled region into the example action file inside the markers,
-    /// leaving everything outside untouched (the agreed blocks + escape hatch model).
+    /// The saved canvas, or null when there is none or it cannot be read.
     /// </summary>
+    /// <remarks>
+    /// A corrupt sidecar is a warning, not an error: the user may be looking at a canvas they want
+    /// to keep, and refusing to open the page would hide it. Returning null leaves the canvas empty
+    /// and the file untouched, so the next save is a deliberate overwrite rather than data loss.
+    /// </remarks>
+    private BlockProgram? ReadPersisted()
+    {
+        var path = SidecarPath();
+        if (path is null || !File.Exists(path))
+        {
+            return null;
+        }
+
+        if (BlockProgramJson.TryDeserialize(File.ReadAllText(path), out var program))
+        {
+            return program;
+        }
+
+        StatusText = $"{Path.GetFileName(path)} could not be read; the canvas starts empty and the file is left alone.";
+        return null;
+    }
+
+    /// <summary>
+    /// Writes the compiled region into the target action, and keeps the canvas itself so the
+    /// blocks can be edited again.
+    /// </summary>
+    /// <remarks>
+    /// The write used to be done here, by hand: it spliced the region in at a hardcoded eight-space
+    /// indent, and never made the executor <c>async</c> or gave the action a host context. So a
+    /// canvas with a delay or a navigation step - the two things a block program is for - wrote code
+    /// that did not compile, and the page said it had been written. All three steps now live in
+    /// <see cref="BlockProgramWriter"/>, where a test can reach them.
+    /// </remarks>
     [RelayCommand]
     private void SaveIntoAction()
     {
@@ -166,34 +441,35 @@ public partial class BlockActionViewModel : ObservableObject
             StatusText = "Open a workspace first.";
             return;
         }
-        var actionFile = Path.Combine(ws.PluginProjectDirectory, "LogMessageAction.cs");
+
+        var program = Program();
+        var actionFile = Path.Combine(ws.PluginProjectDirectory, program.TargetFile);
         if (!File.Exists(actionFile))
         {
-            StatusText = "LogMessageAction.cs not found (rename/replace the example action first).";
+            StatusText = $"{program.TargetFile} not found. Set the target action on the Blocks page first.";
             return;
         }
 
-        var source = File.ReadAllText(actionFile);
-        var compiled = BlockCompiler.Compile(new BlockProgram { TargetActionId = "log-message", Statements = [.. Statements] });
-
-        string updated;
-        if (BlockCompiler.ExtractRegion(source) is not null)
+        try
         {
-            var begin = source.IndexOf(BlockCompiler.BeginMarker, StringComparison.Ordinal);
-            var end = source.IndexOf(BlockCompiler.EndMarker, StringComparison.Ordinal)
-                      + BlockCompiler.EndMarker.Length;
-            updated = source[..begin] + compiled + source[end..];
-        }
-        else
-        {
-            // First generation: insert the region at the top of ExecuteAsync's body.
-            var anchor = "public Task<ActionResult> ExecuteAsync(ActionExecutionContext context)";
-            var idx = source.IndexOf(anchor, StringComparison.Ordinal);
-            var openBrace = source.IndexOf('{', idx);
-            updated = source[..(openBrace + 1)] + "\n        " + compiled + source[(openBrace + 1)..];
-        }
+            var result = BlockProgramWriter.Write(File.ReadAllText(actionFile), program);
+            if (!result.Success)
+            {
+                StatusText = result.Message;
+                return;
+            }
 
-        File.WriteAllText(actionFile, updated);
-        StatusText = $"Blocks written into {actionFile}";
+            File.WriteAllText(actionFile, result.Content);
+            File.WriteAllText(SidecarPath()!, BlockProgramJson.Serialize(program));
+            StatusText = $"Blocks written into {program.TargetFile}.";
+        }
+        catch (IOException ex)
+        {
+            StatusText = $"Could not write the blocks: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            StatusText = $"Could not write the blocks: {ex.Message}";
+        }
     }
 }

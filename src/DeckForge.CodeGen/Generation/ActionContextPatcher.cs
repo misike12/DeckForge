@@ -66,7 +66,7 @@ public static class ActionContextPatcher
         var classMatch = ClassName.Match(source);
         if (!classMatch.Success)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "!classMatch.Success");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the file declares no class");
         }
 
         var className = classMatch.Groups[1].Value;
@@ -74,7 +74,7 @@ public static class ActionContextPatcher
         var open = source.IndexOf('{', classMatch.Index + classMatch.Length);
         if (open < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "open < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the class declaration has no body");
         }
 
         // The interface goes at the end of the base list: the text between the class name and the
@@ -98,14 +98,14 @@ public static class ActionContextPatcher
         var ctor = source.IndexOf("public " + className + "(", StringComparison.Ordinal);
         if (ctor < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "ctor < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the action has no public constructor");
         }
 
         var memberIndent = LineIndent(source, ctor);
         var ctorEnd = EndOfMember(source, ctor);
         if (ctorEnd < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "ctorEnd < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the constructor has no end");
         }
 
         var setter = string.Concat(
@@ -124,13 +124,13 @@ public static class ActionContextPatcher
         var create = source.IndexOf("CreateExecutor()", StringComparison.Ordinal);
         if (create < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "create < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the action has no CreateExecutor");
         }
 
         var pass = source.IndexOf("new Executor(_logger)", create, StringComparison.Ordinal);
         if (pass < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "pass < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "CreateExecutor does not construct new Executor(_logger)");
         }
 
         source = source.Remove(pass, "new Executor(_logger)".Length)
@@ -140,14 +140,14 @@ public static class ActionContextPatcher
         var executorClass = source.IndexOf("class Executor", StringComparison.Ordinal);
         if (executorClass < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "executorClass < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the action has no nested Executor class");
         }
 
         var executorOpen = source.IndexOf('{', executorClass);
         var executorCtor = source.IndexOf("public Executor(", executorClass, StringComparison.Ordinal);
         if (executorOpen < 0 || executorCtor < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "executorOpen < 0 || executorCtor < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the nested Executor has no body or no public constructor");
         }
 
         var execIndent = LineIndent(source, executorCtor);
@@ -158,14 +158,14 @@ public static class ActionContextPatcher
         var execCtorEnd = EndOfMember(source, execCtorMoved);
         if (execCtorEnd < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "execCtorEnd < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the executor constructor has no end");
         }
 
         var execBody = source[execCtorMoved..execCtorEnd];
         var rewritten = RewriteExecutorConstructor(execBody, nl, execIndent, level);
         if (rewritten is null)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "rewritten is null");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the executor constructor could not be rewritten");
         }
 
         return new SourcePatch(PatchOutcome.Patched, string.Concat(source[..execCtorMoved], rewritten, source[execCtorEnd..]), "action wired to the host context");
@@ -187,13 +187,13 @@ public static class ActionContextPatcher
         var initialize = source.IndexOf("InitializeAsync(IIntegrationContext", StringComparison.Ordinal);
         if (initialize < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "initialize < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the integration has no InitializeAsync(IIntegrationContext)");
         }
 
         var open = source.IndexOf('{', initialize);
         if (open < 0)
         {
-            return new SourcePatch(PatchOutcome.AnchorMissing, source, "open < 0");
+            return new SourcePatch(PatchOutcome.AnchorMissing, source, "the InitializeAsync signature has no body");
         }
 
         var indent = LineIndent(source, initialize);
