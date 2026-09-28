@@ -67,15 +67,23 @@
             </Border>
 
             <!-- Environment -->
-            <TextBlock Text="Environment"
-                       FontSize="18"
-                       FontWeight="SemiBold"
-                       Margin="0,24,0,8" />
-            <Border Background="{DynamicResource Liquid.AcrylicBrush}"
-                    BorderBrush="{DynamicResource Liquid.BorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="10"
-                    Padding="16">
+            <Grid Margin="0,24,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Environment" FontSize="18" FontWeight="SemiBold" />
+                <!--
+                    The checks used to run once, on first load, and never again - so a machine that
+                    gained the .NET SDK or the CLI while DeckForge was open kept reporting both
+                    missing until a restart.
+                -->
+                <ui:Button Grid.Column="2" Content="Re-check" Padding="10,4"
+                           Command="{Binding RefreshEnvironmentCommand}"
+                           IsEnabled="{Binding IsCheckingEnvironment, Converter={StaticResource InverseBoolConverter}}" />
+            </Grid>
+            <Border Style="{DynamicResource LiquidCard}">
                 <ItemsControl ItemsSource="{Binding EnvironmentChecks}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

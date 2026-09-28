@@ -13,11 +13,24 @@ public partial class PublishViewModel : ObservableObject
 {
     private readonly WorkspaceManager _workspaces;
     private readonly SettingsService _settings;
+    private readonly CliAdapter.Processes.ProcessRunner _runner;
+    private readonly CliAdapter.Tools.MacroDeckCli _cli;
 
-    public PublishViewModel(WorkspaceManager workspaces, SettingsService settings)
+    public PublishViewModel(
+        WorkspaceManager workspaces,
+        SettingsService settings,
+        CliAdapter.Processes.ProcessRunner runner,
+        CliAdapter.Tools.MacroDeckCli cli)
     {
         _workspaces = workspaces;
         _settings = settings;
+
+        // Injected rather than looked up. The service-locator version null-forgot the result, so a
+        // registration that was missing or resolved late surfaced as a NullReferenceException
+        // halfway through publishing a release.
+        _runner = runner;
+        _cli = cli;
+
         Services.ShellMessenger.WorkspaceChanged += _ => Load();
         Load();
     }
@@ -143,6 +156,16 @@ public partial class PublishViewModel : ObservableObject
         }
 
         var args = new List<string> { "release", "create", ReleaseTag, "--title", ReleaseTag.TrimStart('v') };
+
+        // The account setting is the fallback owner. gh infers the repo from the git remote, which
+        // a plugin folder often does not have, and then creates the release somewhere the user did
+        // not mean - so an explicit owner wins.
+        var owner = ReleaseOwner();
+        if (owner is not null)
+        {
+            args.AddRange(["--repo", $"{owner}/{RepositorySlug()}"]);
+        }
+
         if (!string.IsNullOrWhiteSpace(ReleaseNotes))
         {
             args.AddRange(["--notes", ReleaseNotes]);
@@ -155,17 +178,43 @@ public partial class PublishViewModel : ObservableObject
         StatusText = "Creating GitHub release via gh...";
         try
         {
-            var runner = App.Services.GetService(typeof(CliAdapter.Processes.ProcessRunner)) as CliAdapter.Processes.ProcessRunner;
-            var result = await runner!.RunAsync("gh", args, ws.RootDirectory, null, ct);
+            var result = await _runner.RunAsync("gh", args, ws.RootDirectory, null, ct);
             StatusText = result.Succeeded
                 ? $"Release {ReleaseTag} published - the workflow uploads the build to the Creator Portal."
                 : $"gh failed ({result.ExitCode}): {result.StandardError.Split('\n').FirstOrDefault()?.Trim()}";
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (CliAdapter.Processes.ProcessStartFailedException)
         {
             StatusText = "gh CLI not found - install GitHub CLI and run 'gh auth login'.";
         }
     }
+
+    /// <summary>
+    /// The account to create the release under: the setting, else the owner of the manifest's
+    /// repository URL.
+    /// </summary>
+    private string? ReleaseOwner()
+    {
+        if (!string.IsNullOrWhiteSpace(_settings.Settings.GitHubAccount))
+        {
+            return _settings.Settings.GitHubAccount.Trim();
+        }
+
+        if (!Uri.TryCreate(Repository, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length > 0 ? segments[0] : null;
+    }
+
+    /// <summary>The repository name from the manifest's repository URL.</summary>
+    private string RepositorySlug() =>
+        Uri.TryCreate(Repository, UriKind.Absolute, out var uri)
+            ? uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? ""
+            : "";
 
     [RelayCommand]
     private void OpenPortal() =>

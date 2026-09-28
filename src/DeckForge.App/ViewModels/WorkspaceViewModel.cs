@@ -8,18 +8,81 @@ using DeckForge.Core.Workspace;
 namespace DeckForge.App.ViewModels;
 
 /// <summary>Tracks the open workspace for the shell and Home page.</summary>
+/// <remarks>
+/// The Home page binds its whole DataContext to this view model, so the environment checklist
+/// used to live on a different one - <c>MainViewModel</c> - and every binding to it resolved to
+/// nothing. The section rendered empty and nothing said why. The checks live here now, where the
+/// page can actually see them, and the old view model is gone.
+/// </remarks>
 public partial class WorkspaceViewModel : ObservableObject
 {
     private readonly WorkspaceManager _manager;
     private readonly SettingsService _settings;
+    private readonly CliAdapter.EnvironmentDoctor _doctor;
 
-    public WorkspaceViewModel(WorkspaceManager manager, SettingsService settings)
+    public WorkspaceViewModel(
+        WorkspaceManager manager,
+        SettingsService settings,
+        CliAdapter.EnvironmentDoctor doctor)
     {
         _manager = manager;
         _settings = settings;
+        _doctor = doctor;
         RefreshRecents();
 
         ShellMessenger.WorkspaceChanged += _ => RefreshFromManager();
+
+        // The doctor only ran when the collection happened to be empty, so a machine that gained
+        // the .NET SDK while DeckForge was open kept reporting it missing until a restart. It runs
+        // once on load and again on demand.
+        _ = RefreshEnvironmentAsync(CancellationToken.None);
+    }
+
+    /// <summary>The environment checklist shown on the Home page.</summary>
+    public ObservableCollection<CliAdapter.DoctorCheck> EnvironmentChecks { get; } = [];
+
+    [ObservableProperty]
+    private bool _isCheckingEnvironment;
+
+    /// <summary>Re-runs the environment checks. Safe to call at any time.</summary>
+    [RelayCommand]
+    public async Task RefreshEnvironmentAsync(CancellationToken ct)
+    {
+        if (IsCheckingEnvironment)
+        {
+            return;
+        }
+
+        IsCheckingEnvironment = true;
+        try
+        {
+            var checks = await _doctor.RunAllAsync(ct);
+            EnvironmentChecks.Clear();
+            foreach (var check in checks)
+            {
+                EnvironmentChecks.Add(check);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled check leaves the previous results in place, which is more useful than an
+            // empty list.
+        }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception)
+        {
+            EnvironmentChecks.Clear();
+            EnvironmentChecks.Add(new CliAdapter.DoctorCheck(
+                "environment",
+                "Environment checks",
+                false,
+                "The checks could not run: " + ex.Message,
+                "DeckForge needs dotnet and the macrodeck-plugin CLI on PATH to check them.",
+                CliAdapter.DoctorSeverity.Required));
+        }
+        finally
+        {
+            IsCheckingEnvironment = false;
+        }
     }
 
     [ObservableProperty]
@@ -75,31 +138,33 @@ public partial class WorkspaceViewModel : ObservableObject
         {
             return;
         }
+
         var pluginDir = Path.GetDirectoryName(dialog.FileName)!;
-        var context = WorkspaceManager.FromPluginProject(pluginDir);
-        SetWorkspace(context);
+        try
+        {
+            SetWorkspace(WorkspaceManager.FromPluginProject(pluginDir));
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or IOException or UnauthorizedAccessException)
+        {
+            // FromPluginProject throws when the manifest is missing or unreadable. Three callers
+            // let that escape, so choosing a folder without a manifest closed the app.
+            WorkspaceTitle = "Could not open that manifest";
+            WorkspaceDetail = ex.Message;
+        }
     }
 
     public void OpenSolution(string solutionPath)
     {
-        var root = Path.GetDirectoryName(solutionPath)!;
-        var srcDir = Path.Combine(root, "src");
-        if (!Directory.Exists(srcDir))
+        if (!_manager.TryOpenSolution(solutionPath, out var context, out var problem))
         {
-            WorkspaceTitle = "Invalid workspace";
-            WorkspaceDetail = $"{solutionPath} has no src folder.";
+            // Reported, not thrown. This is called from a command the user just triggered, and an
+            // unhandled FileNotFoundException from opening the wrong folder is not an answer.
+            WorkspaceTitle = "Could not open that solution";
+            WorkspaceDetail = problem;
             return;
         }
-        var pluginDir = Directory.GetDirectories(srcDir).FirstOrDefault();
-        if (pluginDir is null)
-        {
-            WorkspaceTitle = "Invalid workspace";
-            WorkspaceDetail = "No plugin project under src/.";
-            return;
-        }
-        var context = WorkspaceManager.FromPluginProject(pluginDir);
-        context.SolutionPath = solutionPath;
-        SetWorkspace(context);
+
+        SetWorkspace(context!);
     }
 
     private void SetWorkspace(WorkspaceContext context)

@@ -38,6 +38,53 @@ public sealed record DoctorCheck(
 /// </summary>
 public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
 {
+    /// <summary>
+    /// Overrides the expected CLI version. Set from the user's setting so a DeckForge pointed at a
+    /// different SDK can gate on that rather than on the constant it was built with.
+    /// </summary>
+    public string? ExpectedCliVersionOverride { get; set; }
+
+    private string ExpectedCliVersion() =>
+        string.IsNullOrWhiteSpace(ExpectedCliVersionOverride)
+            ? Core.Plugins.MacroDeckSdkInfo.DefaultCliVersion
+            : ExpectedCliVersionOverride.Trim();
+
+    /// <summary>
+    /// Whether an installed version satisfies what DeckForge expects.
+    /// </summary>
+    /// <remarks>
+    /// Compared as SemVer-with-prerelease rather than by string equality: the tool prints a build
+    /// metadata suffix, and a strict comparison reports a mismatch the user cannot act on.
+    /// </remarks>
+    private static bool VersionsMatch(string? installed, string? expected)
+    {
+        if (string.IsNullOrWhiteSpace(installed) || string.IsNullOrWhiteSpace(expected))
+        {
+            return false;
+        }
+
+        static string Normalise(string value) => value.Trim()
+            .Split('+')[0]   // build metadata is not part of precedence
+            .Split('-')[0];  // a prerelease of the same version is not a different version for this purpose
+
+        return string.Equals(
+            Normalise(installed),
+            Normalise(expected),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string DescribeCli(string? installed, string expected, bool ok)
+    {
+        if (ok)
+        {
+            return $"macrodeck-plugin {installed}";
+        }
+
+        return installed is null
+            ? $"not installed - DeckForge targets {expected} and uses the CLI to validate, pack, sign and test"
+            : $"macrodeck-plugin {installed} - DeckForge targets {expected}";
+    }
+
     public async Task<IReadOnlyList<DoctorCheck>> RunAllAsync(CancellationToken ct = default)
     {
         var checks = new List<DoctorCheck>();
@@ -74,21 +121,26 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
             InstallCommand: hasAspNet ? null : "winget install Microsoft.DotNet.SDK.10"));
 
         var cliVersion = await cli.GetVersionAsync(ct);
+        var expectedVersion = ExpectedCliVersion();
         var cliOk = cliVersion is not null;
+        var matchesExpected = cliOk && VersionsMatch(cliVersion, expectedVersion);
         var installCommand = CliInstallCommand();
+
         checks.Add(new DoctorCheck(
             "macrodeck-cli",
             "macrodeck-plugin CLI",
-            cliOk,
-            cliOk
-                ? $"macrodeck-plugin {cliVersion}"
-                : "not installed - DeckForge uses it to validate, pack, sign and test plugins",
-            cliOk
+            matchesExpected,
+            DescribeCli(cliVersion, expectedVersion, matchesExpected),
+            matchesExpected
                 ? null
-                // The version is gated, because a wrong version fails in a way that looks like a
-                // DeckForge bug rather than an environment one.
-                : $"DeckForge can install it: {installCommand}",
-            InstallCommand: cliOk ? null : installCommand));
+                // The version is the point: a CLI at the wrong version fails in ways that look like
+                // a DeckForge bug - an unrecognised flag, a manifest field the tool does not know
+                // about - rather than as a version skew.
+                : $"DeckForge targets macrodeck-plugin {expectedVersion}. "
+                  + (cliOk
+                      ? $"The installed one is {cliVersion}, which is a different version."
+                      : "It is not installed."),
+            InstallCommand: matchesExpected ? null : installCommand));
 
         var macroDeck = FindMacroDeckInstall();
         checks.Add(new DoctorCheck(
@@ -107,7 +159,12 @@ public sealed class EnvironmentDoctor(DotNetCli dotnet, MacroDeckCli cli)
     /// <summary>The exact command that installs the CLI at the version DeckForge targets.</summary>
     public string CliInstallCommand() =>
         "dotnet tool install --global MacroDeck.Plugin.Cli --version "
-        + Core.Plugins.MacroDeckSdkInfo.DefaultCliVersion + " --allow-prerelease";
+        + ExpectedCliVersion() + " --allow-prerelease";
+
+    /// <summary>The command that updates an already-installed CLI to the version DeckForge targets.</summary>
+    public string CliUpdateCommand() =>
+        "dotnet tool update --global MacroDeck.Plugin.Cli --version "
+        + ExpectedCliVersion() + " --allow-prerelease";
 
     private static bool TryHasAspNetCoreFramework(out string detail)
     {

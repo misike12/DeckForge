@@ -55,12 +55,46 @@
                 </ui:NavigationView.FooterMenuItems>
             </ui:NavigationView>
 
-            <Frame Grid.Column="1"
-                   x:Name="PageHost"
-                   Focusable="False"
-                   NavigationUIVisibility="Hidden"
-                   JournalOwnership="OwnsJournal"
-                   Background="Transparent" />
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition />
+                </Grid.RowDefinitions>
+
+                <!--
+                    Handled crashes. The dispatcher handler swallows the first few so one bad page
+                    does not close the app, but it used to do so in silence - the only record was a
+                    file nobody had opened, and the UI carried on in whatever state it was left in.
+                -->
+                <Border x:Name="CrashBanner"
+                        Grid.Row="0"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource Liquid.WarningBrush}"
+                        Padding="16,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="DeckForge recovered from an error"
+                                       FontWeight="SemiBold"
+                                       Foreground="White" />
+                            <TextBlock x:Name="CrashDetail" FontSize="12" Foreground="White"
+                                       TextWrapping="Wrap" MaxHeight="70" />
+                        </StackPanel>
+                        <ui:Button Grid.Column="1" Content="Dismiss" Margin="12,0,0,0"
+                                   Click="CrashBanner_Close" VerticalAlignment="Top" />
+                    </Grid>
+                </Border>
+
+                <Frame Grid.Row="1"
+                       x:Name="PageHost"
+                       Focusable="False"
+                       NavigationUIVisibility="Hidden"
+                       JournalOwnership="OwnsJournal"
+                       Background="Transparent" />
+            </Grid>
         </Grid>
     </Grid>
 </ui:FluentWindow>

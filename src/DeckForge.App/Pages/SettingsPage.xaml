@@ -1,30 +1,31 @@
 <Page x:Class="DeckForge.App.Pages.SettingsPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:themes="clr-namespace:DeckForge.App.Themes"
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel MaxWidth="720" Margin="40,24,40,40">
+        <StackPanel MaxWidth="760" Margin="40,24,40,40">
             <TextBlock Text="Settings" FontSize="26" FontWeight="SemiBold" />
 
+            <!-- Appearance -->
             <TextBlock Text="Appearance" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
             <Border Style="{StaticResource LiquidCard}">
                 <StackPanel>
                     <TextBlock Text="Theme" FontSize="13" FontWeight="Medium" />
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                        <RadioButton x:Name="ThemeSystem" Content="System" Tag="System" Margin="0,0,12,0"
-                                     GroupName="Theme" Checked="Theme_Checked" />
-                        <RadioButton x:Name="ThemeLight" Content="Light" Tag="Light" Margin="0,0,12,0"
-                                     GroupName="Theme" Checked="Theme_Checked" />
-                        <RadioButton x:Name="ThemeDark" Content="Dark" Tag="Dark" Margin="0,0,12,0"
-                                     GroupName="Theme" Checked="Theme_Checked" />
+                        <RadioButton Content="System" Tag="System" Margin="0,0,12,0" GroupName="Theme"
+                                     IsChecked="{Binding Theme, Mode=TwoWay, Converter={StaticResource EnumToAppThemeConverter}, ConverterParameter=System}" />
+                        <RadioButton Content="Light" Tag="Light" Margin="0,0,12,0" GroupName="Theme"
+                                     IsChecked="{Binding Theme, Mode=TwoWay, Converter={StaticResource EnumToAppThemeConverter}, ConverterParameter=Light}" />
+                        <RadioButton Content="Dark" Tag="Dark" GroupName="Theme"
+                                     IsChecked="{Binding Theme, Mode=TwoWay, Converter={StaticResource EnumToAppThemeConverter}, ConverterParameter=Dark}" />
                     </StackPanel>
-                    <TextBlock x:Name="ResolvedTheme" FontSize="12"
+                    <TextBlock Text="{Binding ResolvedTheme}" FontSize="12"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" Margin="0,6,0,0" />
 
                     <TextBlock Text="Accent" FontSize="13" FontWeight="Medium" Margin="0,16,0,0" />
-                    <ItemsControl x:Name="AccentList" Margin="0,8,0,0">
+                    <ItemsControl x:Name="AccentList" ItemsSource="{Binding Accents}" Margin="0,8,0,0"
+                                  HorizontalAlignment="Left">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" />
@@ -52,8 +53,119 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <TextBlock x:Name="AccentName" FontSize="12"
+                    <TextBlock Text="{Binding Accent}" FontSize="12"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Projects -->
+            <TextBlock Text="Projects" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <TextBlock Text="Where new plugin projects are created"
+                               FontSize="13" FontWeight="Medium" />
+                    <TextBlock Text="The New Plugin wizard opens here instead of Documents. The wizard
+                                   also offers a 'remember this folder' checkbox per project."
+                               FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox Text="{Binding DefaultProjectsDirectory, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    PlaceholderText="Documents (the default when empty)" />
+                        <ui:Button Grid.Column="1" Content="Browse..." Margin="8,0,0,0"
+                                   Command="{Binding ChooseDefaultDirectoryCommand}" />
+                        <ui:Button Grid.Column="2" Content="Clear" Margin="8,0,0,0"
+                                   Command="{Binding ClearDefaultDirectoryCommand}" />
+                    </Grid>
+
+                    <TextBlock Text="Recent projects" FontSize="13" FontWeight="Medium" Margin="0,16,0,4" />
+                    <ItemsControl ItemsSource="{Binding RecentWorkspaces}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding}" FontSize="12" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <ui:Button Grid.Column="1" Content="Remove" Padding="8,2"
+                                               Command="{Binding DataContext.ClearRecentCommand,
+                                                         RelativeSource={RelativeSource AncestorType=Page}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ui:Button Content="Clear all recent" Margin="0,8,0,0" HorizontalAlignment="Left"
+                               Command="{Binding ClearAllRecentCommand}"
+                               Visibility="{Binding RecentWorkspaces.Count, Converter={StaticResource IntToVisibilityConverter}}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Tooling -->
+            <TextBlock Text="Tooling" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <TextBlock Text="macrodeck-plugin version" FontSize="13" FontWeight="Medium" />
+                    <TextBlock Text="DeckForge calls this tool to validate, pack, sign and test
+                                   plugins. Leave empty to target the version this build was made
+                                   for. A mismatched CLI fails on options the tool does not know,
+                                   which reads like a DeckForge bug rather than a version skew."
+                               FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                    <ui:TextBox Text="{Binding MacroDeckCliVersion, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                PlaceholderText="3.0.0-beta.14 (built-in default)" />
+
+                    <TextBlock Text="GitHub account" FontSize="13" FontWeight="Medium" Margin="0,16,0,4" />
+                    <TextBlock Text="Used as the owner when the Publish page creates a release, so gh
+                                   does not guess from a git remote a plugin folder often does not have."
+                               FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ui:TextBox Text="{Binding GitHubAccount, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                    PlaceholderText="your-github-user" />
+                        <ui:Button Grid.Column="1" Content="Clear" Margin="8,0,0,0"
+                                   Command="{Binding ClearGitHubAccountCommand}" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Updates -->
+            <TextBlock Text="Updates" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <CheckBox Content="Check for a new DeckForge when the app starts"
+                              IsChecked="{Binding CheckForUpdatesOnStart}" />
+                    <TextBlock Text="A check that finds nothing says nothing. The result appears here."
+                               FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="Update source" FontSize="13" FontWeight="Medium" />
+                    <TextBlock Text="A Velopack releases URL or a local https folder. Empty disables
+                                   the check entirely."
+                               FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                    <ui:TextBox Text="{Binding VelopackUpdateUrl, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                PlaceholderText="https://github.com/owner/deckforge/releases/latest/download" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <ui:Button Content="Check for updates" Command="{Binding CheckUpdatesCommand}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding UpdateStatus}" FontSize="12" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" Margin="0,8,0,0" />
+                    <TextBlock Text="An update applies at the next restart. A dev run (dotnet run) is
+                                   never updated in place."
+                               FontSize="11.5" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
                 </StackPanel>
             </Border>
 
@@ -76,55 +188,35 @@
                         <Run Foreground="{DynamicResource Liquid.TextBrush}">Macro Deck 3</Run>.
                         Not affiliated with the Macro Deck project; Macro Deck is a trademark of its owner.
                         Plugin templates are derived from the official Apache-2.0 plugin template.
+                        DeckForge has no telemetry: nothing about your projects leaves this machine
+                        except the tool invocations you see in the Terminal.
                     </TextBlock>
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <ui:Button Content="Macro Deck docs" Click="Docs_Click" Margin="0,0,8,0" />
                         <ui:Button Content="Macro Deck site" Click="Site_Click" Margin="0,0,8,0" />
-                        <ui:Button Content="Open crash log folder" Click="CrashLog_Click" Margin="0,0,8,0" />
-                        <ui:Button Content="Check for updates" Click="CheckUpdates_Click" />
+                        <ui:Button Content="Open settings folder" Click="SettingsFolder_Click" Margin="0,0,8,0" />
                     </StackPanel>
-                    <TextBlock x:Name="UpdateStatus" FontSize="12" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" Margin="0,8,0,0" />
-                    <TextBlock TextWrapping="Wrap" FontSize="11.5" Margin="0,8,0,0"
-                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}">
-                        Packaging: Velopack - installer, portable build and delta auto-updates.
-                        Build releases with <Run FontFamily="Cascadia Mono, Consolas">vpk pack</Run> (see Ship page or README).
-                    </TextBlock>
                 </StackPanel>
             </Border>
 
             <!-- Keyboard -->
             <TextBlock Text="Keyboard shortcuts" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
             <Border Style="{StaticResource LiquidCard}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="180" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition />
-                        <RowDefinition />
-                        <RowDefinition />
-                        <RowDefinition />
-                        <RowDefinition />
-                        <RowDefinition />
-                        <RowDefinition />
-                    </Grid.RowDefinitions>
-                    <TextBlock FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}">Ctrl+N</TextBlock>
-                    <TextBlock Grid.Column="1" FontSize="12.5">New plugin</TextBlock>
-                    <TextBlock Grid.Row="1" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}">Ctrl+B</TextBlock>
-                    <TextBlock Grid.Row="1" Grid.Column="1" FontSize="12.5">Build workspace</TextBlock>
-                    <TextBlock Grid.Row="2" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}">F5</TextBlock>
-                    <TextBlock Grid.Row="2" Grid.Column="1" FontSize="12.5">Run against stub host</TextBlock>
-                    <TextBlock Grid.Row="3" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}">Ctrl+T</TextBlock>
-                    <TextBlock Grid.Row="3" Grid.Column="1" FontSize="12.5">Focus terminal</TextBlock>
-                    <TextBlock Grid.Row="4" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}">Ctrl+1..9</TextBlock>
-                    <TextBlock Grid.Row="4" Grid.Column="1" FontSize="12.5">Jump between pages</TextBlock>
-                    <TextBlock Grid.Row="5" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}">Ctrl+,</TextBlock>
-                    <TextBlock Grid.Row="5" Grid.Column="1" FontSize="12.5">Open settings</TextBlock>
-                    <TextBlock Grid.Row="6" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}">F1</TextBlock>
-                    <TextBlock Grid.Row="6" Grid.Column="1" FontSize="12.5">Open docs</TextBlock>
-                </Grid>
+                <ItemsControl ItemsSource="{Binding Shortcuts}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Keys}" FontFamily="Cascadia Mono, Consolas"
+                                           FontSize="12" Foreground="{DynamicResource Liquid.AccentStrongBrush}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Description}" FontSize="12.5" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Border>
         </StackPanel>
     </ScrollViewer>

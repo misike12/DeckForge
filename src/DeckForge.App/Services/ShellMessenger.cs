@@ -25,9 +25,26 @@ public static class ShellMessenger
     /// </remarks>
     public static event Action? RunRequested;
 
+    /// <summary>Raised when the start-of-session check found a newer release.</summary>
+    public static event Action<UpdateCheckResult>? UpdateAvailable;
+
+    /// <summary>
+    /// Raised when an exception on the UI thread was handled and the app carried on.
+    /// </summary>
+    /// <remarks>
+    /// The handler swallows the first three so a misbehaving page does not close the app, but it
+    /// used to do so in complete silence - the only record was a file the user had not opened. The
+    /// shell shows these, so surviving a crash is visible rather than mysterious.
+    /// </remarks>
+    public static event Action<Exception>? Unhandled;
+
+    public static void ReportUnhandled(Exception exception) => Unhandled?.Invoke(exception);
+
     public static void NavigateTo(string tag) => NavigationRequested?.Invoke(tag);
 
     public static void RequestRun() => RunRequested?.Invoke();
+
+    public static void AnnounceUpdate(UpdateCheckResult result) => UpdateAvailable?.Invoke(result);
 
     public static void NotifyWorkspaceChanged(string? solutionPath) => WorkspaceChanged?.Invoke(solutionPath);
 

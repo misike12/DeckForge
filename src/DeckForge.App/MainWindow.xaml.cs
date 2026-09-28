@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using DeckForge.App.Pages;
+using Microsoft.Win32;
 using ShellMessenger = DeckForge.App.Services.ShellMessenger;
 
 namespace DeckForge.App;
@@ -30,6 +31,18 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         ShellMessenger.Attach(this);
         TryApplyLiquidChrome();
+
+        // Handled crashes are shown, not just logged. The first few are swallowed so one bad page
+        // does not close the app, which is the right call - but silence made them impossible to
+        // report, because the only record was a file the user had not opened.
+        ShellMessenger.Unhandled += OnRecoveredFromException;
+
+        // System theme changes while the app is open. The setting said "System" and the app
+        // followed it at startup, then ignored the OS for the rest of the session - so a machine
+        // that switched to dark at sunset kept a light window until DeckForge was restarted.
+        SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+        Closed += (_, _) => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+
         _shortcutTags =
         [
             .. RootNavigation.MenuItems
@@ -153,6 +166,51 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             item.IsActive = Equals(item.Tag, tag);
         }
     }
+
+    /// <summary>
+    /// Re-applies the theme when the OS switches between light and dark.
+    /// </summary>
+    /// <remarks>
+    /// Only honoured when the setting is <c>System</c>. An explicit Light or Dark is a choice, and
+    /// overriding it because the machine changed at sunset would be ignoring the user.
+    /// </remarks>
+    private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category != UserPreferenceCategory.General || !Dispatcher.CheckAccess())
+        {
+            if (e.Category == UserPreferenceCategory.General)
+            {
+                Dispatcher.BeginInvoke(() => OnUserPreferenceChanged(sender, e));
+            }
+
+            return;
+        }
+
+        var settings = App.Services.GetService(typeof(Services.SettingsService)) as Services.SettingsService;
+        if (settings?.Settings.Theme != Services.AppTheme.System)
+        {
+            return;
+        }
+
+        App.ReapplyTheme(settings);
+    }
+
+    /// <summary>Shows a recovered crash in the banner, on the UI thread.</summary>
+    private void OnRecoveredFromException(Exception exception)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => OnRecoveredFromException(exception));
+            return;
+        }
+
+        CrashDetail.Text = $"{exception.GetType().Name}: {exception.Message}"
+            + (exception.InnerException is { } inner ? $" ({inner.Message})" : "");
+        CrashBanner.Visibility = Visibility.Visible;
+    }
+
+    private void CrashBanner_Close(object sender, RoutedEventArgs e) =>
+        CrashBanner.Visibility = Visibility.Collapsed;
 
     /// <summary>
     /// Applies the Mica backdrop + rounded corners where the OS supports them (Windows 11).

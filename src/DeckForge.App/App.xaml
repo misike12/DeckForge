@@ -18,6 +18,8 @@
             <conv:BoolToStatusColorConverter x:Key="BoolToStatusColorConverter" />
             <conv:DoctorCheckToStatusColorConverter x:Key="DoctorCheckToStatusColorConverter" />
             <conv:DoctorCheckFixHintToVisibilityConverter x:Key="DoctorCheckFixHintToVisibilityConverter" />
+            <conv:EnumToAppThemeConverter x:Key="EnumToAppThemeConverter" />
+            <conv:IntToVisibilityConverter x:Key="IntToVisibilityConverter" />
             <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter" />
 
             <!-- Liquid card: elevated, clearly bordered surface used by every page. -->

@@ -12,11 +12,22 @@ public partial class NewProjectViewModel : ObservableObject
 {
     private readonly PluginProjectGenerator _generator;
     private readonly WorkspaceManager _workspaces;
+    private readonly SettingsService _settings;
 
-    public NewProjectViewModel(PluginProjectGenerator generator, WorkspaceManager workspaces)
+    public NewProjectViewModel(
+        PluginProjectGenerator generator,
+        WorkspaceManager workspaces,
+        SettingsService settings)
     {
         _generator = generator;
         _workspaces = workspaces;
+        _settings = settings;
+
+        // The wizard's starting folder is a setting. It was stored and never read, so the wizard
+        // always opened on Documents no matter what the user had chosen here.
+        _parentDirectory = FirstExistingDirectory(
+            settings.Settings.DefaultProjectsDirectory,
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments));
 
         // The definition owns the tick so the wizard and the Capabilities page cannot disagree
         // about it; the view model keeps the id list the generator actually needs.
@@ -26,6 +37,20 @@ public partial class NewProjectViewModel : ObservableObject
         }
 
         Validate();
+    }
+
+    /// <summary>The first of the candidates that exists, or the first one, or Documents.</summary>
+    private static string FirstExistingDirectory(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) && Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
     }
 
     [ObservableProperty]
@@ -55,6 +80,10 @@ public partial class NewProjectViewModel : ObservableObject
 
     [ObservableProperty]
     private string _license = "MIT";
+
+    /// <summary>Remember this folder as the wizard's default. Off by default: most people do not.</summary>
+    [ObservableProperty]
+    private bool _rememberLocation;
 
     [ObservableProperty]
     private bool _winX64 = true;
@@ -197,6 +226,11 @@ public partial class NewProjectViewModel : ObservableObject
             var solutionPath = Path.Combine(CreatedPath, options.FolderName + ".slnx");
             if (File.Exists(solutionPath))
             {
+                if (RememberLocation)
+                {
+                    _settings.Update(s => s.DefaultProjectsDirectory = ParentDirectory.Trim());
+                }
+
                 var context = WorkspaceManager.FromPluginProject(
                     Path.Combine(CreatedPath, "src", options.FolderName));
                 context.SolutionPath = solutionPath;

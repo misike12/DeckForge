@@ -33,8 +33,11 @@ public static class LiquidTheme
 
     public static readonly IReadOnlyList<NamedColor> LightSurfaces = new List<NamedColor>
     {
-        new("Base", Color.FromRgb(0xEE, 0xF0, 0xF4)),
-        new("Layer", Color.FromRgb(0xFF, 0xFF, 0xFF)),
+        // Layer is a shade off the base and Card sits on it, so light mode has the same
+        // three-step elevation dark mode does. They were both pure white, so a card and the
+        // panel behind it were the same colour and the only separation was a hairline border.
+        new("Base", Color.FromRgb(0xE7, 0xEA, 0xF0)),
+        new("Layer", Color.FromRgb(0xF4, 0xF6, 0xF9)),
         new("Card", Color.FromRgb(0xFF, 0xFF, 0xFF)),
         new("Border", Color.FromRgb(0xC9, 0xCF, 0xDA)),
     }.AsReadOnly();
@@ -106,20 +109,27 @@ public static class LiquidTheme
         Set("Liquid.AccentWashBrush", new SolidColorBrush(Color.FromArgb(0x24, accent.Color.R, accent.Color.G, accent.Color.B)));
         Set("Liquid.AccentStrongBrush", new SolidColorBrush(Color.FromArgb(0xFF, accent.Color.R, accent.Color.G, accent.Color.B)));
 
-        // Semantic.
-        Set("Liquid.SuccessBrush", new SolidColorBrush(Color.FromRgb(0x3F, 0xB8, 0x63)));
-        Set("Liquid.WarningBrush", new SolidColorBrush(Color.FromRgb(0xE2, 0x9E, 0x2D)));
-        Set("Liquid.DangerBrush", new SolidColorBrush(Color.FromRgb(0xE5, 0x48, 0x4D)));
+        // Semantic. In light mode these are darkened so they keep enough contrast against a white
+        // card; the dark-mode values are tuned for a near-black base and are too pale on white.
+        var success = isDark ? Color.FromRgb(0x3F, 0xB8, 0x63) : Color.FromRgb(0x1E, 0x7A, 0x3C);
+        var warning = isDark ? Color.FromRgb(0xE2, 0x9E, 0x2D) : Color.FromRgb(0x9A, 0x64, 0x00);
+        var danger = isDark ? Color.FromRgb(0xE5, 0x48, 0x4D) : Color.FromRgb(0xC0, 0x2A, 0x2F);
+        Set("Liquid.SuccessBrush", new SolidColorBrush(success));
+        Set("Liquid.WarningBrush", new SolidColorBrush(warning));
+        Set("Liquid.DangerBrush", new SolidColorBrush(danger));
 
-        // The liquid accent gradient: accent -> deep indigo for a richer hero than a flat fill.
+        // The liquid accent gradient. The end caps used to be hardcoded blue and indigo, so
+        // choosing the Lime or Magenta accent still produced a blue hero - the accent was only the
+        // middle stop. Both ends are now derived from the accent: a lightened version at the top
+        // and a darkened one at the bottom, which keeps the depth the gradient was for.
         var gradient = new LinearGradientBrush
         {
             StartPoint = new Point(0, 0),
             EndPoint = new Point(1.1, 1.2),
         };
-        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(0x36, 0x9E, 0xEA), 0));
+        gradient.GradientStops.Add(new GradientStop(Lighten(accent.Color, 0.35f), 0));
         gradient.GradientStops.Add(new GradientStop(accent.Color, 0.55));
-        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(0x3B, 0x2E, 0x8F), 1));
+        gradient.GradientStops.Add(new GradientStop(Darken(accent.Color, 0.55f), 1));
         gradient.Freeze();
         Set("Liquid.AccentGradientBrush", gradient);
 
@@ -138,20 +148,45 @@ public static class LiquidTheme
 
         Set("Liquid.IsDark", isDark);
     }
+
+    /// <summary>Moves a colour towards white by <paramref name="amount"/>.</summary>
+    internal static Color Lighten(Color color, float amount) => Color.FromRgb(
+        Blend(color.R, 255, amount),
+        Blend(color.G, 255, amount),
+        Blend(color.B, 255, amount));
+
+    /// <summary>Moves a colour towards black by <paramref name="amount"/>.</summary>
+    internal static Color Darken(Color color, float amount) => Color.FromRgb(
+        Blend(color.R, 0, amount),
+        Blend(color.G, 0, amount),
+        Blend(color.B, 0, amount));
+
+    private static byte Blend(byte from, byte to, float amount) =>
+        (byte)Math.Clamp(from + ((to - from) * amount), 0, 255);
 }
 
-/// <summary>A named color with a lazily created WPF brush for direct binding.</summary>
+/// <summary>A named colour with a frozen brush, ready to bind.</summary>
+/// <remarks>
+/// The brush used to be a public settable property that every page filled in for itself, so the
+/// same <see cref="NamedColor"/> instance was mutated by whichever page loaded last and a frozen
+/// brush could be assigned twice. It is built once here, frozen, and read-only - there is nothing
+/// for a page to change.
+/// </remarks>
 public sealed class NamedColor
 {
     public NamedColor(string name, Color color)
     {
         Name = name;
         Color = color;
+
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        ColorBrush = brush;
     }
 
     public string Name { get; }
     public Color Color { get; }
 
-    /// <summary>Created on demand by UI code; not frozen so pages may freeze it themselves.</summary>
-    public SolidColorBrush? ColorBrush { get; set; }
+    /// <summary>A frozen brush, ready to bind. Never null and never replaced.</summary>
+    public SolidColorBrush ColorBrush { get; }
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using DeckForge.App.Services;
 using DeckForge.CliAdapter;
 using DeckForge.Validators;
 
@@ -38,6 +39,40 @@ public sealed class BoolToStatusColorConverter : IValueConverter
         brush.Freeze();
         return brush;
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// Binds a radio button's <c>IsChecked</c> to an enum member named by <c>ConverterParameter</c>.
+/// </summary>
+/// <remarks>
+/// The theme radios used a Checked handler in code-behind that wrote a named field, so the page
+/// owned the state and the view model could not. Three radios, one enum and a parameter is what it
+/// takes to bind them properly.
+/// </remarks>
+public sealed class EnumToAppThemeConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        var name = parameter as string;
+        return value is AppTheme theme && string.Equals(theme.ToString(), name, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true
+            ? Enum.TryParse(parameter as string, ignoreCase: true, out AppTheme theme)
+                ? theme
+                : DependencyProperty.UnsetValue
+            : Binding.DoNothing;
+}
+
+/// <summary>Collapses when the bound int is zero, so an empty list shows no button.</summary>
+public sealed class IntToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is int count && count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
