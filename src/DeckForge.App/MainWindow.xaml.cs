@@ -261,6 +261,7 @@ public static class PageRegistry
         "widget" => App.Services.GetService(typeof(WidgetDesignerPage)) as Page,
         "iconpack" => App.Services.GetService(typeof(IconPackPage)) as Page,
         "docs" => App.Services.GetService(typeof(DocsPage)) as Page,
+        "extensions" => App.Services.GetService(typeof(ExtensionsPage)) as Page,
         "settings" => App.Services.GetService(typeof(SettingsPage)) as Page,
         _ => null,
     };

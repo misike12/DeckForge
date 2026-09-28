@@ -1,0 +1,113 @@
+<Page x:Class="DeckForge.App.Pages.ExtensionsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <Grid Margin="40,24,40,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Extensions" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Third-party code that adds pages, gallery entries, checks and commands to DeckForge."
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
+                    <ui:Button Content="Rescan" Margin="0,0,8,0" Command="{Binding ScanCommand}" />
+                    <ui:Button Content="Open folder" Command="{Binding OpenFolderCommand}" />
+                </StackPanel>
+            </Grid>
+            <TextBlock Text="{Binding StatusText}" FontSize="12"
+                       Foreground="{DynamicResource Liquid.AccentStrongBrush}" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.4*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Installed" FontSize="15" FontWeight="SemiBold"
+                               Margin="0,0,0,10" />
+                    <ListBox ItemsSource="{Binding Found}"
+                             Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" FontSize="13.5" FontWeight="Medium" />
+                                            <TextBlock Text="{Binding State}" FontSize="11" Margin="8,2,0,0"
+                                                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Description}" FontSize="11.5"
+                                                   TextWrapping="Wrap" Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                                        <TextBlock Text="{Binding Id}" FontSize="10.5" Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                                        <TextBlock Text="{Binding ErrorText}" FontSize="11" TextWrapping="Wrap"
+                                                   Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource SystemColors.GrayTextBrush}" />
+                                    </StackPanel>
+                                    <ui:Button Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top"
+                                               Content="{Binding ToggleLabel}"
+                                               Command="{Binding DataContext.SetEnabledCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <TextBlock Text="Installing" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <TextBlock TextWrapping="Wrap" FontSize="12.5">
+                        <Run Text="Drop an assembly into" />
+                        <Run Text="{Binding UserExtensionDirectory, Mode=OneWay}" FontFamily="Cascadia Mono, Consolas" />
+                        <Run Text="and press Rescan." />
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap" FontSize="12.5" Margin="0,12,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}">
+                        <Run Text="An assembly implements IDeckForgeExtension and is discovered by scanning, not by being named anywhere." />
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap" FontSize="12.5" Margin="0,12,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}">
+                        <Run Text="Extensions are off by default. Loading one runs its code inside DeckForge with DeckForge's own permissions - a .NET plugin cannot be sandboxed, so installing one is a decision to trust it. DeckForge contains a failure rather than crashing, but it cannot make one safe." />
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap" FontSize="12.5" Margin="0,12,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}">
+                        <Run Text="DeckForge's own assemblies are never scanned. A built-in extension is registered by the app instead." />
+                    </TextBlock>
+                    <TextBlock Text="Checks" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,6" />
+                    <ItemsControl ItemsSource="{Binding Diagnostics}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,3"
+                                           FontFamily="Cascadia Mono, Consolas" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

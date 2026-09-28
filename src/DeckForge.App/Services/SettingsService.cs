@@ -33,6 +33,17 @@ public sealed class AppSettings
     public string? GitHubAccount { get; set; }
 
     /// <summary>
+    /// Extension ids the user has switched off.
+    /// </summary>
+    /// <remarks>
+    /// Default is off, not on. An extension is third-party code that runs in this process the
+    /// moment it is discovered, so installing one is not consent to load it - the user has to say
+    /// so. Everything found is listed either way, so a disabled extension is visible rather than
+    /// invisible.
+    /// </remarks>
+    public List<string> DisabledExtensions { get; set; } = [];
+
+    /// <summary>
     /// The macrodeck-plugin version DeckForge targets. The Environment page gates on it, because a
     /// wrong CLI version fails in ways that look like a DeckForge bug rather than a version skew.
     /// </summary>

@@ -54,6 +54,17 @@ public partial class App : Application
         services.AddSingleton<ViewModels.NewProjectViewModel>();
         services.AddSingleton<ViewModels.BuildRunViewModel>();
 
+        // Extensions. Built-ins are handed in rather than discovered: they live in DeckForge's own
+        // assemblies, which the scan skips on purpose. The disabled list comes from settings, and
+        // the default is off - installing an extension is not consent to run it in this process.
+        services.AddSingleton(sp => new Core.Extensions.ExtensionService(
+            sp,
+            sp.GetRequiredService<SettingsService>().Settings.DisabledExtensions,
+            [new Core.Extensions.BuiltIn.ExtensionDiagnosticsExtension()]));
+        services.AddSingleton<ViewModels.ExtensionsViewModel>();
+        services.AddSingleton<Pages.ExtensionsPage>();
+
+
         // Pages (singletons preserve in-page state like console output and forms).
         services.AddSingleton<Pages.HomePage>();
         services.AddSingleton<Pages.NewProjectPage>();

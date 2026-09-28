@@ -51,6 +51,7 @@
 
                 <ui:NavigationView.FooterMenuItems>
                     <ui:NavigationViewItem Content="Docs" Tag="docs" Icon="{ui:SymbolIcon Book24}" Click="Nav_Click" />
+                    <ui:NavigationViewItem Content="Extensions" Tag="extensions" Icon="{ui:SymbolIcon Puzzle24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Settings" Tag="settings" Icon="{ui:SymbolIcon Settings24}" Click="Nav_Click" />
                 </ui:NavigationView.FooterMenuItems>
             </ui:NavigationView>
