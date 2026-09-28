@@ -44,7 +44,15 @@ public sealed class DesignedNode
 
     public List<DesignedNode> Children { get; set; } = [];
 
-    public string Describe() => $"{Key} ({NodeType})";
+    /// <summary>
+    /// The label shown for this node on the designer canvas.
+    /// </summary>
+    /// <remarks>
+    /// A property, not a method: the designer bound <c>Text="{Binding Describe}"</c>, and WPF binds to
+    /// properties. A method has no property to find, so every node row rendered blank - the tree looked
+    /// empty no matter how many nodes it held.
+    /// </remarks>
+    public string Description => $"{Key} ({NodeType})";
 }
 
 /// <summary>One named state a widget type offers.</summary>

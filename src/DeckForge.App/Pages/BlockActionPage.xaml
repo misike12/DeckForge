@@ -297,7 +297,7 @@
                                         </Grid.ColumnDefinitions>
                                         <Border Background="{DynamicResource Liquid.AccentWashBrush}"
                                                 CornerRadius="6" Padding="9,6" Grid.ColumnSpan="2">
-                                            <TextBlock Text="{Binding Describe()}" FontSize="12.5"
+                                            <TextBlock Text="{Binding Description}" FontSize="12.5"
                                                        TextWrapping="Wrap" />
                                         </Border>
                                         <ui:Button Grid.Column="2" Content="Remove"

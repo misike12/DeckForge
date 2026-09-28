@@ -95,7 +95,7 @@
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate DataType="{x:Type vm:WidgetNode}" ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Describe}" />
+                                    <TextBlock Text="{Binding Description}" />
                                     <Button Content="↑" FontSize="10" Padding="4,0" Margin="6,0,0,0"
                                             Background="Transparent" BorderThickness="0"
                                             Foreground="{DynamicResource Liquid.TextSecondaryBrush}"

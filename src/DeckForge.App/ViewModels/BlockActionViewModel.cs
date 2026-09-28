@@ -421,7 +421,7 @@ public partial class BlockActionViewModel : ObservableObject
         {
             Statements.Remove(statement);
             Recompile();
-            StatusText = $"Removed {statement.Describe()}. {StatementCount} statement{Plural(StatementCount)} left.";
+            StatusText = $"Removed {statement.Description}. {StatementCount} statement{Plural(StatementCount)} left.";
         }
     }
 
@@ -495,6 +495,30 @@ public partial class BlockActionViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Whether the plugin declares <c>IIntegrationContextAware</c>, which host-calling blocks need.
+    /// </summary>
+    /// <remarks>
+    /// A plugin generated before that interface existed, or generated without the capability that
+    /// declares it, has no such type. The writer has to know, because wiring an action for a host
+    /// context names the interface in the class's base list - and against a plugin that does not
+    /// declare it, that is a CS0246 on the action's own declaration. The page said "Blocks written"
+    /// and the plugin would not build.
+    /// </remarks>
+    private static bool PluginDeclaresIntegrationContext(string pluginProjectDirectory)
+    {
+        if (!Directory.Exists(pluginProjectDirectory))
+        {
+            return false;
+        }
+
+        return Directory
+            .EnumerateFiles(pluginProjectDirectory, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Select(File.ReadAllText)
+            .Any(text => text.Contains("interface IIntegrationContextAware", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Writes the compiled region into the target action, and keeps the canvas itself so the
     /// blocks can be edited again.
     /// </summary>
@@ -525,7 +549,10 @@ public partial class BlockActionViewModel : ObservableObject
 
         try
         {
-            var result = BlockProgramWriter.Write(File.ReadAllText(actionFile), program);
+            var result = BlockProgramWriter.Write(
+                File.ReadAllText(actionFile),
+                program,
+                integrationAvailable: PluginDeclaresIntegrationContext(ws.PluginProjectDirectory));
             if (!result.Success)
             {
                 StatusText = result.Message;
@@ -534,7 +561,13 @@ public partial class BlockActionViewModel : ObservableObject
 
             File.WriteAllText(actionFile, result.Content);
             File.WriteAllText(SidecarPath()!, BlockProgramJson.Serialize(program));
-            StatusText = $"Blocks written into {program.TargetFile}.";
+
+            // The writer's own message, when it has more to say than "written" - a canvas that ends
+            // in a return makes the action's own trailing return dead, and the user needs to hear that
+            // here rather than find CS0162 in their own build.
+            StatusText = result.Message.Length > "Blocks written.".Length
+                ? result.Message
+                : $"Blocks written into {program.TargetFile}.";
         }
         catch (IOException ex)
         {

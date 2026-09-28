@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Wpf.Ui.Controls;
@@ -111,6 +112,96 @@ public sealed class XamlMarkupTests
     /// with no way to scroll to it.
     /// </summary>
     private const int FixedColumnBudget = 900;
+
+    [Test]
+    public void No_binding_calls_a_method()
+    {
+        // A WPF binding resolves against properties. Binding to a method - Describe() - finds nothing,
+        // resolves to nothing, and renders blank with no error anywhere. The block canvas did this, so
+        // every statement row was an empty pill and the program looked empty however many blocks it
+        // held, with nothing to point at.
+        //
+        // The parentheses are what makes this unambiguous: a plain {Binding Name} is resolved against
+        // whatever the DataContext happens to be - the page view model on a page, a block inside an
+        // item template - so it cannot be checked without loading the WPF types, which the test project
+        // does not reference. A call is never a valid binding path in any DataContext.
+        var calls = new List<string>();
+        foreach (var file in MarkupFiles())
+        {
+            foreach (Match binding in Regex.Matches(
+                File.ReadAllText(file),
+                @"\{Binding\s+[A-Za-z_][A-Za-z0-9_.]*\s*\(\s*\)\s*\}",
+                RegexOptions.Compiled))
+            {
+                calls.Add($"{Path.GetFileName(file)}: {binding.Value}");
+            }
+        }
+
+        Assert.That(
+            calls,
+            Is.Empty,
+            "These bindings call a method, so they resolve to nothing and render blank with no error. "
+            + "Expose the value as a property and bind to that:" + Environment.NewLine
+            + string.Join(Environment.NewLine, calls));
+    }
+
+    [Test]
+    public void The_method_binding_check_is_actually_looking_at_bindings()
+    {
+        var files = MarkupFiles().ToList();
+        var bindings = files.Sum(file => Regex.Matches(
+            File.ReadAllText(file), @"\{Binding\s+[A-Za-z_][A-Za-z0-9_.]*\s*(\(\s*\))?\s*\}").Count);
+
+        Assert.That(bindings, Is.GreaterThan(0), "No simple bindings were found; the check is vacuous.");
+    }
+
+    [Test]
+    public void Every_block_and_node_type_can_describe_itself_for_the_canvas()
+    {
+        // The two lists the canvas renders: block statements and widget nodes. Each row binds a label,
+        // so each type has to expose it as a property with a value. A type that forgets renders a blank
+        // row, which is indistinguishable from an empty list.
+        Assert.Multiple(() =>
+        {
+            foreach (var type in BlockAndNodeTypes())
+            {
+                var description = type.GetProperty("Description", BindingFlags.Public | BindingFlags.Instance);
+                Assert.That(description, Is.Not.Null, $"{type.Name} has no public Description property.");
+                Assert.That(description!.PropertyType, Is.EqualTo(typeof(string)));
+            }
+        });
+    }
+
+    [Test]
+    public void Every_block_kind_has_a_non_empty_description()
+    {
+        // A description that is blank on a fresh instance is as invisible as a missing property, so the
+        // value is checked rather than only its presence.
+        var blank = new List<string>();
+        foreach (var type in BlockAndNodeTypes())
+        {
+            var instance = Activator.CreateInstance(type) as DeckForge.Core.Blocks.BlockStatement;
+            if (instance is null)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(instance.Description))
+            {
+                blank.Add(type.Name);
+            }
+        }
+
+        Assert.That(blank, Is.Empty, "These render an empty row: " + string.Join(", ", blank));
+    }
+
+    /// <summary>The block statement types, and the widget node type, that the canvas rows bind to.</summary>
+    private static IEnumerable<Type> BlockAndNodeTypes() =>
+        typeof(DeckForge.Core.Blocks.BlockStatement).Assembly
+            .GetTypes()
+            .Where(type => typeof(DeckForge.Core.Blocks.BlockStatement).IsAssignableFrom(type) && !type.IsAbstract)
+            .Append(typeof(DeckForge.CodeGen.Generation.DesignedNode))
+            .OrderBy(type => type.Name);
 
     [Test]
     public void No_row_of_columns_is_wider_than_a_small_window()

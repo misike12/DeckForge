@@ -61,7 +61,13 @@ public sealed class BlockProgram
 public abstract class BlockStatement
 {
     /// <summary>Plain-language summary shown on the canvas tile.</summary>
-    public abstract string Describe();
+    /// <remarks>
+    /// A property, not a method. The canvas bound <c>Text="{Binding Describe()}"</c>, and WPF binds to
+    /// properties - there is no <c>Describe()</c> property to find, so every statement row rendered as
+    /// an empty pill. The program looked empty however many blocks it held, and there was no error to
+    /// point at it.
+    /// </remarks>
+    public abstract string Description { get; }
 }
 
 /// <summary>
@@ -83,7 +89,7 @@ public sealed class LogBlock : BlockStatement
     /// <summary>Log level: Verbose, Debug, Information, Warning, Error.</summary>
     public string Level { get; set; } = "Information";
 
-    public override string Describe() => Parameter is null ? $"Log \"{Template}\"" : $"Log \"{Template}\" ({Parameter})";
+    public override string Description => Parameter is null ? $"Log \"{Template}\"" : $"Log \"{Template}\" ({Parameter})";
 }
 
 /// <summary>Reads a configured parameter into a typed local.</summary>
@@ -102,10 +108,13 @@ public sealed class SetVariableBlock : BlockStatement
     /// <summary>When set, a blank result returns this error instead of continuing.</summary>
     public bool Required { get; set; }
 
-    public override string Describe()
+    public override string Description
     {
-        var source = FromParameter is not null ? $"param {FromParameter}" : $"\"{Literal}\"";
-        return $"Set {VariableName} = {source}";
+        get
+        {
+            var source = FromParameter is not null ? $"param {FromParameter}" : $"\"{Literal}\"";
+            return $"Set {VariableName} = {source}";
+        }
     }
 }
 
@@ -125,7 +134,7 @@ public sealed class IfBlock : BlockStatement
 
     public List<BlockStatement> Else { get; set; } = [];
 
-    public override string Describe() => $"If {LeftVariable} {Operator} \"{RightLiteral ?? string.Empty}\"";
+    public override string Description => $"If {LeftVariable} {Operator} \"{RightLiteral ?? string.Empty}\"";
 }
 
 /// <summary>ActionResult.Success / Failed(code, message) / Accepted(message).</summary>
@@ -139,7 +148,7 @@ public sealed class ReturnResultBlock : BlockStatement
 
     public string Message { get; set; } = "";
 
-    public override string Describe() => Outcome switch
+    public override string Description => Outcome switch
     {
         "failed" => $"Fail ({ErrorCode ?? "ProviderError"})",
         "accepted" => "Accept (pending)",
@@ -152,7 +161,7 @@ public sealed class DelayBlock : BlockStatement
 {
     public int Milliseconds { get; set; } = 500;
 
-    public override string Describe() => $"Wait {Milliseconds} ms";
+    public override string Description => $"Wait {Milliseconds} ms";
 }
 
 /// <summary>HttpClient GET with cancellation; the response body lands in a variable.</summary>
@@ -165,7 +174,7 @@ public sealed class HttpRequestBlock : BlockStatement
     /// <summary>Optional bearer token, read from a configured parameter.</summary>
     public string? BearerTokenParameter { get; set; }
 
-    public override string Describe() => $"GET {Url}";
+    public override string Description => $"GET {Url}";
 }
 
 /// <summary>Raises a host notification. Fire-and-forget, and never throws into the caller.</summary>
@@ -181,7 +190,7 @@ public sealed class NotifyBlock : BlockStatement
     /// <summary>Optional key, which makes a repeat replace the previous notification.</summary>
     public string? Key { get; set; }
 
-    public override string Describe() => $"Notify \"{Title}\"";
+    public override string Description => $"Notify \"{Title}\"";
 }
 
 /// <summary>Opens a folder on the pressing client.</summary>
@@ -189,19 +198,19 @@ public sealed class NavigateBlock : BlockStatement
 {
     public string FolderId { get; set; } = "";
 
-    public override string Describe() => $"Open folder {FolderId}";
+    public override string Description => $"Open folder {FolderId}";
 }
 
 /// <summary>Goes to the parent folder on the pressing client.</summary>
 public sealed class GoToParentBlock : BlockStatement
 {
-    public override string Describe() => "Go to parent folder";
+    public override string Description => "Go to parent folder";
 }
 
 /// <summary>Returns to the previously shown folder on the pressing client.</summary>
 public sealed class GoBackBlock : BlockStatement
 {
-    public override string Describe() => "Go back";
+    public override string Description => "Go back";
 }
 
 /// <summary>Switches to a profile's start folder.</summary>
@@ -209,7 +218,7 @@ public sealed class ChangeProfileBlock : BlockStatement
 {
     public string ProfileId { get; set; } = "";
 
-    public override string Describe() => $"Switch to profile {ProfileId}";
+    public override string Description => $"Switch to profile {ProfileId}";
 }
 
 /// <summary>Runs a host script through <c>context.Scripts</c>.</summary>
@@ -220,7 +229,7 @@ public sealed class RunScriptBlock : BlockStatement
     /// <summary>Input name to parameter name, one <c>scriptInput=parameter</c> per line.</summary>
     public string Inputs { get; set; } = "";
 
-    public override string Describe() => $"Run script {ScriptId}";
+    public override string Description => $"Run script {ScriptId}";
 }
 
 /// <summary>Publishes an event occurrence through <c>context.Events</c>.</summary>
@@ -231,7 +240,7 @@ public sealed class PublishEventBlock : BlockStatement
     /// <summary>Payload parameter name to value, one <c>name=value</c> per line.</summary>
     public string Payload { get; set; } = "";
 
-    public override string Describe() => $"Publish {EventId}";
+    public override string Description => $"Publish {EventId}";
 }
 
 /// <summary>Writes a shared host variable through <c>context.Variables</c>.</summary>
@@ -244,7 +253,7 @@ public sealed class SetVariableValueBlock : BlockStatement
 
     public bool UseParameter { get; set; }
 
-    public override string Describe() => $"Set variable {VariableName}";
+    public override string Description => $"Set variable {VariableName}";
 }
 
 /// <summary>Reads a shared host variable into a local, via <c>context.Variables</c>.</summary>
@@ -254,7 +263,7 @@ public sealed class ReadVariableBlock : BlockStatement
 
     public string IntoVariable { get; set; } = "variableValue";
 
-    public override string Describe() => $"Read variable {VariableName} into {IntoVariable}";
+    public override string Description => $"Read variable {VariableName} into {IntoVariable}";
 }
 
 /// <summary>
@@ -278,7 +287,7 @@ public sealed class ShowModalBlock : BlockStatement
     /// <summary>Context handed to the provider verbatim, one <c>name=value</c> per line.</summary>
     public string Data { get; set; } = "";
 
-    public override string Describe() => $"Open dialog \"{ViewId}\"";
+    public override string Description => $"Open dialog \"{ViewId}\"";
 }
 
 /// <summary>Asks the host to re-fetch an action's icon.</summary>
@@ -286,7 +295,7 @@ public sealed class InvalidateIconBlock : BlockStatement
 {
     public string ActionId { get; set; } = "";
 
-    public override string Describe() => $"Invalidate icon {ActionId}";
+    public override string Description => $"Invalidate icon {ActionId}";
 }
 
 /// <summary>Throws, which the host turns into a failed invocation.</summary>
@@ -294,7 +303,7 @@ public sealed class ThrowBlock : BlockStatement
 {
     public string Message { get; set; } = "The action failed.";
 
-    public override string Describe() => $"Throw \"{Message}\"";
+    public override string Description => $"Throw \"{Message}\"";
 }
 
 /// <summary>Serialization for the persisted canvas.</summary>

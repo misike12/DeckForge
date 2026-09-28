@@ -123,6 +123,292 @@ public sealed class BlockProgramWriterTests
     }
 
     [Test]
+    public void The_final_return_of_the_executor_is_found_where_it_really_is()
+    {
+        // Checked on its own, because the placement cannot be asserted through the spliced output:
+        // the region contains returns of its own, so "the marker is before the last return in the
+        // file" holds whichever end the region went on. That test passed while the region was still
+        // being appended after the very return it was supposed to precede.
+        WriteAction(ReadAction());
+        var source = ReadAction();
+        var anchor = BlockProgramWriter.ExecutorAnchor;
+        var open = source.IndexOf('{', source.IndexOf(anchor, StringComparison.Ordinal));
+        var close = BlockCompiler.MatchingBraceForTest(source, open);
+
+        var found = BlockCompiler.LastTopLevelReturn(source, open, close);
+
+        Assert.That(found, Is.Not.Null, "The executor's own trailing return was not found.");
+        Assert.That(source[found!.Value..], Does.StartWith("return ActionResult.SucceededTask"),
+            "The last top-level return is not the one the region has to precede.");
+    }
+
+    [Test]
+    public void A_return_inside_a_nested_block_is_not_mistaken_for_the_method_s_own()
+    {
+        var source = string.Join(
+            "\n",
+            "class C",
+            "{",
+            "    int M()",
+            "    {",
+            "        if (true)",
+            "        {",
+            "            return 1;",
+            "        }",
+            "        Helper(() => { return 2; });",
+            "        return 3;",
+            "    }",
+            "}",
+            "");
+
+        var open = source.IndexOf("{", source.IndexOf("int M()", StringComparison.Ordinal));
+        var close = BlockCompiler.MatchingBraceForTest(source, open);
+        var found = BlockCompiler.LastTopLevelReturn(source, open, close);
+
+        Assert.That(found, Is.Not.Null);
+        Assert.That(source[found!.Value..], Does.StartWith("return 3;"));
+    }
+
+    [Test]
+    public void The_region_goes_after_the_code_that_was_already_there_and_before_the_final_return()
+    {
+        // A canvas usually ends in a return. Written at the top of the body, the region's return made
+        // everything below it unreachable: the action's own parameter validation stopped running and
+        // every build reported CS0162. Written at the very end, the method's own trailing return became
+        // the unreachable one. Before the final return is the only placement where both halves run.
+        WriteAction(ReadAction());
+        var before = ReadAction();
+
+        var result = BlockProgramWriter.Write(before, new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new LogBlock { Template = "x" }, new ReturnResultBlock { Outcome = "success" }],
+        });
+
+        Assert.That(result.Success, Is.True, result.Message);
+
+        // The action's own return and the region's own are both `return ActionResult.Success()` once
+        // the executor has been made async, so the action's is identified by coming first. Asserting
+        // on the marker alone cannot tell the two placements apart, because the region contains a
+        // return of its own - that test passed while the region was being appended after the very
+        // return it was supposed to precede.
+        var region = result.Content.IndexOf(BlockCompiler.BeginMarker, StringComparison.Ordinal);
+        var validation = result.Content.IndexOf("InvalidParameter", StringComparison.Ordinal);
+        var ownReturn = result.Content.IndexOf("return ActionResult.Success()", StringComparison.Ordinal);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(ownReturn, Is.GreaterThan(0), "The action's own return is missing.");
+            Assert.That(region, Is.GreaterThan(validation),
+                "The region was written above the action's own code, which then never ran.");
+            Assert.That(region, Is.LessThan(ownReturn),
+                "The region was written after the action's own final return, so the region was "
+                + "unreachable code and the build reported CS0162.");
+        });
+    }
+
+    [Test]
+    public void A_one_character_needle_is_emitted_as_a_char_so_the_plugin_does_not_warn()
+    {
+        // string.Contains(string, StringComparison) is correct, but CA1847 asks for the char overload
+        // when the needle is one character. Generated code that reports a warning on every build of
+        // the user's plugin is a warning they will come to ask about.
+        var program = new BlockProgram
+        {
+            Statements =
+            [
+                new IfBlock { LeftVariable = "message", Operator = "contains", RightLiteral = "b" },
+                new IfBlock { LeftVariable = "message", Operator = "notContains", RightLiteral = "b" },
+            ],
+        };
+
+        var compiled = BlockCompiler.Compile(program);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(compiled, Does.Contain("'\\u0062'"),
+                "A one-character needle was emitted as a string literal.");
+            Assert.That(compiled, Does.Not.Contain("Contains(\"b\""),
+                "A one-character needle was emitted as a string literal.");
+        });
+    }
+
+    [Test]
+    public void A_longer_needle_is_still_emitted_as_a_string()
+    {
+        var compiled = BlockCompiler.Compile(new BlockProgram
+        {
+            Statements =
+            [
+                new IfBlock { LeftVariable = "message", Operator = "contains", RightLiteral = "needle" },
+                new IfBlock { LeftVariable = "message", Operator = "contains", RightLiteral = "a\"b" },
+            ],
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(compiled, Does.Contain("\"needle\""));
+            Assert.That(compiled, Does.Contain("\\\"a\\\\\\\"b\"").Or.Contain("a\\\"b"),
+                "A quote inside the needle was not escaped, so the generated code would not compile.");
+        });
+    }
+
+    [Test]
+    public void A_canvas_that_ends_in_a_return_says_that_the_actions_own_return_is_now_dead()
+    {
+        // A method cannot have two reachable trailing returns, so both placements are wrong: the
+        // region before the return makes the return dead, the region after it makes the region dead.
+        // Deleting a line the user wrote is not a decision to make for them, so the page says what
+        // happened and the build tells them the same thing.
+        var result = BlockProgramWriter.Write(ReadAction(), new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new LogBlock { Template = "x" }, new ReturnResultBlock { Outcome = "success" }],
+        });
+
+        Assert.That(result.Success, Is.True, result.Message);
+        Assert.That(result.Message, Does.Contain("unreachable"),
+            "The page did not say that the action's own final return is now dead code.");
+    }
+
+    [Test]
+    public void A_canvas_that_does_not_end_in_a_return_says_nothing_about_it()
+    {
+        var result = BlockProgramWriter.Write(ReadAction(), new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new LogBlock { Template = "x" }, new DelayBlock { Milliseconds = 10 }],
+        });
+
+        Assert.That(result.Success, Is.True, result.Message);
+        Assert.That(result.Message, Does.Not.Contain("unreachable"),
+            "Warned about a dead return for a canvas that does not end in one.");
+    }
+
+    [Test]
+    public void Whether_a_canvas_ends_in_a_return_is_decided_from_the_program()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(BlockCompiler.EndsInReturn(new BlockProgram
+            {
+                Statements = [new LogBlock(), new ReturnResultBlock { Outcome = "success" }],
+            }), Is.True);
+
+            Assert.That(BlockCompiler.EndsInReturn(new BlockProgram
+            {
+                Statements = [new ReturnResultBlock { Outcome = "success" }, new LogBlock()],
+            }), Is.False, "A return that is not last does not decide the result.");
+
+            Assert.That(BlockCompiler.EndsInReturn(new BlockProgram()), Is.False);
+        });
+    }
+
+    [Test]
+    public void A_canvas_that_calls_the_host_is_refused_when_the_plugin_has_no_integration()
+    {
+        // A plugin generated before IIntegrationContextAware existed, or without the capability that
+        // declares it, has no such type. Wiring the action anyway put the interface in the class's base
+        // list, and the plugin failed to build with CS0246 on its own type declaration - after the page
+        // had said "Blocks written".
+        var program = new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new NotifyBlock { Title = "Done", Message = "Finished." }],
+        };
+
+        var result = BlockProgramWriter.Write(ReadAction(), program, integrationAvailable: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Message, Does.Contain("host integration"));
+        });
+    }
+
+    [Test]
+    public void A_canvas_that_does_not_call_the_host_saves_into_a_plugin_with_no_integration()
+    {
+        // Refusing every save in that plugin would be worse than the bug: a canvas of log, wait and
+        // condition blocks needs nothing from the host, and the wiring is what broke the build.
+        var before = ReadAction();
+        var mentionsBefore = CountMentions(before, "IIntegrationContextAware");
+
+        var program = new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new LogBlock { Template = "x" }, new DelayBlock { Milliseconds = 10 }],
+        };
+
+        var result = BlockProgramWriter.Write(before, program, integrationAvailable: false);
+
+        Assert.That(result.Success, Is.True, result.Message);
+        Assert.Multiple(() =>
+        {
+            Assert.That(CountMentions(result.Content, "IIntegrationContextAware"), Is.EqualTo(mentionsBefore),
+                "The action was wired for a host context it was not asked for.");
+            Assert.That(result.Content, Does.Contain(BlockCompiler.BeginMarker));
+        });
+    }
+
+    private static int CountMentions(string text, string needle) =>
+        text.Split(needle, StringSplitOptions.None).Length - 1;
+
+    [Test]
+    public void The_host_blocks_are_the_ones_that_need_an_integration()
+    {
+        // Decided from the program, so a new block kind is covered as soon as it is written, and the
+        // decision cannot drift from what the compiler actually emits.
+        Assert.Multiple(() =>
+        {
+            foreach (var statement in new BlockStatement[]
+            {
+                new NotifyBlock(), new NavigateBlock(), new GoToParentBlock(), new GoBackBlock(),
+                new ChangeProfileBlock(), new RunScriptBlock(), new PublishEventBlock(),
+                new ReadVariableBlock(), new SetVariableValueBlock(), new ShowModalBlock(),
+                new InvalidateIconBlock(),
+            })
+            {
+                Assert.That(
+                    BlockCompiler.UsesHost(new BlockProgram { Statements = [statement] }),
+                    Is.True,
+                    $"{statement.GetType().Name} calls the host but was not recognised as doing so.");
+            }
+
+            foreach (var statement in new BlockStatement[]
+            {
+                new LogBlock(), new SetVariableBlock(), new DelayBlock(),
+                new HttpRequestBlock(), new ThrowBlock(), new ReturnResultBlock(),
+            })
+            {
+                Assert.That(
+                    BlockCompiler.UsesHost(new BlockProgram { Statements = [statement] }),
+                    Is.False,
+                    $"{statement.GetType().Name} does not call the host but was treated as doing so.");
+            }
+        });
+    }
+
+    [Test]
+    public void A_host_block_inside_a_branch_still_counts()
+    {
+        var program = new BlockProgram
+        {
+            Statements =
+            [
+                new IfBlock
+                {
+                    LeftVariable = "x",
+                    Then = [new LogBlock()],
+                    Else = [new NotifyBlock()],
+                },
+            ],
+        };
+
+        Assert.That(BlockCompiler.UsesHost(program), Is.True);
+    }
+
+    [Test]
     public void An_action_with_no_executor_reports_the_anchor_it_looked_for()
     {
         // Patchable enough to get past the host-context step, so the missing anchor is what the

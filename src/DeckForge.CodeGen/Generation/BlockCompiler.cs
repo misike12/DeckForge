@@ -54,6 +54,40 @@ public static partial class BlockCompiler
     /// <summary>Variable types a <see cref="SetVariableBlock"/> may declare.</summary>
     public static IReadOnlyList<string> VariableTypes { get; } = ["string", "number", "bool"];
 
+    /// <summary>
+    /// Whether a program calls the host, and so needs the action wired for a host context.
+    /// </summary>
+    /// <remarks>
+    /// Everything except log, set-variable, if, return-result, delay, http-request and throw compiles
+    /// to a call on <c>_integration</c>. Decided here rather than by scanning the compiled text,
+    /// because "does this canvas need the host" is a question about the program, and answering it from
+    /// the output would break the moment the compiler's spelling changed.
+    /// </remarks>
+    public static bool UsesHost(BlockProgram program) =>
+        program.Statements.Any(UsesHost);
+
+    private static bool UsesHost(BlockStatement statement) => statement switch
+    {
+        NotifyBlock or NavigateBlock or GoToParentBlock or GoBackBlock or ChangeProfileBlock
+            or RunScriptBlock or PublishEventBlock or ReadVariableBlock or SetVariableValueBlock
+            or ShowModalBlock or InvalidateIconBlock => true,
+        IfBlock branch => branch.Then.Any(UsesHost) || branch.Else.Any(UsesHost),
+        _ => false,
+    };
+
+    /// <summary>
+    /// Whether the program always ends by returning, and so decides the action's result itself.
+    /// </summary>
+    /// <remarks>
+    /// Decided from the last statement, not from the compiled text. A trailing return in the region
+    /// makes the action's own final return unreachable, which is CS0162 on every build of the user's
+    /// plugin - and the only two placements available are both bad, because a method cannot have two
+    /// reachable trailing returns. The user's code is not edited to make the warning go away; the page
+    /// says what happened instead.
+    /// </remarks>
+    public static bool EndsInReturn(BlockProgram program) =>
+        program.Statements.Count > 0 && program.Statements[^1] is ReturnResultBlock;
+
     /// <summary>Every block kind, in canvas order, for the palette.</summary>
     public static IReadOnlyList<BlockKind> Kinds { get; } =
     [
@@ -337,19 +371,6 @@ public static partial class BlockCompiler
 
         var begin = source.IndexOf(BeginMarker, StringComparison.Ordinal);
         var end = source.IndexOf(EndMarker, StringComparison.Ordinal);
-        if (begin >= 0 && end > begin)
-        {
-            // Replacing an existing region has to consume the whitespace in front of the marker as
-            // well. Leaving it there and then indenting the replacement on top of it grew the first
-            // line of the region by one level on every save, without bound - save twice and the
-            // file was no longer the file the first save produced.
-            var lineStart = LineStartOf(source, begin);
-            var replacement = Apply(compiled).TrimEnd();
-            return string.Concat(
-                source.AsSpan(0, lineStart),
-                replacement,
-                source.AsSpan(end + EndMarker.Length));
-        }
 
         var anchorIndex = source.IndexOf(anchor, StringComparison.Ordinal);
         if (anchorIndex < 0)
@@ -357,17 +378,130 @@ public static partial class BlockCompiler
             return null;
         }
 
-        var brace = source.IndexOf('{', anchorIndex);
-        if (brace < 0)
+        var open = source.IndexOf('{', anchorIndex);
+        if (open < 0)
         {
             return null;
         }
 
+        var close = MatchingBrace(source, open);
+        if (close < 0)
+        {
+            return null;
+        }
+
+        // An existing region is taken out first, wherever it is, and the new one goes at the end of
+        // the body. Replacing in place kept the region wherever the first save put it, so a file
+        // saved by the previous version stayed wrong for ever: the region was replaced, but it was
+        // still at the top of the method, still above the user's code.
+        if (begin >= 0 && end > begin)
+        {
+            // The whitespace in front of the marker goes with it. Leaving it and indenting the
+            // replacement on top of it grew the first line of the region by one level on every save,
+            // without bound - save twice and the file was no longer the file the first save produced.
+            var start = LineStartOf(source, begin);
+            var after = end + EndMarker.Length;
+            var lineEnd = source.IndexOf('\n', after);
+            source = source.Remove(start, (lineEnd < 0 ? after : lineEnd + 1) - start);
+        }
+
         // The closing line has to line up with the method signature, in the file's own style.
         var closingIndent = LineIndentOf(source, anchorIndex) + (tabbed ? "\t" : new string(' ', indent));
-        var insertion = nl + Apply(compiled) + nl + closingIndent;
-        return source.Insert(brace + 1, insertion);
+
+        // Where in the body the region goes: after everything that is already there, but before the
+        // method's own final return.
+        //
+        // A block program usually ends in a return, so appending it after the method's own trailing
+        // return made that return unreachable - CS0162 on every build - and the region was dead code.
+        // Placing it before the final return means the code that was already there runs first, a
+        // canvas that returns decides the result, and a canvas that does not fall through to whatever
+        // the action already did.
+        var insertAt = LastTopLevelReturn(source, open, close) ?? close;
+        var insertion = nl + Apply(compiled).TrimEnd() + nl + LineIndentOf(source, anchorIndex);
+        return source.Insert(insertAt, insertion + (insertAt == close ? closingIndent : string.Empty));
     }
+
+    /// <summary>
+    /// The index of the last <c>return</c> directly in the body, or null when there is none.
+    /// </summary>
+    /// <remarks>
+    /// Depth one only, so a return inside a local function, a lambda or a nested block is not
+    /// mistaken for the method's own. That is the whole reason this walks the body rather than
+    /// taking the last <c>return</c> in the text.
+    /// <para>
+    /// Public so it can be tested directly. Asserting the placement through the spliced output does
+    /// not work: the region contains returns of its own, so "the region's marker is before the last
+    /// return in the file" is true whichever end the region went on - the test passed while the
+    /// region was still being appended after the return it was supposed to precede.
+    /// </para>
+    /// </remarks>
+    public static int? LastTopLevelReturn(string source, int open, int close)
+    {
+        var depth = 0;
+        int? found = null;
+        var lineComment = false;
+        var blockComment = false;
+        var text = false;
+        var character = false;
+        var verbatim = false;
+
+        for (var i = open; i < close && i < source.Length; i++)
+        {
+            var c = source[i];
+            var next = i + 1 < source.Length ? source[i + 1] : '\0';
+
+            if (lineComment)
+            {
+                if (c == '\n') { lineComment = false; }
+                continue;
+            }
+
+            if (blockComment)
+            {
+                if (c == '*' && next == '/') { blockComment = false; i++; }
+                continue;
+            }
+
+            if (text)
+            {
+                if (verbatim && c == '"' && next == '"') { i++; continue; }
+                if (c == '"' && (!verbatim || next != '"')) { text = false; }
+                if (c == '\\' && !verbatim) { i++; }
+                continue;
+            }
+
+            if (character)
+            {
+                if (c == '\\') { i++; }
+                else if (c == '\'') { character = false; }
+                continue;
+            }
+
+            switch (c)
+            {
+                case '/' when next == '/': lineComment = true; i++; continue;
+                case '/' when next == '*': blockComment = true; i++; continue;
+                case '@' when next == '"': verbatim = true; text = true; i++; continue;
+                case '"': text = true; continue;
+                case '\'': character = true; continue;
+                case '{': depth++; continue;
+                case '}': depth--; continue;
+            }
+
+            if (depth == 1 && c == 'r' && source.AsSpan(i).StartsWith("return", StringComparison.Ordinal))
+            {
+                var before = i == 0 || !char.IsLetterOrDigit(source[i - 1]);
+                var after = i + 6 >= source.Length || !char.IsLetterOrDigit(source[i + 6]);
+                if (before && after)
+                {
+                    found = i;
+                }
+            }
+        }
+
+        return found;
+    }
+
 
     /// <summary>The index of the first character of the line containing <paramref name="index"/>.</summary>
     private static int LineStartOf(string source, int index) =>
@@ -460,6 +594,13 @@ public static partial class BlockCompiler
     private static partial Regex ReturnFromResultPattern();
 
     /// <summary>Index of the brace closing the one at <paramref name="open"/>, or -1.</summary>
+    /// <remarks>
+    /// Public so the placement above can be tested without reaching into private state. The counting
+    /// skips string and character literals and both comment styles, so a brace inside a log message
+    /// or a comment does not close the body early.
+    /// </remarks>
+    public static int MatchingBraceForTest(string source, int open) => MatchingBrace(source, open);
+
     private static int MatchingBrace(string source, int open)
     {
         if (open < 0 || open >= source.Length)
@@ -862,6 +1003,10 @@ public static partial class BlockCompiler
         sb.AppendLine($"{pad}}};");
 
         var right = CSharpCode.StringLiteral(rightLiteral ?? string.Empty);
+        // A one-character needle is emitted as a char literal, not a string. string.Contains(string,
+        // StringComparison) is correct but reports CA1847, and generated code that reports a warning
+        // on every build of the user's plugin is a warning they will come to ask about.
+        var needle = (rightLiteral ?? string.Empty) is [var only] ? CSharpCode.CharLiteral(only) : right;
         return op switch
         {
             "isEmpty" => $"{text} is null || string.IsNullOrWhiteSpace({text})",
@@ -874,8 +1019,8 @@ public static partial class BlockCompiler
             "<" => $"string.CompareOrdinal({text}, {right}) < 0",
             ">=" => $"string.CompareOrdinal({text}, {right}) >= 0",
             "<=" => $"string.CompareOrdinal({text}, {right}) <= 0",
-            "contains" => $"({text} ?? string.Empty).Contains({right}, StringComparison.Ordinal)",
-            "notContains" => $"!({text} ?? string.Empty).Contains({right}, StringComparison.Ordinal)",
+            "contains" => $"({text} ?? string.Empty).Contains({needle}, StringComparison.Ordinal)",
+            "notContains" => $"!({text} ?? string.Empty).Contains({needle}, StringComparison.Ordinal)",
             _ => $"string.Equals({text}, {right}, StringComparison.Ordinal)",
         };
     }

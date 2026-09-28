@@ -46,30 +46,60 @@ public static class BlockProgramWriter
     /// </summary>
     /// <param name="actionSource">The action file's current contents.</param>
     /// <param name="program">The canvas to write.</param>
+    /// <param name="integrationAvailable">
+    /// Whether the plugin declares <c>IIntegrationContextAware</c>. False for a plugin generated
+    /// before that interface existed, or generated without the capability that declares it.
+    /// </param>
     /// <returns>
     /// The rewritten source, or a failure naming the step that could not be applied. Every step is
     /// fallible - a hand-edited action may have lost its constructor, or its base list - and
     /// returning a partial rewrite would produce code that compiles and then throws.
     /// </returns>
-    public static BlockWriteResult Write(string actionSource, BlockProgram program)
+    public static BlockWriteResult Write(
+        string actionSource,
+        BlockProgram program,
+        bool integrationAvailable = true)
     {
         if (program.Statements.Count == 0)
         {
             return BlockWriteResult.Failed(actionSource, "There are no blocks to write.");
         }
 
+        var needsHost = BlockCompiler.UsesHost(program);
+
         // 1. Host context. Without it, every block that calls the host names a field nobody
         //    declared, and the compiler says so eight times over.
-        var wired = ActionContextPatcher.PatchAction(actionSource);
-        if (!wired.Success)
+        if (needsHost && !integrationAvailable)
         {
-            return BlockWriteResult.Failed(actionSource, $"Could not give the action a host context: {wired.Message}");
+            return BlockWriteResult.Failed(
+                actionSource,
+                "This plugin has no host integration, so the blocks that call the host cannot be "
+                + "written. The rest of the canvas is fine - remove those blocks, or add the "
+                + "integration capability on the Capabilities page and regenerate.");
+        }
+
+        // Only wired when the program needs it. It used to be applied unconditionally, which wrote
+        // `IIntegrationContextAware` into the class's base list for a plugin that never declared it -
+        // the page said "Blocks written" and the plugin then failed to build with CS0246 on the
+        // action's own type declaration.
+        var source = actionSource;
+        if (needsHost)
+        {
+            var wired = ActionContextPatcher.PatchAction(source);
+            if (!wired.Success)
+            {
+                return BlockWriteResult.Failed(
+                    actionSource,
+                    $"Could not give the action a host context: {wired.Message}");
+            }
+
+            source = wired.Content;
         }
 
         // 2. The region itself. First check the names against what the method already declares:
         //    the region goes inside a method the user wrote, so a canvas variable can collide with
         //    a local already there.
-        var conflicts = BlockCompiler.LocalNameConflicts(program, DeclaredNamesIn(wired.Content));
+        var conflicts = BlockCompiler.LocalNameConflicts(program, DeclaredNamesIn(source));
         if (conflicts.Count > 0)
         {
             return BlockWriteResult.Failed(
@@ -80,7 +110,7 @@ public static class BlockProgramWriter
         }
 
         var compiled = BlockCompiler.Compile(program);
-        var spliced = BlockCompiler.Splice(wired.Content, compiled, ExecutorAnchor);
+        var spliced = BlockCompiler.Splice(source, compiled, ExecutorAnchor);
         if (spliced is null)
         {
             return BlockWriteResult.Failed(
@@ -89,7 +119,41 @@ public static class BlockProgramWriter
         }
 
         // 3. async, because a delay, an HTTP call or a navigation step puts an await in the body.
-        return BlockWriteResult.Ok(BlockCompiler.EnsureAsyncExecutor(spliced));
+        var result = BlockWriteResult.Ok(BlockCompiler.EnsureAsyncExecutor(spliced));
+
+        // A canvas that ends in a return supersedes the action's own trailing return, which the
+        // compiler then reports as unreachable. Reported rather than fixed: the two returns cannot
+        // both be reachable, and deleting a line the user wrote - or appending the region after it
+        // instead, which only moves the warning - is not a decision to make on their behalf.
+        if (BlockCompiler.EndsInReturn(program) && LastTopLevelReturn(spliced) is not null)
+        {
+            return result with
+            {
+                Message = "Blocks written. The canvas ends in a return, so the action's own final "
+                    + "return is now unreachable and the build will say so - remove it, or end the "
+                    + "canvas without a return result.",
+            };
+        }
+
+        return result;
+    }
+
+    private static int? LastTopLevelReturn(string actionSource)
+    {
+        var start = actionSource.IndexOf(ExecutorAnchor, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        var open = actionSource.IndexOf('{', start);
+        if (open < 0)
+        {
+            return null;
+        }
+
+        var close = BlockCompiler.MatchingBraceForTest(actionSource, open);
+        return close < 0 ? null : BlockCompiler.LastTopLevelReturn(actionSource, open, close);
     }
 
     /// <summary>
