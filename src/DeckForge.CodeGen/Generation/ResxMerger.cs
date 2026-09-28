@@ -103,16 +103,32 @@ public static class ResxMerger
         return true;
     }
 
-    /// <summary>Reads all data entries as key -> value.</summary>
+    /// <summary>Reads all data entries as key -&gt; value.</summary>
+    /// <remarks>
+    /// A duplicate key used to throw from <c>ToDictionary</c>, and a malformed file from the XML
+    /// load. Nothing between here and the shell caught either, so opening the Localization page on a
+    /// project with a hand-edited resx was an unhandled exception on the UI thread - the whole app
+    /// went down over one duplicated key. A duplicate now keeps the first, which is what a resx reader
+    /// is expected to do, and the page carries on showing the rest.
+    /// </remarks>
     public static IReadOnlyDictionary<string, string> ReadKeys(string path)
     {
         var doc = Load(path);
-        return doc.Root!.Elements("data")
-            .Where(e => e.Attribute("name") is not null)
-            .ToDictionary(
-                e => e.Attribute("name")!.Value,
-                e => e.Element("value")?.Value ?? string.Empty,
-                StringComparer.Ordinal);
+        var keys = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var element in doc.Root!.Elements("data"))
+        {
+            var name = element.Attribute("name")?.Value;
+            if (string.IsNullOrEmpty(name))
+            {
+                continue;
+            }
+
+            // First one wins, rather than throwing on the second.
+            keys.TryAdd(name, element.Element("value")?.Value ?? string.Empty);
+        }
+
+        return keys;
     }
 
     private static XDocument Load(string path)

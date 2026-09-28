@@ -54,6 +54,22 @@ public sealed class AppSettings
 
     public List<string> RecentWorkspaces { get; set; } = [];
 
+    /// <summary>
+    /// Replaces a list that the JSON made null, so a hand-edited or truncated settings file cannot
+    /// leave a caller with a null where it expects a list.
+    /// </summary>
+    /// <remarks>
+    /// An explicit <c>"recentWorkspaces": null</c> deserialises to a null property, and the next
+    /// <c>Insert</c> on it is a NullReferenceException - from opening a project, which is the one
+    /// action the user cannot avoid. The property initialiser does not help: the deserialiser
+    /// overwrites it with the null it read.
+    /// </remarks>
+    public void RepairNulls()
+    {
+        RecentWorkspaces ??= [];
+        DisabledExtensions ??= [];
+    }
+
     [JsonIgnore]
     public static string StorePath { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -88,6 +104,10 @@ public sealed class SettingsService
         {
             Settings = JsonSerializer.Deserialize<AppSettings>(
                 File.ReadAllText(AppSettings.StorePath), Options) ?? new AppSettings();
+
+            // An explicit JSON null reads back as a null list, and the next Add on it throws - from
+            // opening a project, which is the one thing the user cannot avoid doing.
+            Settings.RepairNulls();
         }
         catch (JsonException ex)
         {

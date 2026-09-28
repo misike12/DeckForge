@@ -222,7 +222,18 @@ public static class CSharpCode
     }
 
     /// <summary>Escapes text for an XML attribute or element body.</summary>
-    public static string Xml(string? value) => System.Security.SecurityElement.Escape(value ?? string.Empty);
+    /// <remarks>
+    /// Newlines are neutralised as well as the five markup characters. A generated <c>///</c>
+    /// comment holds its text on one line, so a value containing a newline closed the comment early
+    /// and the rest of the value was compiled as code. Replaced with a space, which is what a line
+    /// break in prose means anyway.
+    /// </remarks>
+    public static string Xml(string? value) => SanitiseNewlines(System.Security.SecurityElement.Escape(value ?? string.Empty));
+
+    private static string SanitiseNewlines(string escaped) =>
+        escaped.Replace("\r\n", " ", StringComparison.Ordinal)
+            .Replace('\n', ' ')
+            .Replace('\r', ' ');
 
     /// <summary>
     /// A type name built from an id, safe to use as a class name and as a file name.
@@ -248,7 +259,15 @@ public static class CSharpCode
     public static string XmlAttribute(string? value) => Xml(value).Replace("\"", "&quot;", StringComparison.Ordinal);
 
     /// <summary>Escapes a URL for an XML attribute.</summary>
-    public static string XmlUrl(string? value) => Xml(value).Replace("\"", "&quot;", StringComparison.Ordinal).Replace("&", "&amp;", StringComparison.Ordinal);
+    /// <remarks>
+    /// It escaped, then escaped again. <see cref="Xml"/> already turned <c>&amp;</c> into
+    /// <c>&amp;amp;</c>, so the extra <c>&amp;amp;</c> pass turned that into
+    /// <c>&amp;amp;amp;</c> and a query string like <c>?a=1&amp;b=2</c> was written to the file as
+    /// <c>?a=1&amp;amp;b=2</c> - which a reader decodes as the literal text
+    /// <c>&amp;amp;</c>, not as a separator. Only the quote needed adding, because
+    /// <see cref="SecurityElement.Escape"/> does not escape it.
+    /// </remarks>
+    public static string XmlUrl(string? value) => Xml(value).Replace("\"", "&quot;", StringComparison.Ordinal);
 
     /// <summary>Indents every line of <paramref name="text"/> by <paramref name="spaces"/>.</summary>
     public static string Indent(string? text, int spaces)

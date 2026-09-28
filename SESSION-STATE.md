@@ -67,7 +67,7 @@ Note `validate --manifest` against `src/<Name>/manifest.json` always reports
 exists after `macrodeck-plugin build`. Validate the artifact, or the build output, not the source
 tree.
 
-Current state: **295 tests pass, 0 fail.** Template parity: no unexpected differences. A generated
+Current state: **344 tests pass, 0 fail.** Template parity: no unexpected differences. A generated
 project builds, packs, validates at publication level, and passes 25/25 conformance checks.
 
 To confirm the application actually opens, start the built exe and check for a visible top-level
@@ -162,28 +162,38 @@ startup handler was hardened, a failure now also produces a message box and exit
 
 From the second review pass, verified but not yet fixed - all are real, none is a regression:
 
-- `WorkspaceManager.FromPluginProject` assumes `<root>/src/<ProjectName>/` and silently produces a
-  workspace pointing at directories that do not exist when opening a plugin laid out any other way.
-  It also only trims `\`, not `/`, from the project directory.
-- `WorkspaceManager.Open` assigns `Current` before `Directory.CreateDirectory` can throw, so a
-  read-only project directory leaves `Current` and every page's `HasWorkspace` disagreeing.
-- `ResxMerger.ReadKeys` throws on a duplicate resx key or malformed XML, and nothing between it and
-  `MainWindow.NavigateTo` catches it, so navigating to the Localization page on such a project is an
-  unhandled exception on the UI thread.
-- `ManifestValidator`'s version-range grammar requires a comparator, so a plain `"3.0.0"` - which
-  the real CLI accepts at every level - is reported invalid.
-- `SettingsService.Load` lets an explicit JSON `null` turn `RecentWorkspaces` or `DisabledExtensions`
-  into a null list; the next `Add` throws.
-- `CSharpCode.XmlUrl` double-escapes `&`. Currently dead code; fix it before wiring it up.
-- `CSharpCode.Xml` does not neutralise newlines, so a value with `\n` breaks out of a generated
-  `///` comment. No live path - every bound control is single-line - but the fix belongs in one place.
-- `ManifestValidator.IsBase64` sizes a `stackalloc` from untrusted manifest input. Needs a cap.
-- `DocsSnapshotService.CurrentMeta` can throw `InvalidOperationException` from `GetInt32()`, which
-  its `catch` does not list; it is called from the Docs page constructor.
 - `ActionsEditorViewModel.Generate` writes the `.cs` before the resx and the integration patch, so a
   failure in either leaves a half-written action that a retry then refuses to overwrite.
 - `ActionsEditorViewModel`'s `ParameterSpec` defaults are duplicated in the test fixture rather than
   shared; if a default changes, the compile test silently stops reproducing it.
+
+Fixed since that pass, each with a test in `OpenFindingsTests`: `WorkspaceManager.FromPluginProject`
+now finds the solution by walking up and passes the plugin's real location through, and trims both
+separators; `WorkspaceManager.Open` creates the state directory before publishing `Current`;
+`ResxMerger.ReadKeys` keeps the first of a duplicate key instead of throwing; the version-range
+grammar accepts a bare `3.0.0`; `AppSettings.RepairNulls` replaces a JSON null list;
+`CSharpCode.XmlUrl` no longer double-escapes `&`; `CSharpCode.Xml` neutralises newlines;
+`ManifestValidator.IsBase64` caps its `stackalloc`; `DocsSnapshotService.CurrentMeta` reads a
+non-numeric `pageCount` as 0 and catches what it can throw.
+
+## Testing the parts that are not reachable from a test
+
+Three checks cannot be written as unit tests, and each has been replaced with something that is:
+
+- **Layout.** `XamlMarkupTests` reads the markup rather than loading it: no row or column outside the
+  grid's own definitions, no row of fixed columns over 900px, no binding written as a method call, no
+  attribute value split across source lines, and every `ui:SymbolIcon` naming a real enum member. The
+  rest is done by driving the real window - see below.
+- **The window itself.** `Process.Responding` cannot tell whether a WPF window appeared, so a
+  temporary driver under `%TEMP%\uidriver` finds the real top-level window, resizes it, types into
+  it, clicks it, and screenshots it. `GetWindowDC` + `BitBlt` misses everything DWM composites, so
+  WebView2 pages (Icon Studio, Widget Designer, Docs) need its `screen` command, which captures the
+  desktop instead. Its coordinates are window-relative and 1:1; the fullscreen capture is DPI-scaled
+  and is not.
+- **The extension point.** `extensions/DeckForge.SampleExtension` is a real assembly outside `src/`
+  referencing only `DeckForge.Core`. A test loads its DLL through `Assembly.LoadFrom` and asserts the
+  hook is answered, so a change that made the contract reachable only from inside the app would fail.
+
 
 ## Deliberate deviations from the official template
 

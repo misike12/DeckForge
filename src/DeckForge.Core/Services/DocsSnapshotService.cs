@@ -131,12 +131,13 @@ public sealed partial class DocsSnapshotService
                 root.TryGetProperty("downloadedAt", out var at) && at.TryGetDateTimeOffset(out var when)
                     ? when
                     : File.GetLastWriteTime(path),
-                root.TryGetProperty("pageCount", out var count) ? count.GetInt32() : 0,
+                root.TryGetProperty("pageCount", out var count) ? ReadPageCount(count) : 0,
                 root.TryGetProperty("failures", out var failures)
                     ? [.. failures.EnumerateArray().Select(f => f.GetString() ?? "").Where(f => f.Length > 0)]
                     : []);
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException
+                                       or InvalidOperationException or FormatException)
         {
             // A truncated or hand-edited meta.json is not worth failing over; the snapshot itself
             // is what matters and it is still on disk.
@@ -155,6 +156,18 @@ public sealed partial class DocsSnapshotService
         var dir = CurrentDirectory;
         return dir is null ? null : LoadManifestFrom(dir);
     }
+
+    /// <summary>
+    /// A page count that is a number, or 0 when it is anything else.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetInt32()</c> throws <see cref="InvalidOperationException"/> on a JSON string and
+    /// <see cref="FormatException"/> on an out-of-range number, and the catch above did not list
+    /// either. This runs from the Docs page's constructor, so a hand-edited meta.json took the whole
+    /// app down on the way to showing a page that was sitting there perfectly well.
+    /// </remarks>
+    private static int ReadPageCount(JsonElement count) =>
+        count.ValueKind == JsonValueKind.Number && count.TryGetInt32(out var value) ? value : 0;
 
     /// <summary>Loads the manifest of one specific snapshot directory, or null.</summary>
     private static Dictionary<string, string>? LoadManifestFrom(string dir)

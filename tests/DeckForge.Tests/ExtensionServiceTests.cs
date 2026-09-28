@@ -279,6 +279,38 @@ public sealed class ExtensionServiceTests
             throw new InvalidOperationException("deliberate failure");
     }
 
+    [Test]
+    public async Task An_extension_built_outside_the_app_is_discovered_and_answered()
+    {
+        // The rest of this fixture loads this test assembly, so every case is an extension that was
+        // compiled next to the app and can see everything DeckForge can see. That cannot tell a third
+        // party whether the contract is satisfiable from outside - and it cannot catch a change that
+        // makes the interface reachable only from inside DeckForge.
+        //
+        // So this loads the real sample extension: its own project, under extensions/, referencing
+        // only DeckForge.Core, and handed to the loader as a file on disk.
+        var assembly = typeof(DeckForge.SampleExtension.SampleDiagnosticsExtension).Assembly.Location;
+        var service = Service();
+
+        var found = await service.LoadAsync(assembly);
+        var results = await service.InvokeAsync(DeckForgeHooks.Diagnostics, null);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(found.Select(f => f.Id), Does.Contain("deckforge.sample-diagnostics"),
+                "An extension built as its own assembly was not discovered.");
+            Assert.That(found.Single(f => f.Id == "deckforge.sample-diagnostics").State,
+                Is.EqualTo(ExtensionState.Loaded));
+
+            // The hook's answer came back as the extension's own type, which is the point: the app
+            // carries a value it has never heard of across the boundary without throwing.
+            Assert.That(
+                results.Select(r => r.Result).OfType<DeckForge.SampleExtension.SampleReport>().Select(r => r.Summary),
+                Has.Exactly(1).Contains("Sample extension running on"));
+        });
+    }
+
+
     private sealed class ThrowingOnInvokeExtension : IDeckForgeExtension
     {
         public string Id => nameof(ThrowingOnInvokeExtension);

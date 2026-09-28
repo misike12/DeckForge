@@ -10,11 +10,24 @@ namespace DeckForge.Core.Workspace;
 /// </summary>
 public sealed class WorkspaceContext
 {
-    public WorkspaceContext(string solutionPath, NewProjectOptions options)
+    public WorkspaceContext(string solutionPath, NewProjectOptions options, string? pluginProjectDirectory = null)
     {
         SolutionPath = solutionPath;
         Options = options;
+        PluginProjectDirectoryOverride = pluginProjectDirectory;
     }
+
+    /// <summary>
+    /// The plugin project's real location, when it is not the derived one.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="PluginProjectDirectory"/> is derived from the solution path and the project name,
+    /// which is right for a generated DeckForge project and wrong for a plugin laid out any other
+    /// way - a sibling directory, a nested folder, a plugin opened on its own. Every path on this
+    /// class then pointed at directories that did not exist, and nothing complained until a page
+    /// tried to write to one. Set when the caller knows where the manifest actually is.
+    /// </remarks>
+    public string? PluginProjectDirectoryOverride { get; }
 
     /// <summary>Path to the .slnx (workspace root).</summary>
     public string SolutionPath { get; set; }
@@ -37,7 +50,8 @@ public sealed class WorkspaceContext
     /// </remarks>
     public string RootNamespace => CSharpCode.Identifier(ProjectName);
     /// <summary>src/&lt;ProjectName&gt; - the directory holding manifest.json.</summary>
-    public string PluginProjectDirectory => Path.Combine(RootDirectory, "src", ProjectName);
+    public string PluginProjectDirectory =>
+        PluginProjectDirectoryOverride ?? Path.Combine(RootDirectory, "src", ProjectName);
     public string ManifestPath => Path.Combine(PluginProjectDirectory, "manifest.json");
     public string BuildConfigPath => Path.Combine(PluginProjectDirectory, "macrodeck-build.json");
     public string LocalizationDirectory => Path.Combine(PluginProjectDirectory, "Localization");

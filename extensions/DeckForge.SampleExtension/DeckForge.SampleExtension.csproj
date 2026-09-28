@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A real extension, built as its own assembly outside src/.
+
+    Not a test fixture and not a class inside the app: the whole point of the extension point is that
+    a third party can drop an assembly in the user's extensions folder and have it discovered. That
+    only means something if the contract is satisfiable from outside, so this project references nothing
+    but DeckForge.Core and implements the public interface. If a change to the contract breaks it, the
+    extension point has stopped being an extension point.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>DeckForge.SampleExtension</RootNamespace>
+    <AssemblyName>DeckForge.SampleExtension</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <!-- DeckForge's Directory.Build.props sets a TargetFramework; a library outside the app does not
+         need one of its own, and inheriting the app's Windows-only settings would stop it loading
+         anywhere else. -->
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\DeckForge.Core\DeckForge.Core.csproj" />
+  </ItemGroup>
+
+</Project>

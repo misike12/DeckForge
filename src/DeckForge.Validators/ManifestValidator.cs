@@ -91,8 +91,18 @@ public static partial class ManifestValidator
     [GeneratedRegex(@"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$", RegexOptions.CultureInvariant)]
     private static partial Regex BundledKeyPattern();
 
-    /// <summary>The version-range grammar: comparators joined by commas. No caret, tilde or wildcards.</summary>
-    [GeneratedRegex(@"^\s*(\*|([<>]=?|=)\s*\S+(\s*,\s*[<>]=?|=)?)+\s*$", RegexOptions.CultureInvariant)]
+    /// <summary>
+    /// The version-range grammar: a bare version, or comparators joined by commas. No caret, tilde
+    /// or wildcards.
+    /// </summary>
+    /// <remarks>
+    /// A bare <c>3.0.0</c> was rejected because every alternative in the pattern required a
+    /// comparator. That is the form the real CLI accepts at every level, and the CLI is the
+    /// authority here - so DeckForge reported a manifest as invalid that the tool about to consume
+    /// it would have loaded without complaint, which is the worst kind of validation error: the
+    /// designer refuses to open a working plugin.
+    /// </remarks>
+    [GeneratedRegex(@"^\s*(\*|([<>]=?|=)\s*\S+(\s*,\s*[<>]=?|=)?|\d+\.\d+(\.\d+)?([-+][0-9A-Za-z.+-]+)?)+\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex VersionRangePattern();
 
     private static readonly string[] StandardLinkTypes =
@@ -951,9 +961,38 @@ public static partial class ManifestValidator
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="value"/> is base64.
+    /// </summary>
+    /// <remarks>
+    /// The buffer used to be <c>stackalloc byte[value.Length]</c>, sized from the manifest. A
+    /// hand-edited manifest with a signature value of a few hundred megabytes asked for that much
+    /// stack, and a stack overrun kills the process outright - no catch, no message, and the app
+    /// looked like it had crashed for no reason. Valid base64 is a quarter of its length in bytes, so
+    /// the allocation is bounded by that, and a manifest-sized value is refused rather than attempted.
+    /// </remarks>
+    /// <summary>
+    /// Whether <paramref name="range"/> matches the version-range grammar.
+    /// </summary>
+    /// <remarks>Public so the grammar can be tested directly, one range at a time.</remarks>
+    public static bool IsVersionRangeSyntaxForTest(string range) =>
+        VersionRangePattern().IsMatch(range);
+
+    /// <summary>Whether <paramref name="value"/> is base64. Public so the size cap can be tested.</summary>
+    public static bool IsBase64ForTest(string value) => IsBase64(value);
+
     private static bool IsBase64(string value)
     {
-        Span<byte> buffer = stackalloc byte[value.Length];
+        // Base64 expands 3 bytes into 4 characters, so the decoded size is at most length / 4 * 3,
+        // and is a multiple of 4 characters with padding. Anything far larger than a key or token is
+        // not a signature, so it is rejected before an allocation is attempted at all.
+        const int MaxDecodedBytes = 64 * 1024;
+        if (value.Length > (MaxDecodedBytes / 3 * 4) + 4)
+        {
+            return false;
+        }
+
+        Span<byte> buffer = stackalloc byte[value.Length / 4 * 3 + 3];
         return Convert.TryFromBase64String(value, buffer, out _);
     }
 

@@ -14,8 +14,11 @@ public sealed class WorkspaceManager
 
     public void Open(WorkspaceContext context)
     {
-        Current = context;
+        // The state directory first, and Current only once it exists. It used to be the other way
+        // round: a read-only or missing parent left Current published and every page's HasWorkspace
+        // true, with the workspace unusable and nothing raised - the shell believed it had opened.
         Directory.CreateDirectory(context.DeckForgeStateDirectory);
+        Current = context;
         CurrentChanged?.Invoke(context);
     }
 
@@ -81,6 +84,16 @@ public sealed class WorkspaceManager
         return true;
     }
 
+    /// <summary>Reconstructs a workspace from a plugin project directory (dir of manifest.json).
+    /// Reads real identity from manifest.json when present.</summary>
+    /// <remarks>
+    /// The solution is found by walking up from the plugin directory looking for a <c>.slnx</c>,
+    /// and the plugin's own location is passed through rather than re-derived. It used to assume
+    /// <c>&lt;root&gt;/src/&lt;ProjectName&gt;</c> and take the root as two levels up, so a plugin laid
+    /// out any other way - beside its solution, in a nested folder, opened on its own - produced a
+    /// workspace whose every path pointed somewhere that does not exist. The assumption is kept only
+    /// as the fallback for a plugin with no solution above it at all.
+    /// </remarks>
     public static WorkspaceContext FromPluginProject(string pluginProjectDirectory)
     {
         var manifestPath = Path.Combine(pluginProjectDirectory, "manifest.json");
@@ -89,8 +102,16 @@ public sealed class WorkspaceManager
             throw new FileNotFoundException("manifest.json not found", manifestPath);
         }
 
-        var root = Path.GetFullPath(Path.Combine(pluginProjectDirectory, "..", ".."));
-        var projectName = Path.GetFileName(pluginProjectDirectory.TrimEnd(Path.DirectorySeparatorChar));
+        // Both separators: a caller may well have passed a forward-slash path, and trimming only
+        // '\' left the trailing slash in the name, which then became part of every derived path.
+        var projectDirectory = Path.GetFullPath(pluginProjectDirectory)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var projectName = Path.GetFileName(projectDirectory);
+
+        var solution = FindSolutionAbove(projectDirectory);
+        var root = solution is null
+            ? Path.GetFullPath(Path.Combine(projectDirectory, "..", ".."))
+            : Path.GetDirectoryName(solution)!;
 
         string pluginName = projectName;
         string pluginId = "unknown";
@@ -113,6 +134,28 @@ public sealed class WorkspaceManager
             ParentDirectory = root,
             ProjectName = projectName,
         };
-        return new WorkspaceContext(Path.Combine(root, projectName + ".slnx"), options);
+        var solutionPath = solution ?? Path.Combine(root, projectName + ".slnx");
+        return new WorkspaceContext(solutionPath, options, pluginProjectDirectory: projectDirectory);
+    }
+
+    /// <summary>
+    /// The nearest <c>.slnx</c> at or above <paramref name="fromDirectory"/>, or null when there is
+    /// none. Stops at the filesystem root.
+    /// </summary>
+    private static string? FindSolutionAbove(string fromDirectory)
+    {
+        var current = new DirectoryInfo(fromDirectory);
+        while (current is not null)
+        {
+            var solution = current.EnumerateFiles("*.slnx").FirstOrDefault();
+            if (solution is not null)
+            {
+                return solution.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
     }
 }

@@ -21,6 +21,13 @@
     <ProjectReference Include="..\..\src\DeckForge.CodeGen\DeckForge.CodeGen.csproj" />
     <ProjectReference Include="..\..\src\DeckForge.Validators\DeckForge.Validators.csproj" />
     <ProjectReference Include="..\..\src\DeckForge.CliAdapter\DeckForge.CliAdapter.csproj" />
+    <!--
+      The sample extension is referenced so the test can name the type it returns, and loaded from
+      disk by path so it still goes through the real Assembly.LoadFrom discovery path. It lives in
+      extensions/ and references only DeckForge.Core, so if it compiles at all the extension contract
+      is satisfiable from outside the app's source tree.
+    -->
+    <ProjectReference Include="..\..\extensions\DeckForge.SampleExtension\DeckForge.SampleExtension.csproj" />
   </ItemGroup>
 
 </Project>
