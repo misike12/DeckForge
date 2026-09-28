@@ -109,6 +109,40 @@ public sealed class ExtensionService
     /// <summary>The extensions whose hooks will be invoked.</summary>
     public IReadOnlyCollection<IDeckForgeExtension> Loaded => _loaded.Values;
 
+    /// <summary>The ids the user has switched off.</summary>
+    public IReadOnlyCollection<string> DisabledIds => _disabled;
+
+    /// <summary>
+    /// Replaces the set of switched-off ids.
+    /// </summary>
+    /// <remarks>
+    /// The constructor copies the list it is given, so a toggle that only edited settings left the
+    /// service reading the old set - every switch did nothing until the app restarted, while the
+    /// page said "Rescan to load it" and the button never changed its own label. The page has to be
+    /// able to push the change, or the copy has to be the live list; a method says which.
+    /// </remarks>
+    public void SetDisabled(IEnumerable<string> ids)
+    {
+        _disabled.Clear();
+        foreach (var id in ids)
+        {
+            _disabled.Add(id);
+        }
+    }
+
+    /// <summary>Adds or removes one id from the switched-off set.</summary>
+    public void SetDisabled(string id, bool disabled)
+    {
+        if (disabled)
+        {
+            _disabled.Add(id);
+        }
+        else
+        {
+            _disabled.Remove(id);
+        }
+    }
+
     /// <summary>The folder the user drops extensions into, alongside the app's own.</summary>
     public static string UserExtensionDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -189,9 +223,29 @@ public sealed class ExtensionService
             }
         }
 
-        _found.AddRange(added);
+        // Compared against what was already listed, not against _found after the add: _found now
+        // contains these entries, so every one of them looks like a duplicate of itself.
+        var alreadyListed = _found.ToList();
+        var repeated = Duplicates(alreadyListed, added).ToHashSet(StringComparer.Ordinal);
+        _found.AddRange(added.Where(info => !repeated.Contains(info.Id)));
+
         Changed?.Invoke();
         return added;
+    }
+
+    /// <summary>The ids in <paramref name="added"/> that already appeared in <paramref name="known"/>.</summary>
+    private static IEnumerable<string> Duplicates(
+        IReadOnlyCollection<ExtensionInfo> known,
+        IReadOnlyList<ExtensionInfo> added)
+    {
+        var seen = new HashSet<string>(known.Select(f => f.Id), StringComparer.Ordinal);
+        foreach (var info in added)
+        {
+            if (!seen.Add(info.Id))
+            {
+                yield return info.Id;
+            }
+        }
     }
 
     /// <summary>
@@ -285,6 +339,11 @@ public sealed class ExtensionService
     /// </remarks>
     private static IEnumerable<string> CandidateFiles(string appDirectory)
     {
+        // Both directories can be the same one, and the same file can be reached twice; without this
+        // the page listed one extension twice and the duplicate never picked up a later status
+        // change, because the status is recorded against the first entry with that id.
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var directory in new[] { appDirectory, UserExtensionDirectory })
         {
             if (!Directory.Exists(directory))
@@ -315,7 +374,10 @@ public sealed class ExtensionService
                     continue;
                 }
 
-                yield return file;
+                if (seen.Add(Path.GetFullPath(file)))
+                {
+                    yield return file;
+                }
             }
         }
     }

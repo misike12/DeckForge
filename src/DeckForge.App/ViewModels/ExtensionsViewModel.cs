@@ -83,16 +83,21 @@ public partial class ExtensionsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SetEnabled(ExtensionInfo? info)
+    private async Task SetEnabledAsync(ExtensionInfo? info)
     {
         if (info is null)
         {
             return;
         }
 
+        // A failed extension reports Enabled == false, and branching on that treated it as
+        // disabled - so "Enable" on something that had crashed added it to the switched-off list,
+        // and the next scan reported Disabled. There was no way to retry a failure.
+        var enabling = info.State is ExtensionState.Disabled || !info.Enabled;
+
         _settings.Update(s =>
         {
-            if (info.Enabled)
+            if (enabling)
             {
                 s.DisabledExtensions.Remove(info.Id);
             }
@@ -102,11 +107,11 @@ public partial class ExtensionsViewModel : ObservableObject
             }
         });
 
-        // Turning one on runs third-party code, so it happens here rather than at the next start:
-        // a toggle that silently did nothing until a restart would look broken.
-        StatusText = info.Enabled
-            ? $"{info.Name} enabled. Rescan to load it."
-            : $"{info.Name} disabled. Rescan to unload it.";
+        // The service copied the settings list at construction, so editing settings alone left it
+        // reading the old set and the switch did nothing until the app restarted. Enabling one runs
+        // third-party code, so it has to happen here rather than at the next start.
+        _extensions.SetDisabled(info.Id, disabled: !enabling);
+        await ScanAsync();
     }
 
     [RelayCommand]
@@ -141,7 +146,19 @@ public partial class ExtensionsViewModel : ObservableObject
     {
         Diagnostics.Clear();
 
-        var results = await _extensions.InvokeAsync(DeckForgeHooks.Diagnostics, _extensions);
+        IReadOnlyList<(string Id, object? Result)> results;
+        try
+        {
+            results = await _extensions.InvokeAsync(DeckForgeHooks.Diagnostics, _extensions);
+        }
+        catch (Exception ex)
+        {
+            // InvokeAsync contains its own per-extension failures, so reaching here means something
+            // outside an extension threw. Still contained: this is third-party code one call away.
+            StatusText = $"Could not read extension diagnostics: {ex.Message}";
+            return;
+        }
+
         foreach (var (_, result) in results)
         {
             foreach (var line in Describe(result))
@@ -155,19 +172,42 @@ public partial class ExtensionsViewModel : ObservableObject
     /// Turns whatever an extension returned into lines.
     /// </summary>
     /// <remarks>
-    /// The hook returns <c>object?</c> so an extension is not forced into a shape, which means
-    /// this has to guess. A string, a sequence of strings, and a record exposing
+    /// The hook returns <c>object?</c> so an extension is not forced into a shape, which means this
+    /// has to guess. A string, a sequence of strings, and a record exposing
     /// <c>IReadOnlyList&lt;string&gt;</c> are the three shapes that cover anything sensible; an
-    /// extension returning something else is skipped rather than guessed at, because a wrong guess
-    /// shown as diagnostics is worse than no diagnostics.
+    /// extension returning something else is shown via <c>ToString</c> rather than guessed at,
+    /// because a wrong guess shown as diagnostics is worse than no diagnostics.
+    /// <para>
+    /// Reading a property is itself third-party code - a getter can throw - so the reflection arm is
+    /// guarded. Unguarded, a throwing getter escaped as a <c>TargetInvocationException</c> and took
+    /// the page down, which is exactly what loading an extension is not supposed to be able to do.
+    /// </para>
     /// </remarks>
-    private static IEnumerable<string> Describe(object? result) => result switch
+    private static IEnumerable<string> Describe(object? result)
     {
-        null => [],
-        string text => [text],
-        IEnumerable<string> lines => lines,
-        _ => result.GetType().GetProperty("Lines")?.GetValue(result) is IEnumerable<string> lines
-            ? lines
-            : [result.ToString() ?? string.Empty],
-    };
+        switch (result)
+        {
+            case null:
+                return [];
+            case string text:
+                return [text];
+            case IEnumerable<string> lines:
+                return lines;
+        }
+
+        try
+        {
+            var property = result.GetType().GetProperty("Lines");
+            if (property?.GetValue(result) is IEnumerable<string> fromProperty)
+            {
+                return fromProperty;
+            }
+
+            return [result.ToString() ?? string.Empty];
+        }
+        catch (Exception ex)
+        {
+            return ["(could not read the diagnostics an extension returned: " + ex.Message + ")"];
+        }
+    }
 }

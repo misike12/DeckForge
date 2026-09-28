@@ -185,6 +185,61 @@ public sealed class ExtensionServiceTests
     }
 
     [Test]
+    public async Task Switching_an_extension_off_and_on_takes_effect_without_a_restart()
+    {
+        // The constructor copied the disabled list, so editing settings left the service reading the
+        // old set: every toggle did nothing until the app restarted, while the page claimed a rescan
+        // would load it.
+        var service = Service();
+        await service.LoadAsync(ThisAssembly);
+
+        service.SetDisabled(nameof(GoodExtension), disabled: true);
+        Assert.That(service.DisabledIds, Does.Contain(nameof(GoodExtension)));
+
+        service.SetDisabled(nameof(GoodExtension), disabled: false);
+        Assert.That(service.DisabledIds, Does.Not.Contain(nameof(GoodExtension)));
+
+        // And the whole set can be replaced, which is what loading settings at start-up does.
+        service.SetDisabled([nameof(GoodExtension)]);
+        Assert.That(service.DisabledIds, Does.Contain(nameof(GoodExtension)));
+
+        service.SetDisabled([]);
+        Assert.That(service.DisabledIds, Is.Empty);
+    }
+
+    [Test]
+    public async Task An_extension_is_not_listed_twice_when_both_scan_roots_are_the_same_folder()
+    {
+        // appDirectory and the user folder can be one path, and the same assembly was then added to
+        // the list twice - so the page showed a second row that never picked up a status change.
+        var service = Service();
+
+        var found = await service.ScanAsync(ExtensionService.UserExtensionDirectory);
+
+        var ids = found.Select(f => f.Id).ToList();
+        Assert.That(ids.Distinct().Count(), Is.EqualTo(ids.Count), string.Join(", ", ids));
+    }
+
+    [Test]
+    public async Task Loading_the_same_assembly_twice_does_not_duplicate_the_list()
+    {
+        var service = Service();
+
+        await service.LoadAsync(ThisAssembly);
+        var foundBefore = service.Found.Count;
+        var loadedBefore = service.Loaded.Count;
+        await service.LoadAsync(ThisAssembly);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(service.Found.Count, Is.EqualTo(foundBefore),
+                "A second load added a phantom row for an extension already listed.");
+            Assert.That(service.Loaded.Count, Is.EqualTo(loadedBefore),
+                "A second load registered a second instance of an already-loaded extension.");
+        });
+    }
+
+    [Test]
     public void The_user_extension_folder_is_the_documented_location()
     {
         Assert.Multiple(() =>

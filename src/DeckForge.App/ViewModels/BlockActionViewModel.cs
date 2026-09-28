@@ -136,14 +136,17 @@ public partial class BlockActionViewModel : ObservableObject
     {
         var ws = _workspaces.Current;
         HasWorkspace = ws is not null;
+
+        // Cleared even with no workspace open. The canvas belonged to the workspace that just
+        // closed, so leaving it on screen let the user save one workspace's blocks into another,
+        // or press Save with no workspace and read a confusing message.
+        Statements.Clear();
         if (ws is null)
         {
+            CompiledPreview = "Open a workspace to compose its blocks.";
             return;
         }
 
-        // The canvas has to start from what is already in the action, or a save is a one-way trip
-        // that silently discards every block the user cannot see.
-        Statements.Clear();
         foreach (var statement in ReadPersisted()?.Statements ?? [])
         {
             Statements.Add(statement);

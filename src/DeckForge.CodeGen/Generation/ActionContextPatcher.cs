@@ -199,9 +199,14 @@ public static class ActionContextPatcher
         var indent = LineIndent(source, initialize);
         var body = indent + (source.Contains("\n\t", StringComparison.Ordinal) ? "\t" : "    ");
 
-        // The hand-off goes first, before any of the integration's own work, so that a capability
+        // The hand-off goes first, before any the integration's own work, so that a capability
         // or action a host call depends on is already wired by the time it runs.
-        var handoff = string.Join(nl, new[]
+        //
+        // Built with plain newlines and converted once at the end. Joining with the file's newline
+        // and *then* replacing "\n" with it turns every already-correct "\r\n" into "\r\r\n", and a
+        // lone "\r" is itself a newline to the C# lexer - so that put a blank line between every
+        // line of the hand-off in every generated project, and it still compiled.
+        var lines = new[]
         {
             "foreach (var action in Actions)",
             "{",
@@ -210,10 +215,10 @@ public static class ActionContextPatcher
             "        aware.SetIntegrationContext(context);",
             "    }",
             "}",
-        }).Replace("\n", nl, StringComparison.Ordinal);
+        };
 
-        var indented = string.Join(nl, handoff.Split(nl).Select(l => l.Length == 0 ? l : body + l));
-        var insertion = string.Concat(nl, indented, nl, body);
+        var handoff = string.Join(nl, lines.Select(l => body + l));
+        var insertion = string.Concat(nl, handoff, nl, body);
         return new SourcePatch(PatchOutcome.Patched, source.Insert(open + 1, insertion), "hand-off injected into InitializeAsync");
     }
 
@@ -242,27 +247,22 @@ public static class ActionContextPatcher
         var arrow = member.IndexOf("=>", parenClose, StringComparison.Ordinal);
         if (arrow > 0)
         {
-            var semicolon = member.IndexOf(';', arrow);
-            if (semicolon < 0)
+            // The member text ends at the member's own semicolon, so the expression is everything
+            // between the arrow and that trailing one. It is a single expression and is emitted as a
+            // single statement: splitting it on `;` would tear a lambda with a block in half.
+            var expression = member[(arrow + 2)..].TrimEnd().TrimEnd(';').Trim();
+            if (expression.Length == 0)
             {
                 return null;
             }
-
-            var existing = member[(arrow + 2)..semicolon].Trim();
-            var statements = string.Join(
-                nl,
-                existing.Split(';', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => s.Trim())
-                    .Where(s => s.Length > 0)
-                    .Select(s => indent + level + s + ";")
-                    .Append(indent + level + "_integration = integration;"));
 
             return string.Concat(
                 member[..parenOpen],
                 parameters,
                 nl,
                 indent, "{",
-                nl, statements,
+                nl, indent, level, expression, ";",
+                nl, indent, level, "_integration = integration;",
                 nl, indent, "}");
         }
 
@@ -310,18 +310,119 @@ public static class ActionContextPatcher
         return sb.ToString();
     }
 
-    /// <summary>The index just past the member starting at <paramref name="from"/>.</summary>
+    /// <summary>
+    /// The index just past the member starting at <paramref name="from"/>.
+    /// </summary>
+    /// <remarks>
+    /// This has to find the member's own terminating semicolon, not the first one after it. An
+    /// expression-bodied constructor can contain a semicolon of its own - a lambda with a block, a
+    /// <c>for</c>, an inline statement - and taking the first one cut the member in half and
+    /// produced a file that did not parse, while reporting success. Brackets, string literals and
+    /// comments are all skipped so a brace or semicolon inside any of them cannot end the scan.
+    /// </remarks>
     private static int EndOfMember(string source, int from)
     {
-        var brace = source.IndexOf('{', from);
-        var semicolon = source.IndexOf(';', from);
-        if (brace >= 0 && (semicolon < 0 || brace < semicolon))
+        var parenOpen = source.IndexOf('(', from);
+        if (parenOpen < 0)
         {
-            var close = MatchingBracket(source, brace);
-            return close < 0 ? -1 : close + 1;
+            return -1;
         }
 
-        return semicolon < 0 ? -1 : semicolon + 1;
+        var afterParams = MatchingBracket(source, parenOpen);
+        if (afterParams < 0)
+        {
+            return -1;
+        }
+
+        var depth = 0;
+        for (var i = afterParams + 1; i < source.Length; i++)
+        {
+            var c = source[i];
+
+            if (c is '"' or '\'')
+            {
+                i = EndOfLiteral(source, i);
+                if (i < 0)
+                {
+                    return -1;
+                }
+
+                continue;
+            }
+
+            if (c is '/' && i + 1 < source.Length)
+            {
+                if (source[i + 1] == '/')
+                {
+                    while (i < source.Length && source[i] != '\n')
+                    {
+                        i++;
+                    }
+
+                    continue;
+                }
+
+                if (source[i + 1] == '*')
+                {
+                    var close = source.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                    if (close < 0)
+                    {
+                        return -1;
+                    }
+
+                    i = close + 1;
+                    continue;
+                }
+            }
+
+            if (c is '(' or '[' or '{')
+            {
+                depth++;
+            }
+            else if (c is ')' or ']')
+            {
+                if (--depth < 0)
+                {
+                    return -1;
+                }
+            }
+            else if (c == '}')
+            {
+                if (depth == 0)
+                {
+                    return -1;
+                }
+
+                depth--;
+            }
+            else if (c == ';' && depth == 0)
+            {
+                return i + 1;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>The index of the closing quote of the literal starting at <paramref name="start"/>.</summary>
+    private static int EndOfLiteral(string source, int start)
+    {
+        var quote = source[start];
+        for (var i = start + 1; i < source.Length; i++)
+        {
+            if (source[i] == '\\')
+            {
+                i++;
+                continue;
+            }
+
+            if (source[i] == quote)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static int MatchingBracket(string source, int open)

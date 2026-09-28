@@ -162,6 +162,87 @@ public class IntegrationContextWiringTests
     }
 
     [Test]
+    public void An_executor_constructor_whose_expression_contains_a_semicolon_is_not_cut_in_half()
+    {
+        // The member scan used to stop at the first `;` after the constructor, so a lambda with a
+        // block in the expression body truncated the member - and the patch reported success while
+        // writing a file that does not parse.
+        var source = string.Join(
+            "\n",
+            "namespace Wiring;",
+            "",
+            "using MacroDeck.Sdk;",
+            "using Serilog;",
+            "",
+            "public sealed class Thing : IActionDefinition",
+            "{",
+            "    private readonly ILogger _logger;",
+            "",
+            "    public Thing(ILogger logger) => _logger = logger;",
+            "",
+            "    public IActionExecutor CreateExecutor() => new Executor(_logger);",
+            "",
+            "    private sealed class Executor : IActionExecutor",
+            "    {",
+            "        private readonly ILogger _logger;",
+            "",
+            "        public Executor(ILogger logger) => Register(() => { _logger = logger; });",
+            "    }",
+            "}",
+            "");
+
+        var patch = ActionContextPatcher.PatchAction(source);
+        Assert.That(patch.Outcome, Is.EqualTo(PatchOutcome.Patched), patch.Message);
+
+        // Balanced braces and no orphaned statement: the file has to be parseable C#.
+        var open = patch.Content.Count(c => c == '{');
+        var close = patch.Content.Count(c => c == '}');
+        Assert.Multiple(() =>
+        {
+            Assert.That(open, Is.EqualTo(close), "The rewritten file has unbalanced braces.");
+            Assert.That(patch.Content, Does.Contain("Register(() => { _logger = logger; });"),
+                "The original expression body was truncated.");
+            Assert.That(patch.Content, Does.Contain("_integration = integration;"));
+        });
+    }
+
+    [Test]
+    public void A_brace_or_semicolon_inside_a_string_does_not_end_the_member_scan()
+    {
+        // A semicolon or brace in a string literal is not code, and treating it as such truncated
+        // the member - or ended the scan early and dropped the rest of the constructor.
+        var source = string.Join(
+            "\n",
+            "namespace Wiring;",
+            "",
+            "using MacroDeck.Sdk;",
+            "using Serilog;",
+            "",
+            "public sealed class Thing : IActionDefinition",
+            "{",
+            "    private readonly ILogger _logger;",
+            "",
+            "    public Thing(ILogger logger) => _logger = logger;",
+            "",
+            "    public IActionExecutor CreateExecutor() => new Executor(_logger);",
+            "",
+            "    private sealed class Executor : IActionExecutor",
+            "    {",
+            "        private readonly ILogger _logger;",
+            "",
+            "        public Executor(ILogger logger) => Register(\"a; b {{ c\");",
+            "    }",
+            "}",
+            "");
+
+        var patch = ActionContextPatcher.PatchAction(source);
+
+        Assert.That(patch.Outcome, Is.EqualTo(PatchOutcome.Patched), patch.Message);
+        Assert.That(patch.Content, Does.Contain("Register(\"a; b {{ c\")"),
+            "The string literal was cut at its semicolon.");
+    }
+
+    [Test]
     public void A_generated_action_forwards_the_context_into_its_executor()
     {
         // The same defect existed in the action generator, which is what a user's own actions are

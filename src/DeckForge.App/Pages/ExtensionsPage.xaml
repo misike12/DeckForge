@@ -68,7 +68,7 @@
                                     </StackPanel>
                                     <ui:Button Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top"
                                                Content="{Binding ToggleLabel}"
-                                               Command="{Binding DataContext.SetEnabledCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                               Command="{Binding DataContext.SetEnabledAsyncCommand, RelativeSource={RelativeSource AncestorType=Page}}"
                                                CommandParameter="{Binding}" />
                                 </Grid>
                             </DataTemplate>

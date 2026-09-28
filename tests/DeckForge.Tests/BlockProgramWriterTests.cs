@@ -199,6 +199,212 @@ public sealed class BlockProgramWriterTests
     }
 
     [Test]
+    public void Saving_the_same_canvas_repeatedly_produces_the_same_file()
+    {
+        // Replacing a region used to keep the whitespace in front of the begin marker and indent the
+        // replacement on top of it, so the first line of the region gained a level on every save.
+        // Unbounded, and invisible until someone opened the file.
+        var program = new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new LogBlock { Template = "hello" }],
+        };
+
+        var first = BlockProgramWriter.Write(ReadAction(), program);
+        Assert.That(first.Success, Is.True, first.Message);
+
+        var second = BlockProgramWriter.Write(first.Content, program);
+        var third = BlockProgramWriter.Write(second.Content, program);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(second.Content, Is.EqualTo(first.Content), "A second save changed the file.");
+            Assert.That(third.Content, Is.EqualTo(first.Content), "A third save changed the file again.");
+        });
+    }
+
+    [Test]
+    public void The_region_keeps_the_indentation_of_the_method_it_goes_into()
+    {
+        var first = BlockProgramWriter.Write(ReadAction(), new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new LogBlock { Template = "hello" }],
+        });
+
+        // The stock example action is tab-indented, so the region has to be too. One level, in one
+        // style - not a tab and four spaces on the same line.
+        var lines = first.Content.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var markerLine = lines.First(l => l.TrimStart().StartsWith(BlockCompiler.BeginMarker, StringComparison.Ordinal));
+        var bodyLine = lines[Array.IndexOf(lines, markerLine) + 1];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(markerLine, Does.StartWith("\t"), $"marker was [{markerLine.Replace("\t", "<TAB>")}]");
+            Assert.That(bodyLine, Does.StartWith("\t"), $"body was [{bodyLine.Replace("\t", "<TAB>")}]");
+        });
+    }
+
+    [Test]
+    public void A_name_the_region_relies_on_cannot_be_shadowed_by_a_canvas_variable()
+    {
+        // The region reads `context`, `_logger` and `_integration`. A canvas variable called
+        // `_integration` declares a local that shadows the field, so the null guard the compiler
+        // emits is permanently false and every host call underneath it throws.
+        var before = ReadAction();
+
+        foreach (var reserved in BlockCompiler.ReservedNames)
+        {
+            var result = BlockProgramWriter.Write(before, new BlockProgram
+            {
+                TargetActionId = "log-message",
+                Statements =
+                [
+                    new SetVariableBlock { VariableName = reserved, Literal = "", Type = "string" },
+                    new NotifyBlock { Title = "Done", Message = "x" },
+                ],
+            });
+
+            Assert.That(result.Success, Is.False, $"shadowing {reserved} was accepted");
+            Assert.That(result.Message, Does.Contain(reserved));
+        }
+    }
+
+    [Test]
+    public void Two_blocks_wanting_the_same_variable_name_are_refused_rather_than_one_being_renamed()
+    {
+        // The compiler renames the second declaration, but an `If` refers to the variable by name,
+        // so the conditional would keep reading the first one and test the wrong value.
+        var result = BlockProgramWriter.Write(ReadAction(), new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements =
+            [
+                new HttpRequestBlock { Url = "https://example.com", IntoVariable = "payload" },
+                new SetVariableBlock { VariableName = "payload", Literal = "", Type = "string" },
+                new IfBlock { LeftVariable = "payload", Operator = "isEmpty", Then = [new LogBlock { Template = "x" }] },
+            ],
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Message, Does.Contain("payload"));
+        });
+    }
+
+    [Test]
+    public void A_declaration_inside_an_if_branch_is_checked_too()
+    {
+        // A branch is a nested scope, so a declaration there shadows the enclosing local, which is
+        // CS0136 rather than CS0128 and just as uncompilable. Not reachable from the flat canvas UI,
+        // so only an imported or hand-edited canvas can produce it.
+        var result = BlockProgramWriter.Write(ReadAction(), new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements =
+            [
+                new IfBlock
+                {
+                    LeftVariable = "message",
+                    Operator = "isNotEmpty",
+                    Then = [new SetVariableBlock { VariableName = "message", Literal = "", Type = "string" }],
+                },
+            ],
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Message, Does.Contain("message"));
+        });
+    }
+
+    [Test]
+    public void A_canvas_variable_may_shadow_a_class_member()
+    {
+        // The stock action has `public string Id`. A local is free to shadow a member, so refusing
+        // this would be a false positive - and the earlier whole-file scan refused it.
+        var result = BlockProgramWriter.Write(ReadAction(), new BlockProgram
+        {
+            TargetActionId = "log-message",
+            Statements = [new SetVariableBlock { VariableName = "Id", Literal = "x", Type = "string" }],
+        });
+
+        Assert.That(result.Success, Is.True, result.Message);
+    }
+
+    [Test]
+    public void Every_name_in_the_executor_is_reserved_not_just_the_first_of_each_list()
+    {
+        // The earlier pattern needed a `(` right before the type, so a second executor parameter was
+        // missed and its name became a CS0128 in the user's plugin.
+        var source = string.Join(
+            "\n",
+            "namespace Blocks;",
+            "",
+            "using System.Threading.Tasks;",
+            "",
+            "public sealed class Thing",
+            "{",
+            "    public Task<int> " + BlockProgramWriter.ExecutorAnchor + ", string extra, int more)",
+            "    {",
+            "        var first = context;",
+            "        string? second = null;",
+            "        double? third = null;",
+            "        return Task.FromResult(1);",
+            "    }",
+            "}",
+            "");
+
+        var names = BlockProgramWriter.DeclaredNamesIn(source);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(names, Does.Contain("context"), "The executor's own parameter was not captured.");
+            Assert.That(names, Does.Contain("extra"), "Only the first parameter was captured.");
+            Assert.That(names, Does.Contain("more"), "Only the first parameter was captured.");
+            Assert.That(names, Does.Contain("first"));
+            Assert.That(names, Does.Contain("second"), "A nullable local was not captured.");
+            Assert.That(names, Does.Contain("third"), "A nullable local was not captured.");
+        });
+    }
+
+    [Test]
+    public void A_calls_argument_names_are_not_treated_as_in_scope()
+    {
+        // `Helper(int a, int b)` puts a and b in the callee's scope, not the caller's. Reserving them
+        // refused saves the user could legitimately make.
+        var source = string.Join(
+            "\n",
+            "namespace Blocks;",
+            "",
+            "using System.Threading.Tasks;",
+            "",
+            "public sealed class Thing",
+            "{",
+            "    public Task<int> " + BlockProgramWriter.ExecutorAnchor + ")",
+            "    {",
+            "        Helper(alpha, beta);",
+            "        return Task.FromResult(1);",
+            "    }",
+            "",
+            "    private void Helper(int a, int b) { }",
+            "}",
+            "");
+
+        var names = BlockProgramWriter.DeclaredNamesIn(source);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(names, Does.Contain("context"));
+            Assert.That(names, Does.Not.Contain("Task"), "A type name leaked in from a call.");
+            Assert.That(names, Does.Not.Contain("a"));
+            Assert.That(names, Does.Not.Contain("b"));
+        });
+    }
+
+    [Test]
     public void A_variable_that_collides_with_the_hosts_own_local_is_refused_rather_than_renamed()
     {
         // The stock example action declares `var message`. Renaming the canvas's declaration would

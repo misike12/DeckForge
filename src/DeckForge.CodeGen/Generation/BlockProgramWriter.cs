@@ -93,35 +93,123 @@ public static class BlockProgramWriter
     }
 
     /// <summary>
-    /// The identifiers declared in the executor's own body, which the region will share a scope
-    /// with.
+    /// The identifiers the region will share a scope with: the executor's parameters and locals.
     /// </summary>
     /// <remarks>
-    /// Read from the executor's parameters, locals and <c>var</c> declarations, and from the
-    /// parameters of the enclosing methods, because a block's local shadows nothing but does
-    /// collide with any of them. Deliberately generous: a false positive costs the user a rename,
-    /// a false negative costs them a CS0128 in their plugin.
+    /// <para>
+    /// Scoped to the executor's body, deliberately. Reading the whole file made the check refuse
+    /// legal saves - a canvas variable named <c>Id</c> collided with the class's <c>Id</c> property,
+    /// which a local is free to shadow - and inconsistently, since a member whose type was not in
+    /// the keyword list was not caught at all.
+    /// </para>
+    /// <para>
+    /// Generous inside the method, because there the cost is asymmetric: a false positive costs the
+    /// user a rename, a false negative costs them a CS0128 in their plugin.
+    /// </para>
     /// </remarks>
     public static IReadOnlyCollection<string> DeclaredNamesIn(string actionSource)
     {
+        var method = ExecutorMethod(actionSource);
+        if (method is null)
+        {
+            return [];
+        }
+
+        var parameterList = ExecutorParameterList(actionSource);
         var names = new HashSet<string>(StringComparer.Ordinal);
 
+        // `var message`, `string? message`, `double? count` and so on, including a nullable
+        // annotation, which the first version's keyword list missed.
         foreach (Match match in Regex.Matches(
-            actionSource,
-            @"\b(?:var|string|int|bool|double|float|long|decimal|object)\s+([A-Za-z_][A-Za-z0-9_]*)",
+            method,
+            @"\b(?:var|string|int|long|bool|double|float|decimal|object)\s*\??\s+([A-Za-z_][A-Za-z0-9_]*)",
             RegexOptions.Compiled))
         {
             names.Add(match.Groups[1].Value);
         }
 
+        // The method's own parameters - the one list whose names are genuinely in scope here. A
+        // call's arguments are not: `Helper(int a, int b)` puts `a` and `b` in the callee's scope,
+        // not the caller's, and reserving them refused saves the user could have made. The earlier
+        // pattern also only ever captured the first entry of any list.
         foreach (Match match in Regex.Matches(
-            actionSource,
-            @"\(\s*([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)",
+            parameterList,
+            @"(?:^|[(,;])\s*(?:ref |out |in |params )*[A-Za-z_][A-Za-z0-9_.<>\[\]?]*\s+([A-Za-z_][A-Za-z0-9_]*)",
             RegexOptions.Compiled))
         {
-            names.Add(match.Groups[2].Value);
+            names.Add(match.Groups[1].Value);
         }
 
         return names;
+    }
+
+    /// <summary>
+    /// The executor's own parameter list, or empty when the signature could not be read.
+    /// </summary>
+    private static string ExecutorParameterList(string actionSource)
+    {
+        var start = actionSource.IndexOf(ExecutorAnchor, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return "";
+        }
+
+        var open = actionSource.IndexOf('(', start);
+        if (open < 0)
+        {
+            return "";
+        }
+
+        var depth = 0;
+        for (var i = open; i < actionSource.Length; i++)
+        {
+            if (actionSource[i] == '(')
+            {
+                depth++;
+            }
+            else if (actionSource[i] == ')' && --depth == 0)
+            {
+                return actionSource[(open + 1)..i];
+            }
+        }
+
+        return "";
+    }
+
+    /// <summary>
+    /// The executor method, signature and body, or null when it could not be located.
+    /// </summary>
+    /// <remarks>
+    /// The signature is included because the region's locals live in the method's scope, where its
+    /// parameters are visible too. A region that declared one of those names would be a CS0128.
+    /// </remarks>
+    private static string? ExecutorMethod(string actionSource)
+    {
+        var start = actionSource.IndexOf(ExecutorAnchor, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        var open = actionSource.IndexOf('{', start);
+        if (open < 0)
+        {
+            return null;
+        }
+
+        var depth = 0;
+        for (var i = open; i < actionSource.Length; i++)
+        {
+            if (actionSource[i] == '{')
+            {
+                depth++;
+            }
+            else if (actionSource[i] == '}' && --depth == 0)
+            {
+                return actionSource[start..i];
+            }
+        }
+
+        return null;
     }
 }

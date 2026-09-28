@@ -289,11 +289,17 @@ public static class MacroDeckTemplateFactory
     /// <summary>
     /// The full text of every template, so a test can find which tokens are reachable.
     /// </summary>
+    /// <remarks>
+    /// Every template that declares a token has to be listed here, including
+    /// <see cref="IntegrationContextAwareCs"/>. It is the whole point of the property: a template
+    /// left out is invisible to the test that asserts no token is dead and to the test that asserts
+    /// no template reaches past the token table.
+    /// </remarks>
     public static string AllTemplates { get; } = string.Join(
         "\n",
         TokenVocabulary, AgentsMd, ClaudeMd, DirectoryBuildProps, NuGetConfig, GitIgnore,
         PluginCsproj, ProgramCs, PluginIntegrationCs, LogMessageActionCs, LaunchSettings, TestCsproj,
-        IntegrationTestsCs, LanguageResx);
+        IntegrationTestsCs, LanguageResx, IntegrationContextAwareCs);
 
     // ---------- solution & shared props ----------
 

@@ -108,15 +108,39 @@ public static partial class BlockCompiler
     };
 
     /// <summary>
-    /// The block-local names a program declares that already exist in the method it will be
-    /// spliced into.
+    /// The names in scope inside the generated region that a block must not redeclare, and the
+    /// names a block declares.
+    /// </summary>
+    /// <remarks>
+    /// These are the three the class documents as always in scope. A block local that shadows
+    /// <c>_integration</c> is worse than a collision: the guard the compiler emits tests
+    /// <c>_integration is null</c>, so a local of that name makes the guard permanently false and
+    /// every host call underneath it throws.
+    /// </remarks>
+    public static IReadOnlyCollection<string> ReservedNames { get; } =
+        ["context", "_logger", "_integration"];
+
+    /// <summary>The local a statement declares, or null when it declares none.</summary>
+    private static string? DeclaredLocal(BlockStatement statement) => statement switch
+    {
+        SetVariableBlock set => set.VariableName,
+        HttpRequestBlock http => http.IntoVariable,
+        ReadVariableBlock read => read.IntoVariable,
+        _ => null,
+    };
+
+    /// <summary>
+    /// The names a program would declare that it must not: either they are already taken in the
+    /// method the region goes into, or two blocks want the same one.
     /// </summary>
     /// <param name="program">The canvas to check.</param>
     /// <param name="reservedNames">
-    /// Identifiers already declared in the target method's body.
+    /// Identifiers already in scope where the region will be spliced. <see cref="ReservedNames"/>
+    /// is always included.
     /// </param>
     /// <returns>
-    /// The colliding names, in the order the canvas declares them.
+    /// The offending names, in the order the canvas declares them. A name is listed once even when
+    /// it collides with several things, because the user has one decision to make about it.
     /// </returns>
     /// <remarks>
     /// <para>
@@ -126,43 +150,97 @@ public static partial class BlockCompiler
     /// That is a CS0128 in the user's plugin.
     /// </para>
     /// <para>
-    /// The compiler could rename the declaration, and it already does that for two blocks in the
-    /// same canvas. Renaming across the boundary is not safe: an <c>If</c> refers to the variable by
-    /// name, so a declaration renamed to <c>message1</c> leaves every reference still reading
-    /// <c>message</c> - which resolves to the host's local, and the conditional silently tests the
-    /// wrong value. A wrong answer is worse than a refused save, so this reports instead.
+    /// The compiler could rename the declaration, and it does for two blocks in the same canvas.
+    /// Renaming here is not safe: an <c>If</c> refers to its variable by name, so a declaration
+    /// renamed to <c>message1</c> leaves every reference still reading <c>message</c> - which
+    /// resolves to the host's local, and the conditional silently tests the wrong value. Two blocks
+    /// wanting the same name have the same problem, for the same reason. A wrong answer is worse
+    /// than a refused save, so this reports instead.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<string> LocalNameConflicts(
         BlockProgram program,
-        IEnumerable<string> reservedNames)
+        IEnumerable<string>? reservedNames = null)
     {
-        var reserved = new HashSet<string>(reservedNames, StringComparer.Ordinal);
-        if (reserved.Count == 0)
+        var reserved = new HashSet<string>(ReservedNames, StringComparer.Ordinal);
+        foreach (var name in reservedNames ?? [])
         {
-            return [];
+            reserved.Add(name);
         }
 
-        var declared = new HashSet<string>(StringComparer.Ordinal);
         var conflicts = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var statement in program.Statements)
         {
-            if (statement is not SetVariableBlock set)
+            foreach (var declared in DeclaredNames(statement))
             {
-                continue;
-            }
+                // Already reported: the user has one decision to make about a name, not several.
+                if (!seen.Add(declared))
+                {
+                    continue;
+                }
 
-            var name = CSharpCode.Identifier(set.VariableName);
-            if (name.Length == 0 || !reserved.Contains(name) || !declared.Add(name))
-            {
-                continue;
+                if (reserved.Contains(declared) || ReusedLater(program, declared))
+                {
+                    conflicts.Add(declared);
+                }
             }
-
-            conflicts.Add(name);
         }
 
         return conflicts;
+    }
+
+    /// <summary>Every local name a statement declares, including inside its branches.</summary>
+    private static IEnumerable<string> DeclaredNames(BlockStatement statement)
+    {
+        if (DeclaredLocal(statement) is { Length: > 0 } name)
+        {
+            var identifier = CSharpCode.Identifier(name);
+            if (identifier.Length > 0)
+            {
+                yield return identifier;
+            }
+        }
+
+        if (statement is IfBlock branch)
+        {
+            // A branch is a nested scope, so a declaration there shadows an enclosing local - which
+            // is CS0136 rather than CS0128, and just as uncompilable.
+            foreach (var nestedThen in branch.Then)
+            {
+                foreach (var declaredThen in DeclaredNames(nestedThen))
+                {
+                    yield return declaredThen;
+                }
+            }
+
+            foreach (var nestedElse in branch.Else)
+            {
+                foreach (var declaredElse in DeclaredNames(nestedElse))
+                {
+                    yield return declaredElse;
+                }
+            }
+        }
+    }
+
+    /// <summary>True when more than one block in the program wants <paramref name="name"/>.</summary>
+    private static bool ReusedLater(BlockProgram program, string name)
+    {
+        var count = 0;
+        foreach (var statement in program.Statements)
+        {
+            foreach (var declared in DeclaredNames(statement))
+            {
+                if (declared == name && ++count > 1)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Compiles the whole program, markers included.</summary>
@@ -252,19 +330,24 @@ public static partial class BlockCompiler
     public static string? Splice(string source, string compiled, string anchor, int indent = 8)
     {
         var tabbed = source.Contains("\n\t", StringComparison.Ordinal);
-        string Apply(string text) => tabbed
-            ? string.Join('\n', text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Select(l => l.Length == 0 ? l : "\t" + l))
-            : CSharpCode.Indent(text, indent);
-        var join = source.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var nl = source.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+
+        // One indent level, in the file's own style, applied to every line including the first.
+        string Apply(string text) => Reindent(text, tabbed ? "\t" : new string(' ', indent), nl);
 
         var begin = source.IndexOf(BeginMarker, StringComparison.Ordinal);
         var end = source.IndexOf(EndMarker, StringComparison.Ordinal);
         if (begin >= 0 && end > begin)
         {
-            var replacement = Apply(compiled);
+            // Replacing an existing region has to consume the whitespace in front of the marker as
+            // well. Leaving it there and then indenting the replacement on top of it grew the first
+            // line of the region by one level on every save, without bound - save twice and the
+            // file was no longer the file the first save produced.
+            var lineStart = LineStartOf(source, begin);
+            var replacement = Apply(compiled).TrimEnd();
             return string.Concat(
-                source.AsSpan(0, begin),
-                replacement.TrimEnd(),
+                source.AsSpan(0, lineStart),
+                replacement,
                 source.AsSpan(end + EndMarker.Length));
         }
 
@@ -281,9 +364,51 @@ public static partial class BlockCompiler
         }
 
         // The closing line has to line up with the method signature, in the file's own style.
-        var closingIndent = IntegrationPatcher.IndentOf(source, anchorIndex) + (tabbed ? "\t" : new string(' ', indent));
-        var insertion = join + Apply(compiled) + join + closingIndent;
+        var closingIndent = LineIndentOf(source, anchorIndex) + (tabbed ? "\t" : new string(' ', indent));
+        var insertion = nl + Apply(compiled) + nl + closingIndent;
         return source.Insert(brace + 1, insertion);
+    }
+
+    /// <summary>The index of the first character of the line containing <paramref name="index"/>.</summary>
+    private static int LineStartOf(string source, int index) =>
+        source.LastIndexOf('\n', Math.Clamp(index, 0, Math.Max(source.Length - 1, 0))) + 1;
+
+    /// <summary>
+    /// The leading whitespace of the line containing <paramref name="index"/>.
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="IntegrationPatcher.IndentOf"/>: that searches backwards to the previous
+    /// newline and includes it, so for an index sitting at a line start it describes the line
+    /// before, and reports no indentation at all.
+    /// </remarks>
+    private static string LineIndentOf(string source, int index)
+    {
+        var start = LineStartOf(source, index);
+        var end = start;
+        while (end < source.Length && source[end] is ' ' or '\t')
+        {
+            end++;
+        }
+
+        return source[start..end];
+    }
+
+    /// <summary>
+    /// Puts <paramref name="prefix"/> in front of every line, and normalises the line endings to
+    /// <paramref name="nl"/> at the same time.
+    /// </summary>
+    private static string Reindent(string text, string prefix, string nl)
+    {
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].Length > 0)
+            {
+                lines[i] = prefix + lines[i];
+            }
+        }
+
+        return string.Join(nl, lines);
     }
 
     /// <summary>
