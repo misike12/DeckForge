@@ -64,9 +64,14 @@
                 <StackPanel>
                     <TextBlock Text="Where new plugin projects are created"
                                FontSize="13" FontWeight="Medium" />
-                    <TextBlock Text="The New Plugin wizard opens here instead of Documents. The wizard
-                                   also offers a 'remember this folder' checkbox per project."
-                               FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
+                    <!--
+                        One line, and the alignment pinned. The text was wrapped across two source
+                        lines, and the break inside the attribute left a gap mid-sentence on screen -
+                        the sentence read "The wizard          also offers". Breaking the source string
+                        is not a way to wrap it; the TextBlock does that.
+                    -->
+                    <TextBlock Text="The New Plugin wizard opens here instead of Documents. The wizard also offers a 'remember this folder' checkbox per project."
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,4,0,8"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -112,18 +117,14 @@
             <Border Style="{StaticResource LiquidCard}">
                 <StackPanel>
                     <TextBlock Text="macrodeck-plugin version" FontSize="13" FontWeight="Medium" />
-                    <TextBlock Text="DeckForge calls this tool to validate, pack, sign and test
-                                   plugins. Leave empty to target the version this build was made
-                                   for. A mismatched CLI fails on options the tool does not know,
-                                   which reads like a DeckForge bug rather than a version skew."
+                    <TextBlock Text="DeckForge calls this tool to validate, pack, sign and test plugins. Leave empty to target the version this build was made for. A mismatched CLI fails on options the tool does not know, which reads like a DeckForge bug rather than a version skew."
                                FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                     <ui:TextBox Text="{Binding MacroDeckCliVersion, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                 PlaceholderText="3.0.0-beta.14 (built-in default)" />
 
                     <TextBlock Text="GitHub account" FontSize="13" FontWeight="Medium" Margin="0,16,0,4" />
-                    <TextBlock Text="Used as the owner when the Publish page creates a release, so gh
-                                   does not guess from a git remote a plugin folder often does not have."
+                    <TextBlock Text="Used as the owner when the Publish page creates a release, so gh does not guess from a git remote a plugin folder often does not have."
                                FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                     <Grid>
@@ -150,8 +151,7 @@
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
 
                     <TextBlock Text="Update source" FontSize="13" FontWeight="Medium" />
-                    <TextBlock Text="A Velopack releases URL or a local https folder. Empty disables
-                                   the check entirely."
+                    <TextBlock Text="A Velopack releases URL or a local https folder. Empty disables the check entirely."
                                FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,8"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                     <ui:TextBox Text="{Binding VelopackUpdateUrl, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
@@ -162,8 +162,7 @@
                     </StackPanel>
                     <TextBlock Text="{Binding UpdateStatus}" FontSize="12" TextWrapping="Wrap"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" Margin="0,8,0,0" />
-                    <TextBlock Text="An update applies at the next restart. A dev run (dotnet run) is
-                                   never updated in place."
+                    <TextBlock Text="An update applies at the next restart. A dev run (dotnet run) is never updated in place."
                                FontSize="11.5" TextWrapping="Wrap" Margin="0,8,0,0"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
                 </StackPanel>

@@ -30,50 +30,79 @@
             </Grid>
         </StackPanel>
 
-        <Grid Grid.Row="1">
+        <!--
+            HorizontalContentAlignment="Stretch" is what makes the star columns below work inside a
+            ScrollViewer. Without it the viewer offers its content infinite width, so a star column
+            expands until it fills that and the other four are pushed off the right instead of beside
+            it; with it, the row is given the viewport when the five fit and its own width when they
+            do not, so the bar only appears when there is genuinely somewhere to scroll to.
+        -->
+        <ScrollViewer Grid.Row="1"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch">
+            <Grid>
             <!--
-                Five columns, all proportional with a MinWidth.
+                Five proportional columns with a MinWidth.
 
                 These were five fixed widths totalling 1080px plus the 80px page margin, so anything
                 under a 1200px window pushed the right-hand preview and the Generate button off the
-                right edge with no way to scroll to them. Proportional columns shrink toward their
-                MinWidth first, and every column below wraps or scrolls internally.
+                right edge with no way to scroll to them. For a designer, losing the last column means
+                losing the thing being designed, so the row scrolls below the width the five need.
             -->
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="0.85*" MinWidth="190" />
-                <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="1*" MinWidth="220" />
-                <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="1.05*" MinWidth="230" />
-                <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="1.05*" MinWidth="240" />
-                <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="0.95*" MinWidth="210" />
+                <ColumnDefinition Width="0.8*" MinWidth="160" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="0.9*" MinWidth="180" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="0.95*" MinWidth="190" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="0.95*" MinWidth="195" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="0.9*" MinWidth="170" />
             </Grid.ColumnDefinitions>
 
             <!-- Palette + identity -->
             <Border Grid.Column="0" Style="{StaticResource LiquidCard}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <TextBlock Text="Widget type" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <TextBlock Text="Type id (kebab)" FontSize="11.5" />
-                        <ui:TextBox Text="{Binding WidgetTypeId, Mode=TwoWay}" />
-                        <TextBlock Text="Name" FontSize="11.5" Margin="0,8,0,0" />
-                        <ui:TextBox Text="{Binding WidgetName, Mode=TwoWay}" />
-                        <TextBlock Text="Unit (default data)" FontSize="11.5" Margin="0,8,0,0" />
-                        <ui:TextBox Text="{Binding Unit, Mode=TwoWay}" />
-                        <CheckBox Content="Has configuration" IsChecked="{Binding HasConfiguration}" Margin="0,8,0,0" />
-                        <CheckBox Content="Supports flows" IsChecked="{Binding SupportsFlows}" Margin="0,4,0,0" />
-                        <Separator Margin="0,12" />
-                        <TextBlock Text="Add node" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
-                        <ItemsControl x:Name="PaletteList">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                    </StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <!--
+                        A Grid, not a StackPanel, as the scroll content. A vertical StackPanel measures
+                        its children with infinite width, so the palette's WrapPanel never wrapped - it
+                        reported a single row a couple of thousand pixels wide, which set the width of
+                        the whole page row and squeezed the other four columns off the screen. A Grid
+                        constrains its column to the viewport, so the WrapPanel wraps.
+                    -->
+                    <Grid>
+                        <StackPanel>
+                            <TextBlock Text="Widget type" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <TextBlock Text="Type id (kebab)" FontSize="11.5" />
+                            <ui:TextBox Text="{Binding WidgetTypeId, Mode=TwoWay}" />
+                            <TextBlock Text="Name" FontSize="11.5" Margin="0,8,0,0" />
+                            <ui:TextBox Text="{Binding WidgetName, Mode=TwoWay}" />
+                            <TextBlock Text="Unit (default data)" FontSize="11.5" Margin="0,8,0,0" />
+                            <ui:TextBox Text="{Binding Unit, Mode=TwoWay}" />
+                            <CheckBox Content="Has configuration" IsChecked="{Binding HasConfiguration}" Margin="0,8,0,0" />
+                            <CheckBox Content="Supports flows" IsChecked="{Binding SupportsFlows}" Margin="0,4,0,0" />
+                            <Separator Margin="0,12" />
+                            <TextBlock Text="Add node" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <!--
+                                MaxWidth is what makes the palette wrap. The ItemsControl sits in a
+                                row that scrolls horizontally, so it is offered infinite width; a
+                                WrapPanel given infinite width lays every node out in one row, and that
+                                row then set the width of the whole page - which is how twenty-four node
+                                buttons pushed the other four columns off the screen. Bounded, it wraps
+                                and the row's width comes from the columns again.
+                            -->
+                            <ItemsControl x:Name="PaletteList" MaxWidth="240">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
                 </ScrollViewer>
             </Border>
 
@@ -289,6 +318,7 @@
                             </Border>
                             <TextBlock Grid.Row="1" TextWrapping="Wrap" TextAlignment="Center"
                                        FontSize="11" Margin="0,10,0,0"
+                                       HorizontalAlignment="Left"
                                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
                                        Text="The rendered widget appears here after you add nodes." />
                         </Grid>
@@ -297,7 +327,8 @@
                 <ui:Button Grid.Row="2" Content="Generate widget provider" Appearance="Primary"
                            Margin="0,10,0,0" HorizontalAlignment="Stretch"
                            Command="{Binding GenerateCommand}" />
+                </Grid>
             </Grid>
-        </Grid>
+        </ScrollViewer>
     </Grid>
 </Page>

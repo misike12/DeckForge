@@ -12,15 +12,24 @@
         </Grid.RowDefinitions>
 
         <!-- Toolbar -->
+        <!--
+            Two rows: the address on the first, the six toolbar buttons on the second.
+
+            They were one row of eight auto-width columns, so the address box was a star column
+            competing with six fixed buttons. On a 1100px window the buttons took the space and the
+            address box was squeezed to the width of a few characters - you could not read the page
+            you were on, let alone type a new one. Wrapping the buttons onto their own row costs one
+            line of height and keeps the address readable at any width.
+        -->
         <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Text="Docs" FontSize="26" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,16,0" />
@@ -30,18 +39,21 @@
                           ToolTip="Read the versioned snapshot stored inside the app (works fully offline)" />
             <ui:TextBox Grid.Column="2" x:Name="AddressBox" KeyDown="AddressBox_KeyDown" />
             <ui:Button Grid.Column="3" Content="Go" Margin="8,0,0,0" Click="Go_Click" />
-            <ui:Button Grid.Column="4" Content="Open externally" Margin="8,0,0,0" Click="OpenExternal_Click" />
-            <ui:Button Grid.Column="5" Content="Download snapshot" Margin="8,0,0,0" Click="DownloadSnapshot_Click"
-                       ToolTip="Download the full docs.macro-deck.app into the app for offline reading and search" />
-            <!--
-                Distinct from Download, not a duplicate of it. Download skips files it already
-                has, which is right for a first fetch and wrong for picking up docs that have
-                changed since - the whole reason to refresh.
-            -->
-            <ui:Button Grid.Column="6" Content="Refresh snapshot" Margin="8,0,0,0" Click="RefreshSnapshot_Click"
-                       ToolTip="Re-download every page, replacing today's copy. Use this after the docs site changes." />
-            <ui:Button Grid.Column="7" Content="Search" Margin="8,0,0,0" Click="SearchToggle_Click"
-                       ToolTip="Full-text search (Ctrl+F in offline mode)" />
+
+            <WrapPanel Grid.Row="1" Grid.ColumnSpan="4" Margin="0,8,0,0">
+                <ui:Button Content="Open externally" Margin="0,0,8,0" Click="OpenExternal_Click" />
+                <ui:Button Content="Download snapshot" Margin="0,0,8,0" Click="DownloadSnapshot_Click"
+                           ToolTip="Download the full docs.macro-deck.app into the app for offline reading and search" />
+                <!--
+                    Distinct from Download, not a duplicate of it. Download skips files it already
+                    has, which is right for a first fetch and wrong for picking up docs that have
+                    changed since - the whole reason to refresh.
+                -->
+                <ui:Button Content="Refresh snapshot" Margin="0,0,8,0" Click="RefreshSnapshot_Click"
+                           ToolTip="Re-download every page, replacing today's copy. Use this after the docs site changes." />
+                <ui:Button Content="Search" Click="SearchToggle_Click"
+                           ToolTip="Full-text search (Ctrl+F in offline mode)" />
+            </WrapPanel>
         </Grid>
 
         <TextBlock Grid.Row="1" x:Name="StatusLine" FontSize="11.5" Margin="0,0,0,8"

@@ -1,5 +1,7 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
+using System.Xml;
+using System.Xml.Linq;
 using NUnit.Framework;
 using Wpf.Ui.Controls;
 
@@ -202,6 +204,126 @@ public sealed class XamlMarkupTests
             .Where(type => typeof(DeckForge.Core.Blocks.BlockStatement).IsAssignableFrom(type) && !type.IsAbstract)
             .Append(typeof(DeckForge.CodeGen.Generation.DesignedNode))
             .OrderBy(type => type.Name);
+
+    [Test]
+    public void No_attribute_value_is_broken_across_source_lines()
+    {
+        // A newline inside a Text="..." attribute is not a way to wrap the string, and it does not
+        // render as a line break either - it leaves a gap in the middle of the sentence. Five setting
+        // descriptions read like "The wizard          also offers a 'remember this folder' checkbox",
+        // with the words either side of the break pulled apart and nothing in the markup to explain
+        // it. Wrapping is the TextBlock's job, via TextWrapping.
+        var split = new List<string>();
+
+        foreach (var file in MarkupFiles())
+        {
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                // An unterminated quote at the end of the line is the whole signal: the value runs on
+                // to the next line. Checking the value itself cannot find this, because by the time
+                // the lines are joined the extra space is indistinguishable from a real one.
+                if (Regex.IsMatch(lines[i], @"(?:Text|Content|ToolTip|Header)=""[^""]*$"))
+                {
+                    split.Add($"{Path.GetFileName(file)}:{i + 1}");
+                }
+            }
+        }
+
+        Assert.That(
+            split,
+            Is.Empty,
+            "These attribute values are wrapped across source lines, which leaves a gap in the text "
+            + "instead of wrapping it. Put each on one line and let TextWrapping do the work:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, split));
+    }
+
+    [Test]
+    public void No_control_asks_for_a_row_or_column_its_grid_does_not_have()
+    {
+        // A Grid.Row or Grid.Column beyond the last definition does not fail - the Grid invents an
+        // implicit row or column, sized to nothing when its siblings are stars. The control is then
+        // laid out on top of the content that was already there. The Generate button on the config
+        // flow editor asked for row 2 of a two-row page and sat across the step list, covering a
+        // field, with nothing in the build or the output to say why.
+        //
+        // Walked as XML rather than with a pattern, so a nested grid's rows are counted against that
+        // nested grid and not against the page's.
+        var problems = new List<string>();
+        var gridsChecked = 0;
+
+        foreach (var file in MarkupFiles())
+        {
+            XDocument document;
+            try
+            {
+                document = XDocument.Load(file, LoadOptions.None);
+            }
+            catch (XmlException ex)
+            {
+                problems.Add($"{Path.GetFileName(file)}: could not be parsed as XML ({ex.Message})");
+                continue;
+            }
+
+            foreach (var grid in document.Descendants().Where(e => e.Name.LocalName == "Grid"))
+            {
+                gridsChecked++;
+                problems.AddRange(MissingCells(file, grid, "Row", "RowDefinition"));
+                problems.AddRange(MissingCells(file, grid, "Column", "ColumnDefinition"));
+            }
+        }
+
+        Assert.That(gridsChecked, Is.GreaterThan(0), "No grids were found to check.");
+
+        Assert.That(
+            problems,
+            Is.Empty,
+            "These controls are placed in a row or column their grid does not define. The Grid will "
+            + "invent an implicit one of no size and lay the control over its neighbours:" + Environment.NewLine
+            + string.Join(Environment.NewLine, problems));
+    }
+
+    /// <summary>
+    /// Direct children of <paramref name="grid"/> whose <c>Grid.Row</c> or <c>Grid.Column</c> is past
+    /// the last definition, described well enough to find in the file.
+    /// </summary>
+    private static IEnumerable<string> MissingCells(
+        string file,
+        XElement grid,
+        string direction,
+        string definitionName)
+    {
+        // The element is Grid.RowDefinitions, not RowDefinitions - it is an attached property, so
+        // its local name carries the type prefix. Getting that wrong makes every grid look as though
+        // it declared nothing, and the check passes for the wrong reason.
+        var declared = grid.Elements()
+            .Where(e => e.Name.LocalName == $"Grid.{direction}Definitions")
+            .SelectMany(e => e.Elements().Where(c => c.Name.LocalName == definitionName))
+            .Count();
+
+        if (declared == 0)
+        {
+            // A grid with no explicit definitions puts everything in row 0 / column 0.
+            yield break;
+        }
+
+        foreach (var child in grid.Elements())
+        {
+            var attribute = child.Attribute($"Grid.{direction}");
+            if (attribute is null || !int.TryParse(attribute.Value, out var index) || index < declared)
+            {
+                continue;
+            }
+
+            var line = child.Attribute("Xaml.Line")?.Value ?? "?";
+            var name = child.Attribute("Name")?.Value
+                ?? child.Attribute("Content")?.Value
+                ?? child.Name.LocalName;
+            yield return $"{Path.GetFileName(file)}: {child.Name.LocalName} \"{name}\" asks for " +
+                $"Grid.{direction}=\"{index}\" but the grid declares {declared}";
+        }
+    }
 
     [Test]
     public void No_row_of_columns_is_wider_than_a_small_window()

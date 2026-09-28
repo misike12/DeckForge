@@ -7,6 +7,10 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <!-- The Generate button. It used to ask for row 2, which did not exist: the implicit row
+                 the Grid invented got no height because row 1 is a star, so the button was laid out
+                 over the bottom of the step list and covered a field. -->
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Margin="0,0,0,12">
@@ -53,8 +57,14 @@
                                    Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
                         <TextBlock Text="{Binding FlowClassName}" FontSize="12.5"
                                    Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
-                        <CheckBox Content="Issue secret on complete" IsChecked="{Binding IssueSecretOnComplete}"
-                                  Margin="0,10,0,0" ToolTip="Adds a ConfigFlowValue.Secret when the flow completes (e.g. an OAuth token)." />
+                        <!-- The content is a wrapping TextBlock, not a string. A CheckBox measures
+                             its content as one line and clips it, so in a narrow card the label read
+                             "Issue secret on con" and the rest was simply gone. -->
+                        <CheckBox IsChecked="{Binding IssueSecretOnComplete}"
+                                  Margin="0,10,0,0" HorizontalAlignment="Left"
+                                  ToolTip="Adds a ConfigFlowValue.Secret when the flow completes (e.g. an OAuth token).">
+                            <TextBlock Text="Issue secret on complete" TextWrapping="Wrap" />
+                        </CheckBox>
                         <ui:TextBox Text="{Binding SecretValueName, Mode=TwoWay}" Margin="0,4,0,0"
                                     Visibility="{Binding IssueSecretOnComplete, Converter={StaticResource BoolToVisibilityConverter}}" />
                         <Separator Margin="0,12" />
