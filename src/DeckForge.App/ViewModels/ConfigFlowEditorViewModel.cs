@@ -4,6 +4,7 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeckForge.App.Services;
+using DeckForge.CodeGen.Generation;
 using DeckForge.Core.Code;
 using DeckForge.Core.Workspace;
 
@@ -677,6 +678,14 @@ public partial class ConfigFlowEditorViewModel : ObservableObject
     }
 
     /// <summary>Adds the IConfigFlowProvider members. Returns false when the file could not be patched.</summary>
+    /// <remarks>
+    /// This had its own copies of all three patch steps, and the same faults: the using directive
+    /// anchored on <c>IndexOf("using ")</c>, which matches inside the stock file's XML doc comment,
+    /// and the interface demanded the exact stock class declaration, so a plugin that had already
+    /// opted into another capability could not have a config flow added at all. It now uses
+    /// <see cref="IntegrationPatcher"/> - the one implementation the test suite covers - and a
+    /// patch that cannot be applied is reported rather than assumed.
+    /// </remarks>
     private bool RegisterInIntegration(WorkspaceContext ws, string className)
     {
         var path = Path.Combine(ws.PluginProjectDirectory, "PluginIntegration.cs");
@@ -687,46 +696,37 @@ public partial class ConfigFlowEditorViewModel : ObservableObject
 
         var source = File.ReadAllText(path);
 
-        if (!source.Contains("IConfigFlowProvider", StringComparison.Ordinal))
+        var contract = IntegrationPatcher.AddInterface(source, "IConfigFlowProvider");
+        if (contract.Outcome == PatchOutcome.AnchorMissing)
         {
-            var anchor = "public sealed class PluginIntegration : IPluginIntegration";
-            if (!source.Contains(anchor, StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            source = source.Replace(
-                anchor,
-                $"public sealed class PluginIntegration : IPluginIntegration, IConfigFlowProvider",
-                StringComparison.Ordinal);
+            return false;
         }
 
-        if (!source.Contains("MacroDeck.Sdk.ConfigFlow", StringComparison.Ordinal))
-        {
-            var usingAnchor = source.IndexOf("using ", StringComparison.Ordinal);
-            if (usingAnchor < 0)
-            {
-                return false;
-            }
+        source = contract.Content;
 
-            source = source.Insert(usingAnchor, "using MacroDeck.Sdk.ConfigFlow;\n");
+        var directive = IntegrationPatcher.AddUsing(source, "MacroDeck.Sdk.ConfigFlow");
+        if (directive.Outcome == PatchOutcome.AnchorMissing)
+        {
+            return false;
         }
+
+        source = directive.Content;
 
         if (!source.Contains($"new {className}()", StringComparison.Ordinal))
         {
-            var memberAnchor = "public IReadOnlyList<IActionDefinition> Actions { get; }";
-            if (!source.Contains(memberAnchor, StringComparison.Ordinal))
+            var member = IntegrationPatcher.AddMember(
+                source,
+                $"public IConfigFlow CreateConfigFlow() => new {className}();");
+
+            if (member.Outcome == PatchOutcome.AnchorMissing)
             {
                 return false;
             }
 
-            source = source.Replace(
-                memberAnchor,
-                memberAnchor + "\n\n\tpublic IConfigFlow CreateConfigFlow() => new " + className + "();",
-                StringComparison.Ordinal);
+            source = member.Content;
         }
 
-        File.WriteAllText(path, source);
+        File.WriteAllText(path, source, new System.Text.UTF8Encoding(false));
         return true;
     }
 }

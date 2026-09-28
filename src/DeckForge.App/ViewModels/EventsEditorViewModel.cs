@@ -159,9 +159,18 @@ public partial class EventsEditorViewModel : ObservableObject
 
             // Idempotent patches, not a bail-out: the interface and usings may already be there
             // from a previous event or from the capability scaffolder.
-            integration = AddUsing(integration, "using MacroDeck.Sdk.Events;");
-            integration = AddUsing(integration, "using MacroDeck.Sdk.Actions;");
-            integration = AddInterface(integration, "IEventProvider");
+            integration = AddUsing(integration, "MacroDeck.Sdk.Events", out var eventsUsing);
+            integration = AddUsing(integration, "MacroDeck.Sdk.Actions", out var actionsUsing);
+            integration = AddInterface(integration, "IEventProvider", out var interfaceAdded);
+
+            if (!eventsUsing || !actionsUsing || !interfaceAdded)
+            {
+                StatusText =
+                    "PluginIntegration.cs does not have the shape this editor patches (it needs a "
+                    + "using block and a PluginIntegration class). Nothing was written; add the event "
+                    + "by hand in PluginIntegration.cs under EventDefinitions.";
+                return;
+            }
 
             var region = RenderRegion();
             var outcome = ReplaceOrAppendRegion(integration, region, EventId);
@@ -487,29 +496,31 @@ public partial class EventsEditorViewModel : ObservableObject
         return sb.ToString();
     }
 
-    private static string AddUsing(string source, string usingLine)
+    /// <summary>
+    /// Adds a using directive, or reports why it could not.
+    /// </summary>
+    /// <remarks>
+    /// This was a third copy of IntegrationPatcher, and the worst of the three: it anchored on
+    /// <c>IndexOf("using ")</c>, which matches inside the template's XML doc comment - so on a
+    /// file whose comment mentioned a using directive, the new import landed inside a comment and
+    /// the code did not compile. It is now the one implementation, and its failures are reported
+    /// instead of being assumed away.
+    /// </remarks>
+    private static string AddUsing(string source, string @namespace, out bool ok)
     {
-        if (source.Contains(usingLine, StringComparison.Ordinal))
-        {
-            return source;
-        }
-        var idx = source.IndexOf("using ", StringComparison.Ordinal);
-        var insertAt = idx < 0 ? 0 : idx;
-        return source.Insert(insertAt, usingLine + "\n");
+        var patch = IntegrationPatcher.AddUsing(source, @namespace);
+        ok = patch.Outcome != PatchOutcome.AnchorMissing;
+        return patch.Content;
     }
 
-    private static string AddInterface(string source, string interfaceName)
+    private static string AddInterface(string source, string interfaceName, out bool ok)
     {
-        if (source.Contains(interfaceName, StringComparison.Ordinal))
-        {
-            return source;
-        }
-        var anchor = "public sealed class PluginIntegration : IPluginIntegration";
-        if (!source.Contains(anchor, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException("PluginIntegration.cs does not have the expected shape.");
-        }
-        return source.Replace(anchor, $"public sealed class PluginIntegration : IPluginIntegration, {interfaceName}");
+        // The local version demanded the exact stock class declaration and threw otherwise, so
+        // adding an event to a plugin that had already opted into a capability failed outright -
+        // the base list was longer by then.
+        var patch = IntegrationPatcher.AddInterface(source, interfaceName);
+        ok = patch.Outcome != PatchOutcome.AnchorMissing;
+        return patch.Content;
     }
 
     private void AddPermission(WorkspaceContext ws, string permission)

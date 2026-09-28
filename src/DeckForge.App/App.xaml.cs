@@ -46,7 +46,6 @@ public partial class App : Application
         services.AddSingleton<CodeGen.Capabilities.CapabilityPresetContributor>();
         services.AddSingleton<IProjectContentContributor>(
             sp => sp.GetRequiredService<CodeGen.Capabilities.CapabilityPresetContributor>());
-        services.AddSingleton<Services.CapabilityScaffolder>();
 
         // ViewModels.
         services.AddSingleton<ViewModels.WorkspaceViewModel>();
