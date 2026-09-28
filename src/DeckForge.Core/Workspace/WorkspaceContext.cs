@@ -1,3 +1,4 @@
+using DeckForge.Core.Code;
 using DeckForge.Core.Plugins;
 
 namespace DeckForge.Core.Workspace;
@@ -23,6 +24,18 @@ public sealed class WorkspaceContext
 
     public string RootDirectory => Path.GetDirectoryName(SolutionPath)!;
     public string ProjectName => Options.ProjectName ?? Options.PluginName.Replace(" ", "");
+
+    /// <summary>
+    /// The C# namespace the plugin's own code lives in.
+    /// </summary>
+    /// <remarks>
+    /// The project name, because the generated project file pins
+    /// <c>RootNamespace</c> to it - and because the localization source generator puts the
+    /// <c>Strings</c> class there, along with the template's own <c>IIntegrationContextAware</c>.
+    /// Generated code has to land in the same namespace as both or it cannot see either, which is
+    /// how an action written into a namespace derived from its own id failed to build.
+    /// </remarks>
+    public string RootNamespace => CSharpCode.Identifier(ProjectName);
     /// <summary>src/&lt;ProjectName&gt; - the directory holding manifest.json.</summary>
     public string PluginProjectDirectory => Path.Combine(RootDirectory, "src", ProjectName);
     public string ManifestPath => Path.Combine(PluginProjectDirectory, "manifest.json");

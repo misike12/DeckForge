@@ -11,8 +11,15 @@ public sealed record ActionDesign
     public string ActionDescription { get; init; } = "";
     public IReadOnlyList<ActionParameterSpec> Parameters { get; init; } = [];
 
-    /// <summary>The integration class name, derived from the id.</summary>
-    public string ClassName => CSharpCode.ToPascal(ActionId) + "Action";
+    /// <summary>
+    /// The integration class name, derived from the id.
+    /// </summary>
+    /// <remarks>
+    /// Via <see cref="CSharpCode.TypeName"/> rather than <see cref="CSharpCode.ToPascal"/>: the
+    /// latter prefixes a C# keyword with <c>@</c>, so the id <c>int</c> produced <c>@intAction</c> -
+    /// and that is also the file name, where csc rejects it with CS2011 before compiling anything.
+    /// </remarks>
+    public string ClassName => CSharpCode.TypeName(CSharpCode.ToPascal(ActionId), "Action");
 
     /// <summary>The resx group every string for this action lives under.</summary>
     public string StringsRoot => ResxKeyBuilder.Build("Actions", CSharpCode.ToPascal(ActionId));
@@ -51,9 +58,37 @@ public sealed record ActionDesign
             {
                 problems.Add($"Unknown editor type '{parameter.EditorType}'.");
             }
+
+            problems.AddRange(BraceProblem(parameter.Label, "label", parameter.Name));
+            problems.AddRange(BraceProblem(parameter.Description, "description", parameter.Name));
+            problems.AddRange(BraceProblem(parameter.Placeholder, "placeholder", parameter.Name));
         }
 
         return problems;
+    }
+
+    /// <summary>
+    /// Refuses a string containing a brace, because the SDK's localization generator turns
+    /// <c>{name}</c> in a resx value into a parameter on the generated method.
+    /// </summary>
+    /// <remarks>
+    /// A value of <c>Description with {braces} here</c> produces
+    /// <c>Description(LocalizedText braces)</c>, and the generated action calls
+    /// <c>Description()</c> - a CS7036 in the user's plugin. DeckForge cannot fill a parameter whose
+    /// name and count it does not control, and the SDK offers no escape for a literal brace that
+    /// the editor could apply silently, so the string is refused with a message instead. The
+    /// alternative - emitting the call and letting the build fail - tells the user less and later.
+    /// </remarks>
+    private static IEnumerable<string> BraceProblem(string? value, string what, string parameterName)
+    {
+        if (string.IsNullOrEmpty(value) || !value.Contains('{') && !value.Contains('}'))
+        {
+            yield break;
+        }
+
+        yield return $"The {what} of parameter '{parameterName}' contains a brace. "
+            + "Macro Deck reads {name} in a string as a substitution and adds a parameter for it, "
+            + "which the generated code cannot supply. Use parentheses or square brackets instead.";
     }
 }
 

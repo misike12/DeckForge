@@ -14,6 +14,12 @@ public enum UiPropertyKind
 
     /// <summary>A <c>double</c> passed to an implicit <c>UiValue&lt;T&gt;</c> conversion.</summary>
     ValueNumber,
+
+    /// <summary>A comma-separated list of numbers for an <c>UiValue&lt;IReadOnlyList&lt;double&gt;&gt;</c>.</summary>
+    Points,
+
+    /// <summary>A resource id for a <c>UiValue&lt;UiResource&gt;</c>.</summary>
+    Resource,
 }
 
 /// <summary>One settable property of one node type, transcribed from the real DSL class.</summary>
@@ -36,6 +42,17 @@ public sealed record UiNodeTypeInfo
 
     /// <summary>Properties the designer can set, in declaration order.</summary>
     public required IReadOnlyList<UiPropertyDescriptor> Properties { get; init; }
+
+    /// <summary>
+    /// Members the SDK marks <c>required</c>, which the generator always has to set.
+    /// </summary>
+    /// <remarks>
+    /// <c>UiResponsive.Default</c> and <c>UiModifier.Child</c> are <c>required UiElement</c>. A record
+    /// with a required member that the object initializer does not set is a CS9035, so the
+    /// generator fills these with the node's first child - which is what the type means: a
+    /// responsive node picks a layout, and a modifier wraps exactly one.
+    /// </remarks>
+    public IReadOnlyList<string> RequiredChildMembers { get; init; } = [];
 
     /// <summary>Event names the node advertises.</summary>
     public required IReadOnlyList<string> Events { get; init; }
@@ -69,6 +86,12 @@ public static class UiNodeCatalog
     private static UiPropertyDescriptor B(string name, string summary) => new(name, UiPropertyKind.Flag, summary);
     private static UiPropertyDescriptor V(string name, string summary) => new(name, UiPropertyKind.ValueNumber, summary);
 
+/// <summary>A list of numbers, for a property typed <c>UiValue&lt;IReadOnlyList&lt;double&gt;&c>.</summary>
+private static UiPropertyDescriptor P(string name, string summary) => new(name, UiPropertyKind.Points, summary);
+
+/// <summary>A resource id, for a property typed <c>UiValue&lt;UiResource&gt;</c>.</summary>
+private static UiPropertyDescriptor R(string name, string summary) => new(name, UiPropertyKind.Resource, summary);
+
     /// <summary>Every event name the component profile declares.</summary>
     public static IReadOnlyList<string> AllEvents { get; } =
     [
@@ -80,7 +103,7 @@ public static class UiNodeCatalog
     [
         S("background", "A colour, or 'none'."),
         V("mainSize", "The node's share of the box, as a fraction of the widget basis."),
-        V("fill", "Whether the node grows to fill its box."),
+        B("fill", "Whether the node grows to fill its box."),
         V("columnSpan", "Columns to span, in a ui.grid parent."),
         V("rowSpan", "Rows to span, in a ui.grid parent."),
     ];
@@ -93,6 +116,26 @@ public static class UiNodeCatalog
         V("gap", "Space between children."),
         V("padding", "Space inside the node's own edge."),
     ];
+
+    /// <summary>
+    /// Drops named properties from a composed list.
+    /// </summary>
+    /// <remarks>
+    /// The groups above are shared, and a shared group is only as good as its least compatible
+    /// member: most of the twenty-four types have no <c>Background</c>, a list has no
+    /// <c>Justify</c> or <c>Align</c>, and a gauge has no <c>Step</c>. Listing a property a type
+    /// does not have produces a generated assignment that does not compile - and nothing caught it,
+    /// because the compile test that would have shown it wrote the widget to the solution root,
+    /// outside every project, so nothing was ever built. The affected entries now say which
+    /// properties they drop, and UiNodeCatalogTests fails on any property the SDK type lacks.
+    /// </remarks>
+    private static IReadOnlyList<UiPropertyDescriptor> Without(
+        IReadOnlyList<UiPropertyDescriptor> source,
+        params string[] names)
+    {
+        var drop = new HashSet<string>(names, StringComparer.Ordinal);
+        return [.. source.Where(p => !drop.Contains(p.Name))];
+    }
 
     private static readonly UiPropertyDescriptor[] Textual =
     [
@@ -131,7 +174,7 @@ public static class UiNodeCatalog
         {
             WireType = "ui.text", ClassName = "UiTextRun", DisplayName = "Text", IsContainer = false,
             Summary = "A single run of text, sized as a fraction of the widget basis.",
-            Properties = [.. Textual, .. Common], Events = None, OfferableEvents = None,
+            Properties = Without([..  Textual, .. Common], "background"), Events = None, OfferableEvents = None,
         },
         new()
         {
@@ -156,7 +199,7 @@ public static class UiNodeCatalog
         {
             WireType = "ui.layer", ClassName = "UiLayer", DisplayName = "Layer", IsContainer = true,
             Summary = "Stacks children through the depth of the box, first furthest back.",
-            Properties = [.. Common], Events = None, OfferableEvents = None,
+            Properties = Without([..  Common], "background"), Events = None, OfferableEvents = None,
         },
         new()
         {
@@ -168,7 +211,6 @@ public static class UiNodeCatalog
                 V("rows", "How many rows."),
                 V("gap", "Space between cells."),
                 V("padding", "Space inside the grid."),
-                S("background", "A colour, or 'none'."),
             ],
             Events = None, OfferableEvents = None,
         },
@@ -176,13 +218,13 @@ public static class UiNodeCatalog
         {
             WireType = "ui.list", ClassName = "UiList", DisplayName = "List", IsContainer = true,
             Summary = "A scrolling container that asks for more as the user reaches the end.",
-            Properties = [.. Layout, .. Common], Events = None, OfferableEvents = None,
+            Properties = Without([..  Layout, .. Common], "justify", "align"), Events = None, OfferableEvents = None,
         },
         new()
         {
             WireType = "ui.segmented", ClassName = "UiSegmented", DisplayName = "Segmented", IsContainer = true,
             Summary = "A row of segments; the children are segment content, never controls.",
-            Properties = [V("selected", "Index of the chosen segment."), S("levelColor", "Chosen-segment colour."), .. Common],
+            Properties = Without([V("selected", "Index of the chosen segment."), S("levelColor", "Chosen-segment colour."), .. Common], "background"),
             Events = None, OfferableEvents = None,
         },
         new()
@@ -190,26 +232,30 @@ public static class UiNodeCatalog
             WireType = "ui.transform", ClassName = "UiTransform", DisplayName = "Transform", IsContainer = true,
             Summary = "Draws its children like a layer, then rotates, scales and shifts them together.",
             Properties =
-            [
-                V("rotation", "Rotation in degrees."),
-                V("zoom", "Scale."),
-                V("offsetX", "Horizontal shift."),
-                V("offsetY", "Vertical shift."),
-                V("originX", "Pivot, horizontally."),
-                V("originY", "Pivot, vertically."),
-                .. Common,
-            ],
+                Without(
+                [
+                    V("rotation", "Rotation in degrees."),
+                    V("zoom", "Scale."),
+                    V("offsetX", "Horizontal shift."),
+                    V("offsetY", "Vertical shift."),
+                    V("originX", "Pivot, horizontally."),
+                    V("originY", "Pivot, vertically."),
+                    .. Common,
+                ],
+                "background"),
             Events = None, OfferableEvents = None,
         },
         new()
         {
             WireType = "ui.responsive", ClassName = "UiResponsive", DisplayName = "Responsive", IsContainer = true,
+            RequiredChildMembers = ["Default"],
             Summary = "Draws one of several layouts, chosen by the reader from the box it is given.",
-            Properties = [.. Common], Events = None, OfferableEvents = None,
+            Properties = Without([..  Common], "background"), Events = None, OfferableEvents = None,
         },
         new()
         {
-            WireType = "ui.modifier", ClassName = "UiModifier", DisplayName = "Modifier", IsContainer = false,
+            WireType = "ui.modifier", ClassName = "UiModifier", DisplayName = "Modifier", IsContainer = true,
+            RequiredChildMembers = ["Child"],
             Summary = "Wraps exactly one child to pad, frame, clip, mask or fade it.",
             Properties =
             [
@@ -223,28 +269,28 @@ public static class UiNodeCatalog
         {
             WireType = "ui.gauge", ClassName = "UiGauge", DisplayName = "Gauge", IsContainer = false,
             Summary = "A level drawn as an arc; over a full turn it is a ring.",
-            Properties = [.. Interactive, N("startAngle", "Arc start, in degrees."), N("endAngle", "Arc end, in degrees."), .. Common],
+            Properties = Without([.. Interactive, N("startAngle", "Arc start, in degrees."), N("endAngle", "Arc end, in degrees."), .. Common], "step", "background"),
             Events = None, OfferableEvents = None,
         },
         new()
         {
             WireType = "ui.dial", ClassName = "UiDial", DisplayName = "Dial", IsContainer = false,
             Summary = "A rotary level the user turns: a gauge with a thumb.",
-            Properties = [.. Interactive, N("startAngle", "Arc start, in degrees."), N("endAngle", "Arc end, in degrees."), .. Common],
+            Properties = Without([.. Interactive, N("startAngle", "Arc start, in degrees."), N("endAngle", "Arc end, in degrees."), .. Common], "background"),
             Events = DragEvents, OfferableEvents = DragEvents,
         },
         new()
         {
             WireType = "ui.slider", ClassName = "UiSlider", DisplayName = "Slider", IsContainer = false,
             Summary = "A draggable level: the interactive counterpart of a range bar.",
-            Properties = [.. Interactive, S("interaction", "How the reader takes input."), .. Common],
+            Properties = Without([.. Interactive, S("interaction", "How the reader takes input."), .. Common], "background"),
             Events = DragEvents, OfferableEvents = DragEvents,
         },
         new()
         {
             WireType = "ui.toggle", ClassName = "UiToggle", DisplayName = "Toggle", IsContainer = false,
             Summary = "An on/off switch the user flips.",
-            Properties = [B("on", "Whether it is on."), S("levelColor", "The on colour."), .. Common],
+            Properties = Without([B("on", "Whether it is on."), S("levelColor", "The on colour."), .. Common], "background"),
             Events = ["change"], OfferableEvents = ["change"],
         },
         new()
@@ -252,22 +298,24 @@ public static class UiNodeCatalog
             WireType = "ui.range-bar", ClassName = "UiRangeBar", DisplayName = "Range bar", IsContainer = false,
             Summary = "A horizontal track carrying a gradient-filled span and an optional marker.",
             Properties =
-            [
-                V("start", "Span start, 0 to 1."),
-                V("end", "Span end, 0 to 1."),
-                S("startColor", "Colour at the start of the span."),
-                S("endColor", "Colour at the end of the span."),
-                V("marker", "Marker position, 0 to 1."),
-                V("thickness", "Track thickness."),
-                .. Common,
-            ],
+                Without(
+                [
+                    V("start", "Span start, 0 to 1."),
+                    V("end", "Span end, 0 to 1."),
+                    S("startColor", "Colour at the start of the span."),
+                    S("endColor", "Colour at the end of the span."),
+                    V("marker", "Marker position, 0 to 1."),
+                    V("thickness", "Track thickness."),
+                    .. Common,
+                ],
+                "background"),
             Events = None, OfferableEvents = None,
         },
         new()
         {
             WireType = "ui.chart", ClassName = "UiChart", DisplayName = "Chart", IsContainer = false,
             Summary = "A series of values drawn as a filled line; the points arrive normalised to 0..1.",
-            Properties = [S("points", "Comma-separated values, each 0 to 1."), S("color", "Line colour."), V("plotTop", "Where the plot starts."), V("thickness", "Line thickness."), .. Common],
+            Properties = Without([P("points", "Comma-separated values, each 0 to 1."), S("color", "Line colour."), V("plotTop", "Where the plot starts."), V("thickness", "Line thickness."), .. Common], "background"),
             Events = None, OfferableEvents = None,
         },
         new()
@@ -275,22 +323,24 @@ public static class UiNodeCatalog
             WireType = "ui.shape", ClassName = "UiShape", DisplayName = "Shape", IsContainer = false,
             Summary = "A rectangle, rounded rectangle, circle, capsule or path, filled and stroked.",
             Properties =
-            [
-                S("shape", "rect | rounded-rect | circle | capsule | path."),
-                V("cornerRadius", "Corner radius."),
-                S("color", "Fill colour."),
-                S("strokeColor", "Stroke colour."),
-                V("strokeWidth", "Stroke width."),
-                S("path", "Path data, for the path shape."),
-                .. Common,
-            ],
+                Without(
+                [
+                    S("shape", "rect | rounded-rect | circle | capsule | path."),
+                    V("cornerRadius", "Corner radius."),
+                    S("color", "Fill colour."),
+                    S("strokeColor", "Stroke colour."),
+                    V("strokeWidth", "Stroke width."),
+                    S("path", "Path data, for the path shape."),
+                    .. Common,
+                ],
+                "background"),
             Events = None, OfferableEvents = None,
         },
         new()
         {
             WireType = "ui.icon", ClassName = "UiIcon", DisplayName = "Icon", IsContainer = false,
             Summary = "One glyph of the built-in icon set, drawn by name.",
-            Properties = [S("icon", "The glyph name."), S("color", "Glyph colour."), S("role", "A semantic role."), .. Common],
+            Properties = Without([S("icon", "The glyph name."), S("color", "Glyph colour."), S("role", "A semantic role."), .. Common], "background"),
             Events = None, OfferableEvents = None,
         },
         new()
@@ -298,14 +348,16 @@ public static class UiNodeCatalog
             WireType = "ui.image", ClassName = "UiImage", DisplayName = "Image", IsContainer = false,
             Summary = "An image resolved from a resource handle, fitted into a square box and never cropped.",
             Properties =
-            [
-                S("source", "A resource id registered through the UI resource registry."),
-                S("transition", "none | fade | slide."),
-                V("opacity", "Opacity, 0 to 1."),
-                V("brightness", "Brightness multiplier."),
-                V("saturation", "Saturation multiplier."),
-                .. Common,
-            ],
+                Without(
+                [
+                    R("source", "A resource id registered through the UI resource registry."),
+                    S("transition", "none | fade | slide."),
+                    V("opacity", "Opacity, 0 to 1."),
+                    V("brightness", "Brightness multiplier."),
+                    V("saturation", "Saturation multiplier."),
+                    .. Common,
+                ],
+                "background"),
             Events = None, OfferableEvents = None,
         },
         new()
@@ -313,13 +365,14 @@ public static class UiNodeCatalog
             WireType = "ui.text-field", ClassName = "UiTextField", DisplayName = "Text field", IsContainer = false,
             Summary = "A single line of text the user types.",
             Properties =
-            [
-                S("text", "The current value."),
-                new("placeholder", UiPropertyKind.Text, "Text shown while empty."),
-                V("size", "Font size."),
-                S("color", "Text colour."),
-                .. Common,
-            ],
+                Without(
+                [
+                    S("text", "The current value."),
+                    new("placeholder", UiPropertyKind.Text, "Text shown while empty."),
+                    V("size", "Font size."),
+                    .. Common,
+                ],
+                "color", "background"),
             Events = ["change"], OfferableEvents = ["change"],
         },
         new()
@@ -327,19 +380,21 @@ public static class UiNodeCatalog
             WireType = "macrodeck.dynamic-text", ClassName = "UiDynamicText", DisplayName = "Dynamic text", IsContainer = false,
             Summary = "Text the reader derives from a time reference it resolves itself.",
             Properties =
-            [
-                S("format", "time | date | zone-name, and the duration formats past those."),
-                B("seconds", "Whether seconds are shown."),
-                .. Textual,
-                .. Common,
-            ],
+                Without(
+                [
+                    S("format", "time | date | zone-name, and the duration formats past those."),
+                    B("seconds", "Whether seconds are shown."),
+                    .. Textual,
+                    .. Common,
+                ],
+                "text", "maxLines", "wrap", "fontFace", "digits", "background"),
             Events = None, OfferableEvents = None,
         },
         new()
         {
             WireType = "macrodeck.clock-dial", ClassName = "UiClockDial", DisplayName = "Clock dial", IsContainer = false,
             Summary = "An analogue clock face drawn from a time reference.",
-            Properties = [S("color", "Face colour."), B("seconds", "Whether the second hand is drawn."), .. Common],
+            Properties = Without([S("color", "Face colour."), B("seconds", "Whether the second hand is drawn."), .. Common], "background"),
             Events = None, OfferableEvents = None,
         },
         new()
@@ -347,14 +402,14 @@ public static class UiNodeCatalog
             WireType = "macrodeck.progress-bar", ClassName = "UiProgressBar", DisplayName = "Progress bar", IsContainer = false,
             Summary = "A track the reader fills from a position that is still moving.",
             Properties =
-            [
-                S("positionMs", "Where the position starts, in milliseconds."),
-                S("durationMs", "How long the run lasts, in milliseconds."),
-                S("startColor", "Colour at the start of the fill."),
-                S("endColor", "Colour at the end of the fill."),
-                V("thickness", "Track thickness."),
-                .. Common,
-            ],
+                Without(
+                [
+                    S("startColor", "Colour at the start of the fill."),
+                    S("endColor", "Colour at the end of the fill."),
+                    V("thickness", "Track thickness."),
+                    .. Common,
+                ],
+                "positionMs", "durationMs", "background"),
             Events = None, OfferableEvents = None,
         },
         new()
@@ -362,13 +417,13 @@ public static class UiNodeCatalog
             WireType = "macrodeck.progress-text", ClassName = "UiProgressText", DisplayName = "Progress text", IsContainer = false,
             Summary = "Text the reader derives from the same moving position.",
             Properties =
-            [
-                S("positionMs", "Where the position starts, in milliseconds."),
-                S("durationMs", "How long the run lasts, in milliseconds."),
-                S("format", "How the remaining time is written."),
-                .. Textual,
-                .. Common,
-            ],
+                Without(
+                [
+                    S("format", "How the remaining time is written."),
+                ],
+                "positionMs", "durationMs", "text", "size", "minSize", "weight", "role", "color",
+                "align", "maxLines", "wrap", "fontFace", "digits", "mainSize", "fill", "columnSpan",
+                "rowSpan", "background"),
             Events = None, OfferableEvents = None,
         },
     ];

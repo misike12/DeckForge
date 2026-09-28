@@ -189,10 +189,19 @@ public sealed class ProcessRunner
     /// <summary>
     /// Waits for both redirected pipes to reach end of stream, bounded by <see cref="DrainTimeout"/>.
     /// </summary>
+    /// <remarks>
+    /// The bound is real. The previous version started a five-second timer and then, on the other
+    /// branch, awaited the drain unbounded - so the timeout only began an unlimited wait. A
+    /// grandchild that inherited the pipe keeps it open for as long as it lives, and
+    /// <c>msbuild</c> with node reuse does exactly that: measured at 31 s against a grandchild that
+    /// lived 30 s, with the five-second budget ignored. Every panel that shells out goes through
+    /// this one runner, so one lingering handle stalled the UI with no way to cancel.
+    /// </remarks>
     private static async Task DrainAsync(Task stdout, Task stderr, CancellationToken ct)
     {
         var drained = Task.WhenAll(stdout, stderr);
-        var completed = await Task.WhenAny(drained, Task.Delay(DrainTimeout, ct));
+        var timeout = Task.Delay(DrainTimeout, ct);
+        var completed = await Task.WhenAny(drained, timeout);
         if (completed == drained)
         {
             return;
@@ -202,7 +211,6 @@ public sealed class ProcessRunner
         // cancelled. Either way the child is gone, so returning the lines captured so far is right
         // and a cancelled wait should still surface as cancellation.
         ct.ThrowIfCancellationRequested();
-        await drained;
     }
 
     private static async Task WriteStandardInputAsync(Process process, string standardInput)

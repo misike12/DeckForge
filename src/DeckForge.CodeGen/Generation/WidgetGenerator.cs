@@ -201,8 +201,10 @@ public static class WidgetGenerator
         sb.AppendLine("using MacroDeck.Sdk.Widgets;");
         sb.AppendLine("using MacroDeck.Ui.Components;");
         sb.AppendLine("using MacroDeck.Ui.Dsl;");
+        sb.AppendLine("using MacroDeck.Ui.Model.Events;");
         sb.AppendLine("using MacroDeck.Ui.Model.Nodes;");
         sb.AppendLine("using MacroDeck.Ui.Model.Patches;");
+        sb.AppendLine("using MacroDeck.Ui.Model.Resources;");
         sb.AppendLine("using MacroDeck.Ui.Model.Surfaces;");
         sb.AppendLine("using MacroDeck.Ui.Runtime;");
         sb.AppendLine("using Serilog;");
@@ -265,14 +267,37 @@ public static class WidgetGenerator
         {
             // Appearance properties are what make a placed widget's look configurable, and a
             // property is only offered when the data schema accepts a sample under its key.
-            var appearances = design.States.Select(s =>
-                $"new WidgetAppearanceProperty({CSharpCode.StringLiteral(s.Name)}, {CSharpCode.StringLiteral(s.Background)})");
-            sb.AppendLine($"            AppearanceProperties = [{string.Join(", ", appearances)}],");
+            //
+            // `WidgetAppearanceProperty` is a set of static members, not a constructible type - the
+            // earlier `new WidgetAppearanceProperty(name, colour)` was a CS1729. Each designed state
+            // contributes the two it actually has values for.
+            var appearances = new List<string>();
+            foreach (var state in design.States)
+            {
+                if (!string.IsNullOrWhiteSpace(state.Background))
+                {
+                    appearances.Add($"WidgetAppearanceProperty.BackgroundColor /* {state.Name} */");
+                }
+
+                if (!string.IsNullOrWhiteSpace(state.Text))
+                {
+                    appearances.Add($"WidgetAppearanceProperty.Label /* {state.Name} */");
+                }
+            }
+
+            appearances = appearances.Distinct(StringComparer.Ordinal).ToList();
+            if (appearances.Count > 0)
+            {
+                sb.AppendLine($"            AppearanceProperties = [{string.Join(", ", appearances)}],");
+            }
         }
 
         sb.AppendLine("        };");
         sb.AppendLine();
-        sb.AppendLine("        _logger.Information(\"Registering widget type {TypeId}.\", design.TypeId);");
+        // `design` is the render-time model, not something the generated method can see, and the
+        // generated class has no `WidgetTypeId` property either - the id only exists on the local
+        // `descriptor`. Both readings were CS0103 in the user's plugin.
+        sb.AppendLine($"        _logger.Information(\"Registering widget type {{TypeId}}.\", {CSharpCode.StringLiteral(design.WidgetTypeId)});");
         sb.AppendLine("        await context.RegisterWidgetTypeAsync(descriptor, cancellationToken);");
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -280,16 +305,18 @@ public static class WidgetGenerator
         sb.AppendLine("    // the default empty list would silently prevent.");
         sb.AppendLine("    public IReadOnlyList<WidgetTypeDescriptor> GetWidgetTypes() =>");
         sb.AppendLine("    [");
-        sb.AppendLine("        new()");
-        sb.AppendLine("        {");
-        sb.AppendLine($"            Id = {CSharpCode.StringLiteral(design.WidgetTypeId)},");
-        sb.AppendLine($"            Name = {ResxKeyBuilder.Accessor(root, "Name")},");
+        // `WidgetTypeDescriptor` is a record whose Id has no default, so a target-typed `new()` with
+        // an object initializer does not satisfy it - CS7036. The constructor is called with named
+        // arguments instead, and the list is built as a list because a trailing comma before `)` is
+        // not legal in an argument list - CS1525, which is what appending `,` to each line produced.
+        var arguments = new List<string> { $"Id: {CSharpCode.StringLiteral(design.WidgetTypeId)}" };
+        arguments.Add($"Name: {ResxKeyBuilder.Accessor(root, "Name")}");
         if (!string.IsNullOrWhiteSpace(design.WidgetDescription))
         {
-            sb.AppendLine($"            Description = {ResxKeyBuilder.Accessor(root, "Description")},");
+            arguments.Add($"Description: {ResxKeyBuilder.Accessor(root, "Description")}");
         }
 
-        sb.AppendLine("        },");
+        sb.AppendLine($"        new WidgetTypeDescriptor({string.Join(", ", arguments)}),");
         sb.AppendLine("    ];");
         sb.AppendLine();
         sb.AppendLine("    public Task<IUiSession?> CreateSessionAsync(UiSessionRequest request, CancellationToken cancellationToken)");
@@ -323,7 +350,12 @@ public static class WidgetGenerator
         sb.AppendLine("        _view = view;");
         sb.AppendLine("        _view.Changed += (_, _) => Changed?.Invoke(this, EventArgs.Empty);");
         sb.AppendLine("        _view.HandlerFaulted += (_, fault) => Faulted?.Invoke(this,");
-        sb.AppendLine("            new UiSessionFaultedEventArgs(fault.Reason, fault.Exception));");
+        // `UiHandlerFaultEventArgs` has no Reason. What it carries is the node, the event and the
+        // exception, and the session-level Reason is a human summary - so it is composed here.
+        // Reading a `Reason` off the handler args was a CS1061 in the user's plugin.
+        sb.AppendLine("            new UiSessionFaultedEventArgs(");
+        sb.AppendLine("                $\"Handler '{fault.EventName}' on node '{fault.NodeId}' failed.\",");
+        sb.AppendLine("                fault.Exception));");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    public event EventHandler? Changed;");
@@ -438,12 +470,30 @@ public static class WidgetGenerator
             members.Add(RenderProperty(descriptor, value, design, root, node));
         }
 
-        // Children is init-only, so a childless node must not be given the property at all: an
-        // empty list is a different statement from an absent one to a renderer.
-        if (info.IsContainer && node.Children.Count > 0)
+        // `UiResponsive.Default` and `UiModifier.Child` are required elements, so a record that does
+        // not set them is a CS9035 whether or not it has children. The first child is the right
+        // answer when there is one; with none, an empty stack is - the same fallback the root uses.
+        var renderedChildren = node.Children
+            .Select(c => RenderNode(c, design, root, indent + 1))
+            .ToList();
+
+        if (info.IsContainer && renderedChildren.Count > 0)
         {
-            var children = node.Children.Select(c => RenderNode(c, design, root, indent + 1));
-            members.Add($"Children = [{string.Join(", ", children)}]");
+            // Children is init-only, so a childless node must not be given the property at all: an
+            // empty list is a different statement from an absent one to a renderer.
+            members.Add($"Children = [{string.Join(", ", renderedChildren)}]");
+        }
+
+        foreach (var required in info.RequiredChildMembers)
+        {
+            if (members.Any(m => m.StartsWith(required + " =", StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            // `UiElement.Key` is required too, so the fallback stack needs one of its own.
+            var fallback = $"new UiStack {{ Key = {CSharpCode.StringLiteral(node.Key + "-" + required.ToLowerInvariant())} }}";
+            members.Insert(0, $"{required} = {(renderedChildren.Count > 0 ? renderedChildren[0] : fallback)}");
         }
 
         return $"new {info.ClassName} {{ {string.Join(", ", members)} }}";
@@ -470,14 +520,53 @@ public static class WidgetGenerator
         }
     }
 
-    private static string RenderProperty(UiPropertyDescriptor descriptor, string value, WidgetDesign design, string root, DesignedNode node) => descriptor.Kind switch
+    /// <summary>
+    /// Emits one property assignment.
+    /// </summary>
+    /// <remarks>
+    /// The catalog's <c>Name</c> is the wire name, as it appears in the designer's data and in
+    /// Macro Deck's own profile documents - lower case, like <c>fontFace</c> and <c>columnSpan</c>.
+    /// The CLR property is the Pascal-case equivalent, <c>FontFace</c> and <c>ColumnSpan</c>. Emitting
+    /// the wire name directly produced all 235 properties of the kitchen-sink widget as CS0117s, and
+    /// the compile test that would have shown it was writing the widget to the solution root, outside
+    /// every project, so nothing was ever built.
+    /// </remarks>
+    private static string RenderProperty(UiPropertyDescriptor descriptor, string value, WidgetDesign design, string root, DesignedNode node)
     {
-        UiPropertyKind.Text => $"{descriptor.Name} = {RenderText(descriptor.Name, value, node)}",
-        UiPropertyKind.Number => $"{descriptor.Name} = {CSharpCode.NumberLiteral(value)}",
-        UiPropertyKind.Flag => $"{descriptor.Name} = {CSharpCode.BoolLiteral(value)}",
-        UiPropertyKind.ValueNumber => $"{descriptor.Name} = {CSharpCode.NumberLiteral(value)}",
-        _ => $"{descriptor.Name} = {CSharpCode.StringLiteral(value)}",
-    };
+        var member = CSharpCode.ToPascal(descriptor.Name);
+        return descriptor.Kind switch
+        {
+            UiPropertyKind.Text => $"{member} = {RenderText(descriptor.Name, value, node)}",
+            UiPropertyKind.Number => $"{member} = {CSharpCode.NumberLiteral(value)}",
+            UiPropertyKind.Flag => $"{member} = {CSharpCode.BoolLiteral(value)}",
+            UiPropertyKind.ValueNumber => $"{member} = {CSharpCode.NumberLiteral(value)}",
+
+            // `UiValue<IReadOnlyList<double>>` has an implicit conversion from a sequence, so the
+            // values are built as an array. A collection expression is CS9174: the type is not
+            // constructible, because the implicit operator takes the sequence, not the wrapper.
+            UiPropertyKind.Points => $"{member} = {RenderPoints(value)}",
+
+            // `UiValue<UiResource>` likewise takes a UiResource, and a bare string is a CS0029.
+            UiPropertyKind.Resource => $"{member} = new UiResource {{ ResourceId = {CSharpCode.StringLiteral(value)} }}",
+
+            _ => $"{member} = {CSharpCode.StringLiteral(value)}",
+        };
+    }
+
+    /// <summary>
+    /// A comma-separated list of numbers as a <c>double[]</c> literal.
+    /// </summary>
+    /// <remarks>
+    /// Built here rather than left as a call into a helper, because the generated widget has no such
+    /// method: emitting the call name produced a CS0103 in the user's plugin.
+    /// </remarks>
+    private static string RenderPoints(string value)
+    {
+        var numbers = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(CSharpCode.NumberLiteral);
+        return $"new double[] {{ {string.Join(", ", numbers)} }}";
+    }
+
     private static string RenderText(string property, string value, DesignedNode node)
     {
         // The two reference-carrying families need their real reference type, not a string.

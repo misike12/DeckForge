@@ -126,6 +126,9 @@ public static class ActionParameterTypes
             Name = "Duration", WireType = "Duration",
             SupportsDescription = true, SupportsDefaultValue = true, SupportsRequired = true,
             SupportsRange = true,
+            // min and max only: the real overload has no step, and the designer pre-fills one, so
+            // emitting it anyway was a CS1739 on every Duration with no user input at all.
+            SupportsStep = false,
             Summary = "A span of time. The default parameter is defaultMilliseconds, not defaultValue.",
         },
         new()

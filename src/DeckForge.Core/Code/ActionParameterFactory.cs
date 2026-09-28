@@ -90,6 +90,16 @@ public sealed record ActionParameterTypeInfo
     public bool SupportsRequired { get; init; }
     public bool SupportsOptions { get; init; }
     public bool SupportsRange { get; init; }
+
+    /// <summary>
+    /// Whether the range parameters include a step.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="SupportsRange"/> because <c>Duration</c> takes <c>min</c> and
+    /// <c>max</c> and no <c>step</c>. Emitting one anyway is a CS1739 in the user's plugin, and the
+    /// designer's Step box is pre-filled, so it happened on every Duration with no user input.
+    /// </remarks>
+    public bool SupportsStep { get; init; } = true;
     public bool SupportsOptionsSourceId { get; init; }
     public bool SupportsFileExtensions { get; init; }
     public bool SupportsLanguage { get; init; }
@@ -161,31 +171,52 @@ public static class ActionParameterFactory
             named.Add($"required: {(spec.Required ? "true" : "false")}");
         }
 
-        // Range, but only for the types whose range parameters are min/max/step.
+        // Range, but only for the types whose range parameters are min/max/step. Duration has min
+        // and max and no step, so treating it as a step-capable type emitted `step:` and every
+        // generated Duration failed with CS1739.
         if (info.SupportsRange)
         {
-            if (spec.Min is { } min)
+            // Slider's min and max are required, so they are always emitted - and emitted here,
+            // once, rather than also appearing in RequiredArguments, which had it producing a
+            // duplicate `max:`.
+            var (min, max) = info.Name == "Slider" ? SliderBounds(spec) : (spec.Min, spec.Max);
+
+            if (min is { } minValue)
             {
-                named.Add($"min: {CSharpCode.NumberLiteral(min.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
+                named.Add($"min: {CSharpCode.NumberLiteral(minValue.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
             }
 
-            if (spec.Max is { } max)
+            if (max is { } maxValue)
             {
-                named.Add($"max: {CSharpCode.NumberLiteral(max.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
+                named.Add($"max: {CSharpCode.NumberLiteral(maxValue.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
             }
 
-            if (spec.Step is { } step)
+            if (info.SupportsStep && spec.Step is { } step)
             {
                 named.Add($"step: {CSharpCode.NumberLiteral(step.ToString(System.Globalization.CultureInfo.InvariantCulture))}");
             }
         }
 
-        if (info.SupportsOptions && spec.Options.Count > 0)
+        // A few overloads have a parameter with no default at all, so omitting it when the designer's
+        // box is blank is a CS7036 in the user's plugin rather than a default. They are emitted
+        // unconditionally, falling back to something valid.
+        foreach (var required in RequiredArguments(info, spec, accessor, indent))
+        {
+            named.Add(required);
+        }
+
+        // Both, not one or the other. The earlier `else if` meant a spec carrying a static list and
+        // a source id kept only the list - and the designer pre-fills the list, so a named source
+        // was silently dropped. A type that requires its options gets an empty list when there are
+        // none, which RequiredArguments already emitted; emitting it twice is a CS0102.
+        var optionsRequired = info.Name == "Choice";
+        if (info.SupportsOptions && (spec.Options.Count > 0 || optionsRequired))
         {
             // Autocomplete's list is optional; Choice's is required, so it is emitted whenever present.
             named.Add($"options: {RenderOptions(spec.Options, indent)}");
         }
-        else if (info.SupportsOptionsSourceId && !string.IsNullOrWhiteSpace(spec.OptionsSourceId))
+
+        if (info.SupportsOptionsSourceId && !string.IsNullOrWhiteSpace(spec.OptionsSourceId))
         {
             named.Add($"optionsSourceId: {CSharpCode.StringLiteral(spec.OptionsSourceId)}");
         }
@@ -239,40 +270,104 @@ public static class ActionParameterFactory
             named.Add($"defaultValue: {RenderDefaultValue(spec, info)}");
         }
 
-        if (info.SupportsChildren && spec.Children.Count > 0)
+        // Children and item templates are emitted by RequiredArguments, because the overloads
+        // require them. Emitting them here as well produced `children:` twice, which is CS1740.
+        if (info.SupportsChildren && spec.Children.Count > 0 && info.Name != "Object")
         {
             var children = string.Join(", ", spec.Children.Select(c => Emit(c, accessor, indent + 4)));
             named.Add($"children: [{children}]");
         }
 
-        if (info.SupportsItemTemplate && spec.ItemTemplate is { } item)
+        if (info.SupportsItemTemplate && spec.ItemTemplate is { } item && info.Name != "Array")
         {
             named.Add($"itemTemplate: {Emit(item, accessor, indent + 4)}");
         }
 
         named.Add($"label: {accessor("Label")}");
 
-        // WidgetTarget's options-carrying overload, when the designer asked for one.
+        // WidgetTarget's options-carrying overload, when the designer asked for one. Label,
+        // Description and Required live *inside* WidgetTargetOptions on this overload - passing them
+        // as named arguments alongside it is a CS1744.
         if (info.SupportsWidgetTargetOptions && (!spec.AllowSelf || spec.WidgetTypes.Count > 0))
         {
-            var parts = new List<string> { "AllowSelf = " + CSharpCode.BoolLiteral(spec.AllowSelf ? "true" : "false") };
+            var parts = new List<string>
+            {
+                "Label = " + accessor("Label"),
+                "Description = " + accessor("Description"),
+                "Required = " + CSharpCode.BoolLiteral(spec.Required ? "true" : "false"),
+                "AllowSelf = " + CSharpCode.BoolLiteral(spec.AllowSelf ? "true" : "false"),
+            };
             if (spec.WidgetTypes.Count > 0)
             {
                 parts.Add($"WidgetTypes = [{string.Join(", ", spec.WidgetTypes.Select(CSharpCode.StringLiteral))}]");
             }
 
-            var arguments = new List<string>
-            {
-                CSharpCode.StringLiteral(spec.Name),
-                $"new WidgetTargetOptions {{ {string.Join(", ", parts)} }}",
-            };
-            arguments.AddRange(named);
-            return $"ActionParameter.{info.Name}({string.Join(", ", arguments)})";
+            return $"ActionParameter.{info.Name}({CSharpCode.StringLiteral(spec.Name)}, "
+                + $"new WidgetTargetOptions {{ {string.Join(", ", parts)} }})";
         }
 
         var all = new List<string> { CSharpCode.StringLiteral(spec.Name) };
         all.AddRange(named);
         return $"ActionParameter.{info.Name}({string.Join(", ", all)})";
+    }
+
+    /// <summary>
+    /// The arguments an overload requires and has no default for.
+    /// </summary>
+    /// <remarks>
+    /// <c>Object</c> needs its children and <c>Array</c> its item template; the designer leaves both
+    /// boxes blank, and omitting a parameter with no default is a CS7036 in the user's plugin.
+    /// <c>Slider</c>'s min and max are also required, but they are emitted from the range block
+    /// above so that there is one source for them - having it in both places produced a duplicate
+    /// <c>max:</c>, which is its own compile error.
+    /// </remarks>
+    private static IEnumerable<string> RequiredArguments(
+        ActionParameterTypeInfo info,
+        ActionParameterSpec spec,
+        Func<string, string> accessor,
+        int indent)
+    {
+        if (info.Name == "Object")
+        {
+            var children = spec.Children.Count > 0
+                ? string.Join(", ", spec.Children.Select(c => Emit(c, accessor, indent + 4)))
+                : "";
+            yield return $"children: [{children}]";
+        }
+
+        if (info.Name == "Array")
+        {
+            // An array with no item template cannot render a row, so an empty text field stands in
+            // for one: the user sees a field per element and a value they can type. The label is an
+            // empty literal because the item template's own strings are not in the action's resx.
+            var template = spec.ItemTemplate ?? new ActionParameterSpec { Name = "value" };
+            yield return $"itemTemplate: {Emit(template, _ => "\"\"", indent + 4)}";
+        }
+    }
+
+    /// <summary>
+    /// A Slider's effective min and max, which the overload requires and has no default for.
+    /// </summary>
+    /// <remarks>
+    /// Kept in order: a missing bound falls back towards the other one, never below it, because an
+    /// inverted range is a slider the host rejects at configuration time.
+    /// </remarks>
+    private static (double? Min, double? Max) SliderBounds(ActionParameterSpec spec)
+    {
+        static double Parse(double? value) =>
+            value ?? 0D;
+
+        if (spec.Min is null && spec.Max is null)
+        {
+            return (0D, 100D);
+        }
+
+        if (spec.Min is null)
+        {
+            return (System.Math.Min(0D, Parse(spec.Max)), spec.Max);
+        }
+
+        return (spec.Min, spec.Max is null ? System.Math.Max(100D, Parse(spec.Min)) : spec.Max);
     }
 
     private static string RenderOptions(IReadOnlyList<ParameterOption> options, int indent)

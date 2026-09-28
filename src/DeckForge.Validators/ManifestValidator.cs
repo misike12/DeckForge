@@ -187,6 +187,30 @@ public static partial class ManifestValidator
             return;
         }
 
+        if (root.TryGetProperty("bundledIconPacks", out var packs) && packs.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var pack in packs.EnumerateObject())
+            {
+                if (pack.Value.ValueKind == JsonValueKind.Object
+                    && TryString(pack.Value, "path", out var packPath)
+                    && !Path.IsPathRooted(packPath))
+                {
+                    // Checked against the filesystem, which is the only way to tell a declared pack
+                    // from a bundled one. The previous version asserted "not present" for every
+                    // pack at package level without looking, so it was wrong in both directions.
+                    var resolved = Path.Combine(
+                        baseDirectory,
+                        packPath.Replace('/', Path.DirectorySeparatorChar));
+                    if (!File.Exists(resolved))
+                    {
+                        result.Add("bundled-icon-pack-missing", ValidationSeverity.Warning,
+                            $"Bundled icon pack '{pack.Name}' resolves to '{resolved}', which does not exist.",
+                            $"/bundledIconPacks/{pack.Name}/path");
+                    }
+                }
+            }
+        }
+
         foreach (var entry in entrypoints.EnumerateObject())
         {
             if (entry.Value.ValueKind != JsonValueKind.Object
@@ -769,13 +793,11 @@ public static partial class ManifestValidator
                     $"Bundled icon pack path '{path}' is declared more than once.", $"{pointer}/path");
             }
 
-            // The reader checks shape only, never existence; the tool adds these at package level.
-            if (level >= ManifestValidationLevel.Package && path is not null)
-            {
-                result.Add("bundled-icon-pack-missing", ValidationSeverity.Warning,
-                    $"Bundled icon pack '{key}' is not present. Check it exists under the version directory.",
-                    $"{pointer}/path");
-            }
+            // Existence is checked in ValidatePackagedContent, alongside the icon and the
+            // entrypoints. It used to be reported here for every declared pack at package level
+            // without ever looking at the filesystem, so a plugin that bundled its packs correctly
+            // carried a permanent "not present" warning - and one that had genuinely not bundled
+            // them got the same warning, which is no warning at all.
         }
     }
 

@@ -33,11 +33,11 @@ public static class LocalizationValidator
             return result;
         }
 
-        var defaultKeys = ReadKeys(dir.Default.Path);
-        foreach (var group in defaultKeys.Keys.GroupBy(k => k, StringComparer.Ordinal).Where(g => g.Count() > 1))
+        var (defaultKeys, defaultDuplicates) = ReadKeysWithDuplicates(dir.Default.Path);
+        foreach (var duplicate in defaultDuplicates)
         {
             result.Add("MDLOC003", ValidationSeverity.Error,
-                $"Duplicate key '{group.Key}' in {dir.Default.FileName}.", dir.Default.FileName);
+                $"Duplicate key '{duplicate}' in {dir.Default.FileName}.", dir.Default.FileName);
         }
 
         // Dotted keys: a key that is also a prefix group of others collides (MDLOC008).
@@ -54,12 +54,13 @@ public static class LocalizationValidator
         // Placeholder checks: named placeholders must agree between default and translations.
         foreach (var translation in dir.Translations)
         {
-            var keys = ReadKeys(translation.Path);
-            foreach (var group in keys.Keys.GroupBy(k => k, StringComparer.Ordinal).Where(g => g.Count() > 1))
+            var (keys, duplicates) = ReadKeysWithDuplicates(translation.Path);
+            foreach (var duplicate in duplicates)
             {
                 result.Add("MDLOC003", ValidationSeverity.Error,
-                    $"Duplicate key '{group.Key}' in {translation.FileName}.", translation.FileName);
+                    $"Duplicate key '{duplicate}' in {translation.FileName}.", translation.FileName);
             }
+
             foreach (var key in keys.Keys.Where(k => !defaultKeys.ContainsKey(k)))
             {
                 result.Add("MDLOC001", ValidationSeverity.Error,
@@ -124,22 +125,43 @@ public static class LocalizationValidator
         return result;
     }
 
-    private static IReadOnlyDictionary<string, string> ReadKeys(string path)
+    /// <summary>
+    /// The keys in a resx, and the ones declared more than once.
+    /// </summary>
+    /// <remarks>
+    /// The duplicates used to be detected by grouping the resulting dictionary's keys, which can
+    /// never produce a group of more than one - so MDLOC003 never fired, while the SDK's own
+    /// analyzer reports it as an error on exactly the files DeckForge called clean. Detecting it
+    /// here means reading the elements before they are collapsed.
+    /// </remarks>
+    private static (IReadOnlyDictionary<string, string> Keys, IReadOnlyList<string> Duplicates) ReadKeysWithDuplicates(string path)
     {
         try
         {
-            var doc = XDocument.Load(path);
-            return doc.Root?.Elements("data")
+            var elements = XDocument.Load(path).Root?.Elements("data")
                 .Where(e => (string?)e.Attribute("name") is not null)
+                .ToList() ?? [];
+
+            var duplicates = elements
                 .GroupBy(e => (string)e.Attribute("name")!, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.First().Element("value")?.Value ?? string.Empty, StringComparer.Ordinal)
-                ?? new Dictionary<string, string>();
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToList();
+
+            return (
+                elements
+                    .GroupBy(e => (string)e.Attribute("name")!, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().Element("value")?.Value ?? string.Empty, StringComparer.Ordinal),
+                duplicates);
         }
-        catch (Exception ex) when (ex is System.Xml.XmlException or System.IO.IOException)
+        catch (Exception ex) when (ex is System.Xml.XmlException or System.IO.IOException or UnauthorizedAccessException)
         {
-            return new Dictionary<string, string>();
+            return (new Dictionary<string, string>(), []);
         }
     }
+
+    private static IReadOnlyDictionary<string, string> ReadKeys(string path) =>
+        ReadKeysWithDuplicates(path).Keys;
 }
 
 /// <summary>The Localization directory of a plugin project, split into default + translations.</summary>

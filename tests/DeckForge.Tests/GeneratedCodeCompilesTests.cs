@@ -43,7 +43,8 @@ public class GeneratedCodeCompilesTests
     /// <summary>Writes a stock project plus the given extra files, then builds it.</summary>
     private static (string Root, string Output) WriteAndBuild(
         NewProjectOptions options,
-        IReadOnlyList<(string RelativePath, string Content)> extras)
+        IReadOnlyList<(string RelativePath, string Content)> extras,
+        IReadOnlyDictionary<string, string>? resxEntries = null)
     {
         var sandbox = Sandbox();
         var scoped = options with { ParentDirectory = sandbox };
@@ -56,6 +57,16 @@ public class GeneratedCodeCompilesTests
             var path = Path.Combine(root, ProjectContentBuilder.ToOsPath(relative));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, content, new UTF8Encoding(false));
+        }
+
+        // A generated action reads its strings through the generated `Strings` class, so the resx
+        // has to carry them or every accessor is a CS0117. Writing only the .cs produced a build
+        // full of errors that had nothing to do with the code under test.
+        if (resxEntries is { Count: > 0 })
+        {
+            ResxMerger.AddKeys(
+                Path.Combine(root, "src", scoped.ProjectName!, "Localization", "Strings.resx"),
+                resxEntries);
         }
 
         var slnx = Directory.GetFiles(root, "*.slnx").First();
@@ -167,12 +178,92 @@ public class GeneratedCodeCompilesTests
         };
 
         var options = Options();
-        var source = ActionGenerator.Render(design, options.ProjectName!);
-        var (_, output) = WriteAndBuild(options, [($"{design.ClassName}.cs", source)]);
+        var file = ActionGenerator.Generate(design, options.ProjectName!);
+        var (_, output) = WriteAndBuild(
+            options,
+            [($"src/{options.ProjectName}/{file.Path}", file.Content)],
+            file.ResxEntries);
         AssertNoCompilerErrors(output);
     }
 
     /// <summary>Each editor type, filled with values that exercise its optional arguments.</summary>
+    [Test]
+    public void A_freshly_added_parameter_compiles_for_every_action_editor_type()
+    {
+        if (Skip)
+        {
+            Assert.Ignore("DECKFORGE_SKIP_SLOW_TESTS=1");
+        }
+
+        // What the Actions page actually hands the generator for a row the user has just added and
+        // not touched. This is the fixture the real defects were found in, and it is not the same as
+        // an empty spec: the designer pre-fills Maximum with 100 and Step with 1, so a Duration is
+        // emitted with a `step:` it has no parameter for, and it pre-fills the options list, so a
+        // spec that also names an options source kept the list and silently dropped the source.
+        //
+        // The defaults are copied from ParameterSpec's field initialisers in ActionsEditorViewModel,
+        // which the test project cannot reference.
+        var parameters = ActionParameterTypes.All
+            .Select(type => new ActionParameterSpec
+            {
+                Name = Kebab(type.Name),
+                EditorType = type.Name,
+                Label = type.Name,
+                Max = 100,
+                Step = 1,
+                Options =
+                [
+                    new ParameterOption("option1", "First"),
+                    new ParameterOption("option2", "Second"),
+                ],
+            })
+            .ToList();
+
+        var design = new ActionDesign
+        {
+            ActionId = "fresh",
+            ActionName = "Fresh",
+            ActionDescription = "One of each type, as the designer first produces it.",
+            Parameters = parameters,
+        };
+
+        var options = Options();
+        var file = ActionGenerator.Generate(design, options.ProjectName!);
+        var (_, output) = WriteAndBuild(
+            options,
+            [($"src/{options.ProjectName}/{file.Path}", file.Content)],
+            file.ResxEntries);
+
+        AssertNoCompilerErrors(output);
+    }
+
+    [Test]
+    public void An_action_id_that_is_a_csharp_keyword_still_produces_a_usable_file_name()
+    {
+        // `int` is a valid action id. It became `@intAction.cs`, and csc rejects a response file it
+        // cannot open with CS2011 - before it compiles a single line of the project.
+        var design = new ActionDesign
+        {
+            ActionId = "int",
+            ActionName = "Int",
+            ActionDescription = "A keyword as an id.",
+            Parameters = [new ActionParameterSpec { Name = "value", EditorType = "Text", Label = "Value" }],
+        };
+
+        var file = ActionGenerator.Generate(design, "Sample");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(file.Path, Does.Not.Contain("@"), $"The file name was [{file.Path}].");
+            Assert.That(Path.GetInvalidFileNameChars().Any(c => file.Path.Contains(c, StringComparison.Ordinal)),
+                Is.False, $"The file name was [{file.Path}].");
+            Assert.That(file.Content, Does.Not.Contain("namespace @"),
+                "The namespace carries a verbatim-identifier prefix.");
+            Assert.That(file.ResxEntries.Keys, Has.None.Match(".*@.*"),
+                "A resx key carries a verbatim-identifier prefix, which the SDK's generator maps to an underscore.");
+        });
+    }
+
     private static ActionParameterSpec ExtremeFor(ActionParameterTypeInfo type)
     {
         // Parameter names are persisted wire ids, so they are kebab-case - which is what the
@@ -251,8 +342,8 @@ public class GeneratedCodeCompilesTests
         var design = new ActionDesign
         {
             ActionId = "set-light",
-            ActionName = "Set \"light\" \\ level\ttab",
-            ActionDescription = "A \"description\" with a \n newline and a \\ backslash.",
+                ActionName = "Set \"light\" \\ level\ttab",
+                ActionDescription = "A \"description\" with a \n newline and a \\ backslash.",
             Parameters =
             [
                 new ActionParameterSpec
@@ -260,7 +351,7 @@ public class GeneratedCodeCompilesTests
                     Name = "name",
                     EditorType = "Text",
                     Label = "Label with \"quotes\" and <angle> & ampersand",
-                    Description = "Description with {braces} and \"quotes\"",
+                    Description = "Description with (parens) and \"quotes\"",
                     Placeholder = "Placeholder \"quoted\"",
                     Required = true,
                 },
@@ -290,8 +381,44 @@ public class GeneratedCodeCompilesTests
                 $"The generated code reads Strings.{reference.Groups[1].Value}() but no resx entry produces it.");
         }
 
-        var (_, output) = WriteAndBuild(options, [($"{design.ClassName}.cs", source)]);
+        var (_, output) = WriteAndBuild(
+            options,
+            [($"src/{options.ProjectName}/{design.ClassName}.cs", source)],
+            strings);
         AssertNoCompilerErrors(output);
+    }
+
+    [Test]
+    public void A_string_containing_a_brace_is_refused_because_the_generator_would_need_a_parameter()
+    {
+        // Macro Deck's localization generator turns `{name}` in a resx value into a parameter on the
+        // generated method, so a value containing braces produces `Description(LocalizedText braces)`
+        // while the generated action calls `Description()`. Emitting that and letting the build fail
+        // tells the user less, much later.
+        var design = new ActionDesign
+        {
+            ActionId = "braced",
+            ActionName = "Braced",
+            Parameters =
+            [
+                new ActionParameterSpec
+                {
+                    Name = "name",
+                    EditorType = "Text",
+                    Label = "Name",
+                    Description = "Description with {braces} in it",
+                },
+            ],
+        };
+
+        var problems = design.Validate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problems, Has.Some.Contains("brace"), string.Join(" | ", problems));
+            Assert.That(problems.Any(p => p.Contains("name", StringComparison.Ordinal)), Is.True,
+                "The message has to name the parameter, or the user cannot tell which one to change.");
+        });
     }
 
     [Test]
@@ -546,7 +673,10 @@ public class GeneratedCodeCompilesTests
 
         var options = Options();
         var source = WidgetGenerator.Render(design, options.ProjectName!);
-        var (_, output) = WriteAndBuild(options, [($"{design.ClassName}.cs", source)]);
+        var (_, output) = WriteAndBuild(
+            options,
+            [($"src/{options.ProjectName}/{design.ClassName}.cs", source)],
+            WidgetGenerator.BuildStrings(design));
         AssertNoCompilerErrors(output);
     }
 

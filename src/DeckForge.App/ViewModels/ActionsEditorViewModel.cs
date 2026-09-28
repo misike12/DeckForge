@@ -261,7 +261,10 @@ public partial class ActionsEditorViewModel : ObservableObject
             }
         }
 
-        var className = CSharpCode.ToPascal(ActionId) + "Action";
+        // The same name the generator will use, so the file on disk and the registration agree. The
+        // path matters: an id like `int` produced `@intAction.cs`, and csc rejects that with CS2011
+        // before it compiles anything.
+        var className = CSharpCode.TypeName(CSharpCode.ToPascal(ActionId), "Action");
         var path = Path.Combine(ws.PluginProjectDirectory, className + ".cs");
         if (File.Exists(path))
         {
@@ -271,146 +274,43 @@ public partial class ActionsEditorViewModel : ObservableObject
 
         try
         {
-            var source = RenderAction(className);
-            File.WriteAllText(path, source);
+            // The shared generator, not a second copy of it. This page used to keep its own
+            // renderer, and the two had drifted: the copy put the class in a namespace derived from
+            // the action id rather than the project's, so the interface the template declares, the
+            // generated Strings class, and the registration in PluginIntegration were all in three
+            // different namespaces. Every action the page produced failed to build, and the copy
+            // was the one nothing tested.
+            var design = new ActionDesign
+            {
+                ActionId = ActionId,
+                ActionName = ActionName,
+                ActionDescription = ActionDescription,
+                Parameters = [.. Parameters.Select(p => p.ToSpec())],
+            };
+
+            var problems = design.Validate();
+            if (problems.Count > 0)
+            {
+                StatusText = string.Join(" ", problems);
+                return;
+            }
+
+            var file = ActionGenerator.Generate(design, ws.RootNamespace);
+            File.WriteAllText(path, file.Content);
 
             var stringsPath = Path.Combine(ws.LocalizationDirectory, "Strings.resx");
-            var entries = BuildStringEntries();
-            _resx.AddKeys(stringsPath, entries);
+            _resx.AddKeys(stringsPath, file.ResxEntries);
 
-            var registered = RegisterInIntegration(ws, className);
+            var registered = RegisterInIntegration(ws, design.ClassName);
 
             StatusText = registered
-                ? $"Generated {className}.cs with {Parameters.Count} parameter(s), {entries.Count} resx keys, and registered it in PluginIntegration.cs."
-                : $"Generated {className}.cs with {Parameters.Count} parameter(s) and {entries.Count} resx keys, but PluginIntegration.cs could not be patched - add `new {className}(logger)` to the Actions list by hand.";
+                ? $"Generated {file.Path} with {Parameters.Count} parameter(s), {file.ResxEntries.Count} resx keys, and registered it in PluginIntegration.cs."
+                : $"Generated {file.Path} with {Parameters.Count} parameter(s) and {file.ResxEntries.Count} resx keys, but PluginIntegration.cs could not be patched - add `new {design.ClassName}(logger)` to the Actions list by hand.";
         }
         catch (Exception ex)
         {
             StatusText = $"Generation failed: {ex.Message}";
         }
-    }
-
-    private Dictionary<string, string> BuildStringEntries()
-    {
-        var group = $"Actions.{CSharpCode.ToPascal(ActionId)}";
-        var entries = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            [$"{group}.Name"] = ActionName,
-            [$"{group}.Description"] = ActionDescription,
-        };
-
-        // Parameters live under their own `Parameters` group rather than as siblings of Name and
-        // Description. A sibling group is what trips the SDK's own MDLOC008 diagnostic when a
-        // parameter happens to be called "Name" or "Description", because the key is then both a
-        // leaf and the group other keys nest under.
-        foreach (var parameter in Parameters)
-        {
-            var key = $"{group}.Parameters.{CSharpCode.ToPascal(parameter.Name)}";
-            entries[$"{key}.Label"] = parameter.Label;
-            if (!string.IsNullOrWhiteSpace(parameter.Description))
-            {
-                entries[$"{key}.Description"] = parameter.Description;
-            }
-
-            if (!string.IsNullOrWhiteSpace(parameter.Placeholder))
-            {
-                entries[$"{key}.Placeholder"] = parameter.Placeholder;
-            }
-        }
-
-        return entries;
-    }
-
-    private string RenderAction(string className)
-    {
-        var ns = CSharpCode.Identifier(CSharpCode.ToPascal(ActionId));
-        var stem = CSharpCode.ToPascal(ActionId);
-        var sb = new System.Text.StringBuilder();
-
-        sb.AppendLine("using MacroDeck.Localization;");
-        sb.AppendLine("using MacroDeck.Sdk;");
-        sb.AppendLine("using MacroDeck.Sdk.Actions;");
-        sb.AppendLine("using Serilog;");
-        sb.AppendLine();
-        sb.AppendLine($"namespace {ns};");
-        sb.AppendLine();
-        sb.AppendLine("/// <summary>");
-        sb.AppendLine($"/// {CSharpCode.Xml(ActionName)} - generated by DeckForge's Actions editor.");
-        sb.AppendLine("/// The parameter plumbing is complete; replace the body of ExecuteAsync with the real work.");
-        sb.AppendLine("/// </summary>");
-        sb.AppendLine($"public sealed class {className} : IActionDefinition, {ActionContextPatcher.InterfaceName}");
-        sb.AppendLine("{");
-        sb.AppendLine("    private readonly ILogger _logger;");
-        sb.AppendLine("    private IIntegrationContext? _integration;");
-        sb.AppendLine();
-        sb.AppendLine($"    public {className}(ILogger logger) => _logger = logger.ForContext<{className}>();");
-        sb.AppendLine();
-        sb.AppendLine("    public void SetIntegrationContext(IIntegrationContext context) => _integration = context;");
-        sb.AppendLine();
-        sb.AppendLine($"    public string Id => {CSharpCode.StringLiteral(ActionId)};");
-        sb.AppendLine();
-        sb.AppendLine($"    public LocalizedText Name => Strings.Actions.{stem}.Name();");
-        sb.AppendLine();
-        sb.AppendLine($"    public LocalizedText Description => Strings.Actions.{stem}.Description();");
-        sb.AppendLine();
-        sb.AppendLine("    public IReadOnlyList<ActionParameter> Parameters { get; } =");
-        sb.AppendLine("    [");
-
-        foreach (var parameter in Parameters)
-        {
-            var spec = parameter.ToSpec();
-            var key = $"Strings.Actions.{stem}.Parameters.{CSharpCode.ToPascal(spec.Name)}";
-            var call = ActionParameterFactory.Emit(spec, property => $"{key}.{property}()");
-
-            if (!string.IsNullOrWhiteSpace(spec.OnlyWhenParameter))
-            {
-                call += $".OnlyWhen({CSharpCode.StringLiteral(spec.OnlyWhenParameter)}, {CSharpCode.StringLiteral(spec.OnlyWhenValue)})";
-            }
-
-            sb.AppendLine($"        {call},");
-        }
-
-        sb.AppendLine("    ];");
-        sb.AppendLine();
-        sb.AppendLine("    public MacroDeckPlatform Platforms => MacroDeckPlatform.All;");
-        sb.AppendLine();
-        sb.AppendLine("    public IActionExecutor CreateExecutor() => new Executor(_logger, _integration);");
-        sb.AppendLine();
-        sb.AppendLine("    private sealed class Executor : IActionExecutor");
-        sb.AppendLine("    {");
-        sb.AppendLine("        private readonly ILogger _logger;");
-        sb.AppendLine("        private readonly IIntegrationContext? _integration;");
-        sb.AppendLine();
-        sb.AppendLine("        public Executor(ILogger logger, IIntegrationContext? integration = null)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            _logger = logger;");
-        sb.AppendLine("            _integration = integration;");
-        sb.AppendLine("        }");
-        sb.AppendLine();
-        // async unconditionally, so a later Block Programmer save that injects an await - Task.Delay,
-        // an HTTP call, a folder change - cannot land a bare await in a non-async method.
-        sb.AppendLine("        public async Task<ActionResult> ExecuteAsync(ActionExecutionContext context)");
-        sb.AppendLine("        {");
-        sb.AppendLine("            // TODO: implement the real work. The configured values are:");
-        foreach (var parameter in Parameters)
-        {
-            var local = CSharpCode.Identifier(parameter.Name.Trim());
-            sb.AppendLine($"            //     {CSharpCode.StringLiteral(parameter.Name.Trim())} -> context.Parameters.TryGetValue({CSharpCode.StringLiteral(parameter.Name.Trim())}, out var {local});");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("            // Parameters is IReadOnlyDictionary<string, object>, so a value is never null:");
-        sb.AppendLine("            // narrow it yourself (value as string, Convert.ToDouble, and so on).");
-        sb.AppendLine("            //");
-        sb.AppendLine("            // context.CancellationToken is already cancelled when the flow is aborted, so forward it.");
-        sb.AppendLine("            await Task.CompletedTask;");
-        sb.AppendLine();
-        sb.AppendLine($"            _logger.Information(\"Action {CSharpCode.EscapeLiteralBody(ActionId)} executed\");");
-        sb.AppendLine("            return ActionResult.Success();");
-        sb.AppendLine("        }");
-        sb.AppendLine("    }");
-        sb.AppendLine("}");
-        return sb.ToString();
     }
 
     /// <summary>Appends the new action to the integration's Actions list. Returns false when it could not.</summary>
