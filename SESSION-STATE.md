@@ -67,8 +67,11 @@ Note `validate --manifest` against `src/<Name>/manifest.json` always reports
 exists after `macrodeck-plugin build`. Validate the artifact, or the build output, not the source
 tree.
 
-Current state: **344 tests pass, 0 fail.** Template parity: no unexpected differences. A generated
-project builds, packs, validates at publication level, and passes 25/25 conformance checks.
+Current state: **344 tests pass, 0 fail.** Template parity: 9 files byte-identical to the official
+template, 13 intentional deviations, no unexpected differences. A generated project builds, and
+`macrodeck-plugin build` + `validate --level Publication` is clean (0 errors, 0 warnings) with
+conformance at 29 passed, 20 skipped with stated reasons, 0 failed - 28 of them required. The
+generated project's own tests pass 7/7.
 
 To confirm the application actually opens, start the built exe and check for a visible top-level
 window - not `Process.Responding`:
