@@ -148,8 +148,11 @@ public sealed class VisualMigrationTests
 
             var block = migrated.Targets.Single().Scripts.Single().Body.Single();
             Assert.That(block.Kind, Is.EqualTo("var.set-from-parameter"));
-            Assert.That(block.Field("param"), Is.EqualTo("amount"));
+            Assert.That(block.InputText("param"), Is.EqualTo("amount"),
+                "a slot value lives in inputs, where the emitter reads it — not in fields");
             Assert.That(block.Field("required"), Is.EqualTo("true"));
+            Assert.That(block.Field("type"), Is.EqualTo("Numeric"),
+                "a parameter arrives as an object, so the block carries the menu for reading it");
         });
     }
 
@@ -168,7 +171,7 @@ public sealed class VisualMigrationTests
             Assert.That(block.Kind, Is.EqualTo("legacy.unsupported"));
             Assert.That(block.Disabled, Is.True, "an unrecognised block must not emit code by accident");
             Assert.That(block.Comment, Does.Contain(nameof(UnknownStatement)));
-            Assert.That(block.Field("legacyType"), Is.EqualTo(nameof(UnknownStatement)));
+            Assert.That(block.InputText("legacyType"), Is.EqualTo(nameof(UnknownStatement)));
         });
     }
 
@@ -215,17 +218,27 @@ public sealed class VisualMigrationTests
         var notify = reloaded.Targets.Single().Scripts.Single().Body.Single();
         Assert.Multiple(() =>
         {
-            Assert.That(notify.Kind, Is.EqualTo("ui.notify"));
+            // A level other than Info migrates to the levelled variant, whose level is a menu field.
+            Assert.That(notify.Kind, Is.EqualTo("ui.notify-level"));
             Assert.That(notify.Field("level"), Is.EqualTo("Warning"));
-            Assert.That(notify.Field("title"), Is.EqualTo("Done"));
+            Assert.That(notify.InputText("title"), Is.EqualTo("Done"),
+                "a slot value lives in inputs, where the emitter reads it — not in fields");
             Assert.That(notify.InputText("message"), Is.EqualTo("ok"));
         });
     }
 
     /// <summary>One instance of each of the eighteen legacy kinds, with the block it must become.</summary>
+    /// <remarks>
+    /// The read-variable mapping is the one deliberate surprise in this table. The legacy block read a
+    /// host variable into a local, which is one gesture: a read is a reporter, and something has to hold
+    /// its value. <c>var.set-from-host</c> is that block, so the local it declares shows up in the
+    /// palette instead of being invisible. Part 7.15's row is the destination for the <em>name</em> being
+    /// read; this is where the read lands.
+    /// </remarks>
     private static IEnumerable<TestCaseData> LegacyKinds()
     {
         yield return Case(new LogBlock(), "ui.log");
+        yield return Case(new LogBlock { Parameter = "amount" }, "ui.log-with-param");
         yield return Case(new SetVariableBlock { FromParameter = "message" }, "var.set-from-parameter");
         yield return Case(new SetVariableBlock { FromParameter = null, Literal = "text" }, "var.set");
         yield return Case(new IfBlock(), "control.if");
@@ -241,7 +254,7 @@ public sealed class VisualMigrationTests
         yield return Case(new ChangeProfileBlock(), "deck.switch-profile");
         yield return Case(new RunScriptBlock(), "sensing.run-script");
         yield return Case(new PublishEventBlock(), "events.publish");
-        yield return Case(new ReadVariableBlock(), "sensing.get-host-variable");
+        yield return Case(new ReadVariableBlock(), "var.set-from-host");
         yield return Case(new SetVariableValueBlock(), "sensing.set-host-variable");
         yield return Case(new ShowModalBlock(), "ui.show-modal");
         yield return Case(new InvalidateIconBlock(), "deck.invalidate-icon");

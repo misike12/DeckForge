@@ -13,6 +13,16 @@ namespace DeckForge.Core.Visual.Migrations;
 /// <c>visual.md</c> so the two can be checked against each other rather than trusted.
 /// </para>
 /// <para>
+/// <strong>Every key written here is one the catalog declares.</strong> Menu selections — the log
+/// level, the error code, the comparison operator — go into <c>fields</c>, because that is where
+/// <see cref="Block.Fields"/> is read from, and everything that fills a slot goes into
+/// <c>inputs</c>, because that is where the emitter and the canvas look. The first version of this
+/// file wrote slot values with <c>WithField</c>, which parses and round-trips perfectly and emits
+/// nothing at all: the block is there, its inputs are empty, and the generated C# passes an empty
+/// string. <c>BlockCatalogTests</c> now refuses that, by migrating one instance of every legacy kind
+/// and checking each key against the descriptor.
+/// </para>
+/// <para>
 /// A statement type this build does not know becomes a disabled <c>legacy.unsupported</c> block that
 /// records its type name and compiles to nothing, rather than being dropped. The whole point of a
 /// migration is that the user's work survives a version they cannot see, so the failure mode has to be
@@ -42,10 +52,7 @@ public static class BlocksV1Migration
 
         foreach (var statement in program.Statements)
         {
-            if (MigrateStatement(statement, ids) is { } migrated)
-            {
-                script.Body.Add(migrated);
-            }
+            script.Body.AddRange(MigrateStatement(statement, ids));
         }
 
         var project = new VisualProject
@@ -87,24 +94,24 @@ public static class BlocksV1Migration
     {
         foreach (var block in script.Body.SelectMany(statement => statement.Walk()))
         {
-            if (block.Kind is not ("var.set" or "var.set-from-parameter"))
+            if (block.Kind is not ("var.set" or "var.set-from-parameter" or "var.set-from-host"))
             {
                 continue;
             }
 
-            var name = block.Field("var");
+            var name = block.InputText("var");
             if (string.IsNullOrWhiteSpace(name))
             {
                 continue;
             }
 
-            // The block's type field is already in the document's vocabulary: MigrateSetVariable put it
+            // The block's type menu is already in the document's vocabulary: MigrateSetVariable put it
             // there through NormaliseType. Normalising again was a real bug - "Numeric" is not one of
             // the legacy spellings, so every numeric local was redeclared as Text.
             yield return new VariableDeclaration
             {
                 Name = name,
-                Type = block.Field("type") is { Length: > 0 } type ? type : "Text",
+                Type = DeclaredTypeOf(block),
                 Scope = VariableScope.Local,
             };
         }
@@ -125,94 +132,206 @@ public static class BlocksV1Migration
         _ => "Text",
     };
 
-    /// <summary>Migrates one statement, or null when it produced nothing.</summary>
-    private static Block? MigrateStatement(BlockStatement statement, IdSource ids) => statement switch
+    /// <summary>
+    /// The legacy operator set, which is almost the catalog's.
+    /// </summary>
+    /// <remarks>
+    /// The one difference is <c>==</c> against the catalog's <c>=</c>, because the legacy model stored
+    /// C# operators and the catalog stores menu keys. Left alone, a migrated condition would carry a
+    /// menu value that is not one of the menu's options: the canvas would show a blank dropdown and the
+    /// emitter would fall through to its default, silently testing something else.
+    /// </remarks>
+    private static string NormaliseOperator(string? legacyOperator) => legacyOperator switch
     {
-        LogBlock log => new Block { Kind = "ui.log", Id = ids.Next() }
-            .WithField("level", log.Level)
-            .WithText("template", log.Template)
-            .Apply(block => log.Parameter is { Length: > 0 }
-                ? block.WithText("param", log.Parameter)
-                : block),
-
-        SetVariableBlock set => MigrateSetVariable(set, ids),
-
-        IfBlock branch => MigrateIf(branch, ids),
-
-        ReturnResultBlock result => new Block
-        {
-            Kind = result.Outcome switch
-            {
-                "failed" => "control.finish-failed",
-                "accepted" => "control.finish-accepted",
-                _ => "control.finish-success",
-            },
-            Id = ids.Next(),
-        }
-            .WithField("code", result.ErrorCode)
-            .WithField("message", result.Message),
-
-        DelayBlock delay => new Block { Kind = "control.wait-ms", Id = ids.Next() }
-            .WithNumber("ms", delay.Milliseconds),
-
-        HttpRequestBlock http => new Block { Kind = "http.get", Id = ids.Next() }
-            .WithField("into", http.IntoVariable)
-            .WithField("bearer", http.BearerTokenParameter)
-            .WithText("url", http.Url),
-
-        NotifyBlock notify => new Block { Kind = "ui.notify", Id = ids.Next() }
-            .WithField("level", notify.Level)
-            .WithField("title", notify.Title)
-            .WithField("key", notify.Key)
-            .WithText("message", notify.Message),
-
-        NavigateBlock navigate => new Block { Kind = "deck.open-folder", Id = ids.Next() }
-            .WithText("folder", navigate.FolderId),
-
-        GoToParentBlock => new Block { Kind = "deck.go-to-parent", Id = ids.Next() },
-
-        GoBackBlock => new Block { Kind = "deck.go-back", Id = ids.Next() },
-
-        ChangeProfileBlock profile => new Block { Kind = "deck.switch-profile", Id = ids.Next() }
-            .WithText("profile", profile.ProfileId),
-
-        RunScriptBlock script => new Block { Kind = "sensing.run-script", Id = ids.Next() }
-            .WithField("script", script.ScriptId)
-            .WithField("inputs", script.Inputs),
-
-        PublishEventBlock publish => new Block { Kind = "events.publish", Id = ids.Next() }
-            .WithField("event", publish.EventId)
-            .WithField("payload", publish.Payload),
-
-        ReadVariableBlock read => new Block { Kind = "sensing.get-host-variable", Id = ids.Next() }
-            .WithField("name", read.VariableName)
-            .WithField("into", read.IntoVariable),
-
-        SetVariableValueBlock write => new Block { Kind = "sensing.set-host-variable", Id = ids.Next() }
-            .WithField("name", write.VariableName)
-            .WithText("value", write.Value),
-
-        ShowModalBlock modal => new Block { Kind = "ui.show-modal", Id = ids.Next() }
-            .WithField("view", modal.ViewId)
-            .WithField("title", modal.Title)
-            .WithField("data", modal.Data),
-
-        InvalidateIconBlock icon => new Block { Kind = "deck.invalidate-icon", Id = ids.Next() }
-            .WithField("action", icon.ActionId),
-
-        ThrowBlock thrown => new Block { Kind = "control.throw", Id = ids.Next() }
-            .WithText("message", thrown.Message),
-
-        // Not a statement this build knows. Kept as an inert, visible placeholder rather than dropped:
-        // a migration must never be the reason a user's block disappeared.
-        _ => new Block
-        {
-            Kind = "legacy.unsupported",
-            Id = ids.Next(),
-            Disabled = true,
-            Comment = $"Not recognised by this build: {statement.GetType().Name}",
-        }.WithField("legacyType", statement.GetType().Name),
+        "==" => "=",
+        "!=" or "<" or ">" or "<=" or ">=" or "isEmpty" or "isNotEmpty"
+            or "isAvailable" or "isNotAvailable" or "contains" or "notContains" => legacyOperator,
+        _ => "=",
     };
+
+    /// <summary>An <c>ActionErrorCodes</c> member name, or null when the legacy value is not one.</summary>
+    private static string? NormaliseErrorCode(string? legacyCode) =>
+        ErrorCodes.FirstOrDefault(code => string.Equals(code, legacyCode, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The nine members of the SDK's <c>ActionErrorCodes</c>, in the order the menu lists them.</summary>
+    private static readonly string[] ErrorCodes =
+    [
+        "NotConfigured", "NotConnected", "PermissionDenied", "ProviderError", "ProviderRejected",
+        "InvalidParameter", "NotFound", "Timeout", "Unavailable",
+    ];
+
+    /// <summary>Migrates one statement into the blocks it becomes, in order.</summary>
+    /// <remarks>
+    /// A sequence rather than a single block, because one legacy statement genuinely maps onto two: an
+    /// HTTP request that carries a bearer token needs the token set before the call, and the catalog
+    /// keeps that as its own block rather than an extra slot on <c>http.get</c>. Returning a list also
+    /// leaves room for a future legacy kind that has to be split, without changing every caller again.
+    /// </remarks>
+    private static IEnumerable<Block> MigrateStatement(BlockStatement statement, IdSource ids)
+    {
+        switch (statement)
+        {
+            case LogBlock log:
+            {
+                // Two variants, like notify: a log line that attaches a parameter is a different call
+                // (one extra structured argument), and the catalog keeps them apart so the palette row
+                // tells the truth about what the block does.
+                var withParameter = log.Parameter is { Length: > 0 };
+                var block = new Block
+                {
+                    Kind = withParameter ? "ui.log-with-param" : "ui.log",
+                    Id = ids.Next(),
+                }.WithField("level", NormaliseLogLevel(log.Level));
+
+                if (withParameter)
+                {
+                    block.WithText("template", log.Template).WithText("param", log.Parameter!);
+                }
+                else
+                {
+                    block.WithText("template", log.Template);
+                }
+
+                yield return block;
+                break;
+            }
+
+            case SetVariableBlock set:
+                yield return MigrateSetVariable(set, ids);
+                break;
+
+            case IfBlock branch:
+                yield return MigrateIf(branch, ids);
+                break;
+
+            case ReturnResultBlock result:
+                yield return MigrateReturnResult(result, ids);
+                break;
+
+            case DelayBlock delay:
+                yield return new Block { Kind = "control.wait-ms", Id = ids.Next() }
+                    .WithNumber("ms", delay.Milliseconds);
+                break;
+
+            case HttpRequestBlock http:
+            {
+                if (http.BearerTokenParameter is { Length: > 0 } bearer)
+                {
+                    yield return new Block { Kind = "http.set-bearer", Id = ids.Next() }
+                        .WithText("name", bearer);
+                }
+
+                yield return new Block { Kind = "http.get", Id = ids.Next() }
+                    .WithText("into", http.IntoVariable is { Length: > 0 } target ? target : "response")
+                    .WithText("url", http.Url);
+                break;
+            }
+
+            case NotifyBlock notify:
+                yield return MigrateNotify(notify, ids);
+                break;
+
+            case NavigateBlock navigate:
+                yield return new Block { Kind = "deck.open-folder", Id = ids.Next() }
+                    .WithText("folder", navigate.FolderId);
+                break;
+
+            case GoToParentBlock:
+                yield return new Block { Kind = "deck.go-to-parent", Id = ids.Next() };
+                break;
+
+            case GoBackBlock:
+                yield return new Block { Kind = "deck.go-back", Id = ids.Next() };
+                break;
+
+            case ChangeProfileBlock profile:
+                yield return new Block { Kind = "deck.switch-profile", Id = ids.Next() }
+                    .WithText("profile", profile.ProfileId);
+                break;
+
+            case RunScriptBlock script:
+                yield return script.Inputs is { Length: > 0 }
+                    ? new Block { Kind = "sensing.run-script-with-inputs", Id = ids.Next() }
+                        .WithText("script", script.ScriptId)
+                        .WithText("inputs", script.Inputs)
+                    : new Block { Kind = "sensing.run-script", Id = ids.Next() }
+                        .WithText("script", script.ScriptId);
+                break;
+
+            case PublishEventBlock publish:
+                yield return publish.Payload is { Length: > 0 }
+                    ? new Block { Kind = "events.publish-with-payload", Id = ids.Next() }
+                        .WithText("event", publish.EventId)
+                        .WithText("payload", publish.Payload)
+                    : new Block { Kind = "events.publish", Id = ids.Next() }
+                        .WithText("event", publish.EventId);
+                break;
+
+            // The legacy block read a host variable into a local, which is one block in the catalog:
+            // a read is a reporter, and something has to hold its value. var.set-from-host is that
+            // block, and it declares its local like every other set block does.
+            case ReadVariableBlock read:
+                yield return new Block { Kind = "var.set-from-host", Id = ids.Next() }
+                    .WithText("var", read.IntoVariable is { Length: > 0 } local ? local : "variableValue")
+                    .WithText("name", read.VariableName);
+                break;
+
+            case SetVariableValueBlock write:
+            {
+                var block = new Block { Kind = "sensing.set-host-variable", Id = ids.Next() }
+                    .WithText("name", write.VariableName);
+
+                // UseParameter meant "the value is a parameter, not a literal", which the catalog
+                // expresses by nesting the parameter reader in the slot. That nesting is the whole
+                // reason this model has slots at all.
+                if (write.UseParameter)
+                {
+                    block.WithBlock("value", new Block { Kind = "data.read-payload", Id = ids.Next() }
+                        .WithText("name", write.Value));
+                }
+                else
+                {
+                    block.WithText("value", write.Value);
+                }
+
+                yield return block;
+                break;
+            }
+
+            case ShowModalBlock modal:
+                yield return modal.Data is { Length: > 0 }
+                    ? new Block { Kind = "ui.show-modal-data", Id = ids.Next() }
+                        .WithText("view", modal.ViewId)
+                        .WithText("title", modal.Title)
+                        .WithText("data", modal.Data)
+                    : new Block { Kind = "ui.show-modal", Id = ids.Next() }
+                        .WithText("view", modal.ViewId)
+                        .WithText("title", modal.Title);
+                break;
+
+            case InvalidateIconBlock icon:
+                yield return new Block { Kind = "deck.invalidate-icon", Id = ids.Next() }
+                    .WithText("action", icon.ActionId);
+                break;
+
+            case ThrowBlock thrown:
+                yield return new Block { Kind = "control.throw", Id = ids.Next() }
+                    .WithText("message", thrown.Message);
+                break;
+
+            // Not a statement this build knows. Kept as an inert, visible placeholder rather than
+            // dropped: a migration must never be the reason a user's block disappeared.
+            default:
+                yield return new Block
+                {
+                    Kind = "legacy.unsupported",
+                    Id = ids.Next(),
+                    Disabled = true,
+                    Comment = $"Not recognised by this build: {statement.GetType().Name}",
+                }.WithText("legacyType", statement.GetType().Name);
+                break;
+        }
+    }
 
     private static Block MigrateSetVariable(SetVariableBlock set, IdSource ids)
     {
@@ -220,43 +339,127 @@ public static class BlocksV1Migration
         {
             Kind = set.FromParameter is not null ? "var.set-from-parameter" : "var.set",
             Id = ids.Next(),
-        }.WithField("var", set.VariableName)
-         .WithField("type", NormaliseType(set.Type));
+        }.WithVariable("var", set.VariableName);
 
         if (set.FromParameter is not null)
         {
+            // A parameter arrives as an object, so the block has to be told how to read it.
             return block
-                .WithField("param", set.FromParameter)
+                .WithField("type", NormaliseType(set.Type))
+                .WithText("param", set.FromParameter)
                 .WithField("required", set.Required ? "true" : "false");
         }
 
+        // A literal carries its own type: 5, "5" and true are three different BlockInputs. So there is
+        // no type menu on this block at all - design C8 says the local is declared by inference - and
+        // DeclaredVariables reads the type back off the slot. An extra type field or valueKind field
+        // would be a second source of truth for a type, which is one that can disagree with the first.
         return set.Type switch
         {
-            "number" => block.WithField("valueKind", "number")
-                .WithNumber("value", double.TryParse(
-                    set.Literal,
-                    System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var number) ? number : 0),
-            "bool" => block.WithField("valueKind", "bool")
-                .WithBoolean("value", bool.TryParse(set.Literal, out var flag) && flag),
-            _ => block.WithField("valueKind", "text").WithText("value", set.Literal ?? string.Empty),
+            "number" => block.WithNumber("value", double.TryParse(
+                set.Literal,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var number) ? number : 0),
+            "bool" => block.WithBoolean("value", bool.TryParse(set.Literal, out var flag) && flag),
+            _ => block.WithText("value", set.Literal ?? string.Empty),
         };
     }
 
+    /// <summary>
+    /// The notify kind that matches what the legacy block actually set.
+    /// </summary>
+    /// <remarks>
+    /// The catalog keeps a level, a key and a bare notify apart, because they are three different calls
+    /// to the host. The legacy model had one block with all three properties, so the migration has to
+    /// choose: a key makes the notification replaceable, a non-default level makes it a warning, and
+    /// anything else is the plain form.
+    /// </remarks>
+    private static Block MigrateNotify(NotifyBlock notify, IdSource ids)
+    {
+        if (notify.Key is { Length: > 0 } key)
+        {
+            return new Block { Kind = "ui.notify-key", Id = ids.Next() }
+                .WithText("key", key)
+                .WithText("title", notify.Title)
+                .WithText("message", notify.Message);
+        }
+
+        if (notify.Level is { Length: > 0 } level && !string.Equals(level, "Info", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Block { Kind = "ui.notify-level", Id = ids.Next() }
+                .WithField("level", NormaliseNotificationLevel(level))
+                .WithText("title", notify.Title)
+                .WithText("message", notify.Message);
+        }
+
+        return new Block { Kind = "ui.notify", Id = ids.Next() }
+            .WithText("title", notify.Title)
+            .WithText("message", notify.Message);
+    }
+
+    /// <summary>One of the catalog's three notification levels, defaulting to Info.</summary>
+    private static string NormaliseNotificationLevel(string legacyLevel) => legacyLevel.ToLowerInvariant() switch
+    {
+        "warning" or "warn" => "Warning",
+        "error" => "Error",
+        _ => "Info",
+    };
+
+    /// <summary>One of the catalog's five log levels, defaulting to Information.</summary>
+    private static string NormaliseLogLevel(string legacyLevel) =>
+        LogLevels.FirstOrDefault(level => string.Equals(level, legacyLevel, StringComparison.OrdinalIgnoreCase))
+        ?? "Information";
+
+    /// <summary>The five Serilog levels the log block offers, in the order the menu lists them.</summary>
+    private static readonly string[] LogLevels =
+        ["Verbose", "Debug", "Information", "Warning", "Error"];
+
+    /// <summary>
+    /// The type of the local a set block declares.
+    /// </summary>
+    /// <remarks>
+    /// Two sources, because the two set blocks differ on purpose. <c>var.set-from-parameter</c> has a
+    /// type menu — a parameter arrives as an object and has to be read as something — while
+    /// <c>var.set</c> deliberately has none, because a literal's type is the slot's own value kind.
+    /// Reading both from the menu made every migrated numeric literal declare itself as text.
+    /// </remarks>
+    private static string DeclaredTypeOf(Block block) => block.Kind switch
+    {
+        "var.set-from-parameter" => block.Field("type") is { Length: > 0 } type ? type : "Text",
+        _ => block.Inputs.TryGetValue("value", out var value)
+            ? value.Kind switch
+            {
+                BlockInputKind.Number => "Numeric",
+                BlockInputKind.Boolean => "Boolean",
+                _ => "Text",
+            }
+            : "Text",
+    };
+
+    private static Block MigrateReturnResult(ReturnResultBlock result, IdSource ids) => result.Outcome switch
+    {
+        "failed" => new Block { Kind = "control.finish-failed", Id = ids.Next() }
+            .WithField("code", NormaliseErrorCode(result.ErrorCode))
+            .WithText("message", result.Message),
+        "accepted" => new Block { Kind = "control.finish-accepted", Id = ids.Next() }
+            .WithText("message", result.Message),
+        _ => new Block { Kind = "control.finish-success", Id = ids.Next() },
+    };
+
     private static Block MigrateIf(IfBlock branch, IdSource ids)
     {
-        var comparison = new Block { Kind = "ops.compare", Id = ids.Next(), }
-            .WithField("op", branch.Operator);
+        var comparison = new Block { Kind = "ops.compare", Id = ids.Next() }
+            .WithField("op", NormaliseOperator(branch.Operator));
 
         if (branch.RightLiteral is { Length: > 0 })
         {
             comparison.WithText("b", branch.RightLiteral);
         }
 
-        if (branch.LeftVariable is { Length: > 0 })
+        if (branch.LeftVariable is { Length: > 0 } left)
         {
-            comparison.WithVariable("a", branch.LeftVariable);
+            comparison.WithVariable("a", left);
         }
         else
         {
@@ -271,18 +474,12 @@ public static class BlocksV1Migration
 
         foreach (var child in branch.Then)
         {
-            if (MigrateStatement(child, ids) is { } migrated)
-            {
-                container.Body("then").Add(migrated);
-            }
+            container.Body("then").AddRange(MigrateStatement(child, ids));
         }
 
         foreach (var child in branch.Else)
         {
-            if (MigrateStatement(child, ids) is { } migrated)
-            {
-                container.Body("else").Add(migrated);
-            }
+            container.Body("else").AddRange(MigrateStatement(child, ids));
         }
 
         return container;
@@ -302,11 +499,4 @@ public static class BlocksV1Migration
 
         public string Next() => "b" + (++_next).ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
-}
-
-/// <summary>Small fluent helper so the migration's mapping table stays a table.</summary>
-internal static class BlockFluentExtensions
-{
-    /// <summary>Applies a change, for the odd case that needs a condition inside a chain.</summary>
-    public static Block Apply(this Block block, Func<Block, Block> change) => change(block);
 }

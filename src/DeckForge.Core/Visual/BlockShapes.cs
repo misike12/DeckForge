@@ -40,35 +40,94 @@ public enum BlockShape
 
     /// <summary>Attaches to a block: a comment or a disable marker.</summary>
     Modifier,
+
+    /// <summary>
+    /// A block a document may hold but the palette never offers.
+    /// </summary>
+    /// <remarks>
+    /// Exactly one kind uses it: <c>legacy.unsupported</c>, the migration's record of a statement type
+    /// from a build this one does not know. It has to be a real catalog entry — the emitter and the
+    /// validator both need somewhere to look, and "a kind with no descriptor" is the failure the whole
+    /// design is arranged around — but it must never be draggable, because a user has no way to fill it
+    /// in. A shape says both at once, where a boolean flag beside <c>Shape</c> would be a second thing
+    /// to keep in step.
+    /// </remarks>
+    Placeholder,
 }
 
 /// <summary>
-/// The kind of value a slot prefers.
+/// The kind of value a slot prefers, and — when it names something the document declares — where the
+/// editor draws its dropdown from.
 /// </summary>
 /// <remarks>
+/// <para>
 /// A preference, never a restriction. Part 5.3 of the design keeps Scratch's freedom — any reporter
 /// fits any slot, and the emitter coerces at the use site — so this drives editor affordances and
 /// warnings only. Refusing a drop here would be the wrong kind of strictness.
+/// </para>
+/// <para>
+/// The last nine members are not value types at all, they are <em>sources</em>: a slot marked
+/// <see cref="HostVariable"/> is filled by picking one of the plugin's declared variables, not by
+/// typing text. One member per source, rather than a separate descriptor type, because the editor and
+/// the validator both need to ask the same question — "what may go here, and what can I offer" — and
+/// one enum answers both without a second lookup table to keep in step.
+/// </para>
 /// </remarks>
 public enum SlotType
 {
+    /// <summary>Anything. The common case.</summary>
     Any,
+
+    /// <summary>Text.</summary>
     Text,
+
+    /// <summary>A number.</summary>
     Number,
+
+    /// <summary>A condition.</summary>
     Boolean,
+
+    /// <summary>A list declared in this document, referenced by name.</summary>
     List,
+
+    /// <summary>A variable the plugin declares, picked from the manifest.</summary>
     HostVariable,
+
+    /// <summary>A user variable the host owns, picked from the host's names.</summary>
     UserVariable,
+
+    /// <summary>One of the action's parameters, picked from the action's own declaration.</summary>
     Parameter,
+
+    /// <summary>An event the plugin declares.</summary>
     Event,
+
+    /// <summary>An action the plugin declares.</summary>
     Action,
+
+    /// <summary>A host script the plugin declares.</summary>
     Script,
+
+    /// <summary>A widget the plugin declares.</summary>
     Widget,
+
+    /// <summary>A configuration entry the plugin declares.</summary>
     ConfigEntry,
+
+    /// <summary>A path on disk.</summary>
     File,
+
+    /// <summary>An icon reference.</summary>
     Icon,
+
+    /// <summary>A colour literal.</summary>
     Color,
-    Menu,
+
+    /// <summary>A variable this document declares, in the scope nearest the block.</summary>
+    Variable,
+
+    /// <summary>A procedure this document declares.</summary>
+    Procedure,
 }
 
 /// <summary>The palette grouping a block belongs to, which is also its colour.</summary>
@@ -127,18 +186,49 @@ public sealed record BodyDescriptor(string Name, string? Label = null, bool Requ
 /// <summary>
 /// How a block reaches the host, quoted from the assembly the mapping was verified against.
 /// </summary>
-/// <param name="Expression">The generated expression or statement shape, without the guard.</param>
-/// <param name="RequiresHost">True when the block calls <c>_integration</c> and needs the null guard.</param>
-/// <param name="RequiresInteraction">True when the block calls <c>context.Ui</c> or <c>context.Interactions</c>, which are null until a session exists and need a check of their own.</param>
-/// <param name="VerifiedAgainst">The Appendix A row this mapping came from, or null when unverified.</param>
-public sealed record SdkMapping(
-    string Expression,
-    bool RequiresHost = true,
-    bool RequiresInteraction = false,
-    string? VerifiedAgainst = null)
+/// <param name="Expression">
+/// The emitted expression or statement, as a template.
+/// </param>
+/// <param name="VerifiedAgainst">The Appendix A surface this mapping was read from.</param>
+/// <param name="SuppressHostGuard">
+/// True for the one block that *asks* whether a host session exists, which must not be preceded by a
+/// guard that returns early when it does not.
+/// </param>
+/// <remarks>
+/// <para>
+/// The expression is a template: <c>{into}</c>, <c>{level}</c>, <c>{var}</c> and friends are replaced by
+/// the emitter with the block's own field or slot value, the same convention the log template already
+/// uses. A template keeps a row readable as one line, which matters when there are a hundred and fifty
+/// of them to review.
+/// </para>
+/// <para>
+/// <see cref="RequiresHost"/> and <see cref="RequiresInteraction"/> are <em>derived from the
+/// expression</em> rather than stored as flags. A hand-maintained flag is a second source of truth that
+/// can disagree with the code, and disagreeing here is expensive: the guard the emitter places before a
+/// host call returns <c>NotConnected</c> from the whole action, so a block wrongly marked as touching
+/// the host would fail an action that never needed a session. Deriving it makes that mistake
+/// impossible rather than merely tested for.
+/// </para>
+/// </remarks>
+public sealed record SdkMapping(string Expression, string VerifiedAgainst, bool SuppressHostGuard = false)
 {
     /// <summary>Whether the mapping was read off the real assembly rather than assumed.</summary>
     public bool IsVerified => !string.IsNullOrWhiteSpace(VerifiedAgainst);
+
+    /// <summary>Whether the block touches <c>_integration</c> and therefore needs the null guard.</summary>
+    public bool RequiresHost =>
+        !SuppressHostGuard && Expression.Contains("_integration", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Whether the block touches a surface on <c>ActionExecutionContext</c> instead.
+    /// </summary>
+    /// <remarks>
+    /// Dialogs and pickers live on the execution context, not on the integration context, and they are
+    /// null until a session exists — so they need a check of their own rather than the integration guard.
+    /// </remarks>
+    public bool RequiresInteraction =>
+        Expression.Contains("context.Ui", StringComparison.Ordinal)
+        || Expression.Contains("context.Interactions", StringComparison.Ordinal);
 }
 
 /// <summary>A palette category: its name, colour and glyph.</summary>
@@ -147,6 +237,12 @@ public sealed record SdkMapping(
 /// <param name="Hue">The base colour, as <c>#RRGGBB</c>. Part 7.2 of the design lists these.</param>
 /// <param name="Glyph">A <c>SymbolRegular</c> member name, checked by the markup test.</param>
 /// <param name="Summary">One line explaining what the category is for.</param>
+/// <remarks>
+/// <see cref="BlockCategory.Media"/> has no descriptor, because it has no blocks and the rail renders
+/// the descriptors it is given: a heading with nothing under it is worse than an absent heading. The
+/// decision still has somewhere to live — in the enum's comment, in <c>BlockCatalog.Dropped</c> and in
+/// Part 7.6 of <c>visual.md</c> — which is what an empty category needs most.
+/// </remarks>
 public sealed record BlockCategoryDescriptor(
     BlockCategory Category,
     string Name,

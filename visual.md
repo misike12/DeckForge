@@ -69,13 +69,13 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P1a complete (Core document model). Next: P1b — the 153-block catalog.**
+**Current position: P1b complete (block catalog). Next: P1c — validator, metrics, stack layout, drop resolver.**
 
 | Phase | Status | Evidence |
 |---|---|---|
 | P0 — Ground truth | ✅ **complete** | Appendix A filled from the real assembly; Part 7.16 records the verdicts; baseline build and tests recorded below |
 | P1a — Core document model | ✅ **complete** | `Core/Visual/{BlockShapes,Block,VisualProject,VisualProjectJson}.cs` + `Migrations/BlocksV1Migration.cs`; 38 new tests, full suite 387 green |
-| P1b — Block catalog (153 rows) | ⬜ not started | |
+| P1b — Block catalog | ✅ **complete** | `BlockCatalog.cs` + `BlockCatalogRows.cs`: **156 shipping blocks** across 11 palette categories (Media stays empty by design), 7 deferred, 28 dropped, 1 placeholder; 7 discovered blocks included in the 156. 31 new tests in `BlockCatalogTests`, full suite **444 green**. As-built §7.17 records the drift from the §7.3–§7.14 tables and the design decisions the tests forced |
 | P1c — Validator, metrics, stack layout, drop resolver | ⬜ not started | |
 | P2 — Emitters | ⬜ not started | |
 | P3 — Palette and rendering | ⬜ not started | |
@@ -101,6 +101,7 @@ inspected.
 | Date | Completed | Commit |
 |---|---|---|
 | 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
+| 2026-09-29 | **P1b**: the block catalog — 156 shipping blocks in 11 categories, `Search`, per-category counts pinned by test, every expression checked against the Appendix A surface dump, capabilities cross-checked against `CapabilityCatalog`. The migration was rewritten: slot values now land in `inputs` (they were in `fields`, which parsed fine and emitted nothing), variants are chosen by what the legacy block actually set (`ui.log-with-param`, `ui.notify-key`, `sensing.run-script-with-inputs`), `read-variable` migrates to `var.set-from-host`, literals lose their redundant `valueKind`/`type` menu, `==` normalises to `=`, error codes normalise case-insensitively against the real nine. Design changes recorded in §6.2.1 and §7.17 | **milestone 3 — see commit** |
 | 2026-09-29 | **P1a**: the visual document model — `Block`/`BlockInput`, the document types, hand-written JSON converters, structural legacy detection, and the 18-kind migration. 38 new tests (`VisualModelTests`, `VisualMigrationTests`); full suite 387 green. The class hierarchy in §6.2 became one generic node (§6.2.1) | **milestone 2 — see commit** |
 | 2026-09-29 | **P0**: added `tools/SdkInventory` (re-runnable surface dumper) and dumped `MacroDeck.Sdk` + `MacroDeck.Localization` at the pin; recorded the baseline; filled Appendix A; added Part 7.16 verdicts (28 blocks dropped, 6 deferred, 7 discovered) | **milestone 1 — `c23f67d`** |
 
@@ -879,6 +880,49 @@ owner exists to dispose them.
    `entryId` plus a key. So `get setting` / `set setting` need a **config entry picker** rather than a
    text box, and `GetSecretAsync` existing is exactly why Part 27.2's rule (a secret is read at
    runtime, never written into the document) is enforceable rather than aspirational.
+
+### 7.17 As built (P1b) — what the catalog is, and what changed
+
+The catalog ships in two files: `BlockCatalog.cs` holds the rules, lookups and the deliberate-absence
+lists (`Deferred`, `Dropped`); `BlockCatalogRows.cs` holds the vocabulary, one method per category.
+`Search` matches kind, label and summary — Part 9.7's requirement, testable before a window exists.
+
+**The counts moved from 153 to 156, and each +1 is a decision with a name.** The §7.3–§7.14 tables were
+written before the P0 verdicts; building the rows against the real surface found blocks the tables had
+no row for, plus three the tables promised that the surface could not honour:
+
+| Change | Why |
+|---|---|
+| C5 **+2**: `events.request-message` (the discovered `Messages.RequestAsync` reporter), `events.send-message` kept, `publish`/`publish-with-payload` split as the table already listed | the two discovered blocks from §7.16 needed rows, not footnotes |
+| C9 **+1**: `list.define` | Scratch declares lists implicitly on first use; a code generator cannot. An explicit declaration block is the one honest way to scope a list, and the editor uses it to drive the palette of list names |
+| C11 **−2**, then **+1**: `websocket connect/send` dropped (no client surface, §7.16), `http.set-bearer` added | the legacy `http-request` block carried a bearer parameter; as a slot it would have vanished on migration. A separate block keeps the rule visible and the request blocks simple |
+| C10 **−1**: `read flow field` folded into `data.read-payload` | the P0 verdict found no separate flow-field surface; one reader with a picker covers both |
+| `control.finish-failed`'s code menu is exactly the nine `ActionErrorCodes` **member names**, pinned by test | §7.16 finding 3: the values are upper-snake constants; the member names are what the emitter writes |
+| `sensing.get-host-variable` routes through a runtime helper that maps `GetByNameAsync`'s **throw-on-absent** to null | the SDK has no try-read; a bare `?.Value` on a throwing call would be a bug in every generated action |
+| `ui.show-modal*` and `ui.update-widget` construct `ModalDefinition { ViewId = … }` / `WidgetAppearanceRequest { WidgetId = … }` directly | §A.2: the surface defines no `Create` factory; the first draft invented two |
+| Categories: the enum keeps **Media** (empty, with the reason in its comment), the rail renders the 11 that have blocks | the decision needs somewhere to live; an empty heading does not |
+| One **`Placeholder`** shape and one `legacy.unsupported` block, never draggable, in the catalog but not the palette | the migration's record of an unknown statement must resolve for the emitter but must not be offerable |
+| `SlotType` gained `Variable` and `Procedure` and lost nothing; source slots (list, variable, parameter, procedure, …) never carry a hardcoded default name | the canvas turns a source slot into a dropdown of the right names; a default like "items" would be a block born referencing a list that does not exist |
+
+**The migration was rewritten against the catalog, and the first version was wrong in a way that
+parsed.** It wrote slot values with `WithField`, which is legal JSON, round-trips perfectly, and emits
+nothing: the emitter and the canvas read `inputs`, so every migrated block would have run with empty
+slots. `BlockCatalogTests` now migrates one instance of every legacy kind — reflected from
+`BlockModel`, so a nineteenth kind is covered the moment it exists — and refuses any key the block's
+descriptor does not declare. The other corrections the test suite forced:
+
+- Variants are chosen by what the legacy block actually set: `ui.log` vs `ui.log-with-param`,
+  `ui.notify` vs `ui.notify-level` vs `ui.notify-key`, `ui.show-modal` vs `ui.show-modal-data`,
+  `sensing.run-script` vs `sensing.run-script-with-inputs`, `events.publish` vs
+  `events.publish-with-payload`. The legacy model had one block with every property optional; the
+  catalog's variants are honest about what they do.
+- `read-variable` migrates to **`var.set-from-host`**, not `sensing.get-host-variable`: the legacy
+  block read into a local, and a read with nowhere to put it is not a program.
+- A literal set loses its `type`/`valueKind` menu entirely: the slot's own value kind is the type, and
+  design C8 says the local is declared by inference. Two records of one type disagree; one is kept.
+- `==` normalises to `=` (the catalog's menu key), error codes normalise case-insensitively against
+  the real nine, log levels against the real five — a menu value that is not one of its options is a
+  blank dropdown on the canvas and a fall-through in the emitter.
 
 ---
 
