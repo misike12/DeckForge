@@ -43,11 +43,19 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         Closed += (_, _) => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
 
+        // Menu items first, then the footer items, because Ctrl+1 is _shortcutTags[0] and the
+        // numbers have to run down the sidebar in the order the user sees them.
+        //
+        // This used to flatten MenuItems through OfType<IEnumerable>() and a SelectMany, on the
+        // assumption that each entry was a nested list of items. They are not: every entry is a
+        // NavigationViewItem, which is not IEnumerable, so the cast filtered out all of them and
+        // the tag list held nothing but the footer. Ctrl+1..9 were dead, and the digit that
+        // reached NavigateTo was the footer's, so the shortcut could open Settings when the user
+        // pressed Ctrl+1. The same enumeration is written out plainly at the bottom of
+        // NavigateTo, which is the pattern to follow.
         _shortcutTags =
         [
-            .. RootNavigation.MenuItems
-                .OfType<System.Collections.IEnumerable>()
-                .SelectMany(items => items.Cast<Wpf.Ui.Controls.NavigationViewItem>())
+            .. RootNavigation.MenuItems.OfType<Wpf.Ui.Controls.NavigationViewItem>()
                 .Concat(RootNavigation.FooterMenuItems.OfType<Wpf.Ui.Controls.NavigationViewItem>())
                 .Select(item => item.Tag as string)
                 .Where(tag => !string.IsNullOrEmpty(tag))

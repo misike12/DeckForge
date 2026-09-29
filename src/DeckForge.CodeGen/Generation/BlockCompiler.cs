@@ -372,20 +372,7 @@ public static partial class BlockCompiler
         var begin = source.IndexOf(BeginMarker, StringComparison.Ordinal);
         var end = source.IndexOf(EndMarker, StringComparison.Ordinal);
 
-        var anchorIndex = source.IndexOf(anchor, StringComparison.Ordinal);
-        if (anchorIndex < 0)
-        {
-            return null;
-        }
-
-        var open = source.IndexOf('{', anchorIndex);
-        if (open < 0)
-        {
-            return null;
-        }
-
-        var close = MatchingBrace(source, open);
-        if (close < 0)
+        if (source.IndexOf(anchor, StringComparison.Ordinal) < 0)
         {
             return null;
         }
@@ -403,6 +390,28 @@ public static partial class BlockCompiler
             var after = end + EndMarker.Length;
             var lineEnd = source.IndexOf('\n', after);
             source = source.Remove(start, (lineEnd < 0 ? after : lineEnd + 1) - start);
+        }
+
+        // Every position is resolved here, after the removal above, and not one index earlier.
+        // Taking the region out deletes characters from inside the method body, so every index
+        // after it moves earlier by however many characters went, including the index of the
+        // method's own closing brace. Resolving the brace first and using it after the removal
+        // left it pointing past the end of the string: LastTopLevelReturn then scanned beyond the
+        // end of the executor and could pick up the return of a different method further down the
+        // file, and when it found nothing the insert either landed outside the executor or threw
+        // outright. It only ever showed up on the second save of a program, because the first save
+        // has no region to remove and so never goes near this branch.
+        var anchorIndex = source.IndexOf(anchor, StringComparison.Ordinal);
+        var open = source.IndexOf('{', anchorIndex);
+        if (open < 0)
+        {
+            return null;
+        }
+
+        var close = MatchingBrace(source, open);
+        if (close < 0)
+        {
+            return null;
         }
 
         // The closing line has to line up with the method signature, in the file's own style.

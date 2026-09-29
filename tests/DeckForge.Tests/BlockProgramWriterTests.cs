@@ -845,4 +845,127 @@ public sealed class BlockProgramWriterTests
 
         return count;
     }
+
+    /// <summary>
+    /// The action used by the second-save tests: the executor is deliberately NOT the last member,
+    /// and the member after it ends in a top level return.
+    /// </summary>
+    /// <remarks>
+    /// That shape is what made the second save corrupt. Splice resolved the executor's closing brace
+    /// before removing the old region, so after the removal the index pointed past the real end of
+    /// the body. LastTopLevelReturn then kept walking: the executor's own closing brace dropped the
+    /// depth to zero, the next member's opening brace raised it back to one, and the return in that
+    /// second member looked exactly like the executor's own trailing return. The new region was
+    /// spliced into the wrong method, so a block program silently stopped running when the action
+    /// was not the last member of its file. A fixture whose executor ends the file hid it, because
+    /// there was nothing after the stale index to match and the last real return won anyway.
+    /// </remarks>
+    private const string ActionWithAMemberAfterTheExecutor =
+        """
+        using System;
+        using System.Threading.Tasks;
+        using MacroDeck.Sdk;
+
+        namespace Demo;
+
+        public sealed class LogMessageAction : IMacroDeckAction
+        {
+            public string Id => "log-message";
+
+            public Task<ActionResult> ExecuteAsync(ActionExecutionContext context)
+            {
+                var message = context.Parameters.Get("message")?.ToString() ?? string.Empty;
+                return Task.FromResult(ActionResult.Ok(message));
+            }
+
+            public string BuildLabel()
+            {
+                return "a return that belongs to a different member";
+            }
+        }
+
+        """;
+
+    [Test]
+    public void Saving_a_second_program_over_the_first_keeps_the_region_in_the_executor()
+    {
+        // First save: no region exists, so this only proves the starting point is sane.
+        var first = BlockCompiler.Splice(
+            ActionWithAMemberAfterTheExecutor,
+            BlockCompiler.Compile(new BlockProgram
+            {
+                TargetActionId = "log-message",
+                Statements = [new LogBlock { Template = "FIRST_PASS_MARKER", Level = "Debug" }],
+            }),
+            BlockProgramWriter.ExecutorAnchor)
+            ?? throw new InvalidOperationException("The first save could not splice a region.");
+
+        Assert.That(CountOccurrences(first, BlockCompiler.BeginMarker), Is.EqualTo(1),
+            "The first save did not produce exactly one region.");
+
+        // Second save over the same file. This is the save that used to corrupt.
+        var second = BlockCompiler.Splice(
+            first,
+            BlockCompiler.Compile(new BlockProgram
+            {
+                TargetActionId = "log-message",
+                Statements = [new LogBlock { Template = "SECOND_PASS_MARKER", Level = "Debug" }],
+            }),
+            BlockProgramWriter.ExecutorAnchor)
+            ?? throw new InvalidOperationException("The second save could not splice a region.");
+
+        Assert.That(CountOccurrences(second, BlockCompiler.BeginMarker), Is.EqualTo(1),
+            "A second save left more than one region behind.");
+        Assert.That(CountOccurrences(second, BlockCompiler.EndMarker), Is.EqualTo(1),
+            "A second save left more than one region end behind.");
+        Assert.That(second, Does.Contain("SECOND_PASS_MARKER"),
+            "The second program is not in the file.");
+        Assert.That(second, Does.Not.Contain("FIRST_PASS_MARKER"),
+            "The second save kept a statement from the program it replaced.");
+
+        // The marker alone proves nothing: the spliced text stays in the file even when it lands in
+        // the wrong member, so the region has to be proven to be in the executor. Asserting only the
+        // marker count and the program's presence passed while the whole region had been spliced
+        // into the member below the executor, where the block program can never run.
+        var regionStart = second.IndexOf(BlockCompiler.BeginMarker, StringComparison.Ordinal);
+        var executorReturn = second.IndexOf("ActionResult.Ok(message)", StringComparison.Ordinal);
+        var laterMember = second.IndexOf("a return that belongs to a different member", StringComparison.Ordinal);
+
+        Assert.That(executorReturn, Is.GreaterThan(0), "The fixture's executor return went missing.");
+        Assert.That(laterMember, Is.GreaterThan(0), "The fixture's later member went missing.");
+        Assert.That(regionStart, Is.LessThan(executorReturn),
+            "The second save put the region after the executor's own return, so it is not in the executor.");
+        Assert.That(regionStart, Is.LessThan(laterMember),
+            "The second save spliced the region into the member after the executor, where it never runs.");
+    }
+
+    [Test]
+    public void The_region_lands_before_the_executor_s_own_return_and_not_in_a_later_member()
+    {
+        var spliced = BlockCompiler.Splice(
+            ActionWithAMemberAfterTheExecutor,
+            BlockCompiler.Compile(new BlockProgram
+            {
+                TargetActionId = "log-message",
+                Statements = [new LogBlock { Template = "only {name}", Level = "Debug" }],
+            }),
+            BlockProgramWriter.ExecutorAnchor)
+            ?? throw new InvalidOperationException("Could not splice a region.");
+
+        // The executor's body has to still end with its own return, and the region has to sit above
+        // that return rather than after it, or the return is unreachable (CS0162).
+        var executorReturn = spliced.IndexOf("ActionResult.Ok(message)", StringComparison.Ordinal);
+        var regionStart = spliced.IndexOf(BlockCompiler.BeginMarker, StringComparison.Ordinal);
+        Assert.That(regionStart, Is.GreaterThanOrEqualTo(0), "The region is missing from the file.");
+        Assert.That(regionStart, Is.LessThan(executorReturn),
+            "The region was placed after the executor's own return, which makes that return dead code.");
+
+        // The region must be inside the executor, so it has to come before the brace that closes
+        // the method. Finding that brace by name is the point: the label in the member after the
+        // executor must stay exactly where it was, untouched and outside the region.
+        var laterMember = spliced.IndexOf("a return that belongs to a different member", StringComparison.Ordinal);
+        Assert.That(laterMember, Is.GreaterThan(0), "The fixture member went missing.");
+        Assert.That(regionStart, Is.LessThan(laterMember),
+            "The region was spliced into the member after the executor, where it can never run.");
+    }
 }

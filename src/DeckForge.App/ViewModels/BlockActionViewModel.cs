@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeckForge.CodeGen.Generation;
 using DeckForge.Core.Blocks;
+using DeckForge.Core.Code;
 using DeckForge.Core.Workspace;
 
 namespace DeckForge.App.ViewModels;
@@ -22,7 +23,7 @@ public partial class BlockActionViewModel : ObservableObject
     /// The id reaches the generated code - it is the action's log label - so the preview a user
     /// read was not the code they got. One constant, used by both.
     /// </remarks>
-    private const string TargetActionId = "log-message";
+    private const string DefaultTargetActionId = "log-message";
 
     private readonly WorkspaceManager _workspaces;
 
@@ -31,6 +32,26 @@ public partial class BlockActionViewModel : ObservableObject
         _workspaces = workspaces;
         Services.ShellMessenger.WorkspaceChanged += _ => Load();
     }
+
+    /// <summary>
+    /// The id of the action the canvas writes into.
+    /// </summary>
+    /// <remarks>
+    /// This was a <c>const</c>, which is why the canvas could only ever write into
+    /// <c>LogMessageAction.cs</c>: the target file was never derived from a choice, because there was
+    /// no choice to make. It is a property now so the target is real state, restored from the saved
+    /// program and usable by the target picker that still has to be added to the page.
+    /// </remarks>
+    [ObservableProperty]
+    private string _targetActionId = DefaultTargetActionId;
+
+    /// <summary>
+    /// The file the canvas writes into, named from <see cref="TargetActionId"/> by the same rule
+    /// the generator and the Actions page use.
+    /// </summary>
+    public string TargetFileName => CSharpCode.TypeName(CSharpCode.ToPascal(TargetActionId), "Action") + ".cs";
+
+    partial void OnTargetActionIdChanged(string value) => OnPropertyChanged(nameof(TargetFileName));
 
     [ObservableProperty]
     private bool _hasWorkspace;
@@ -61,6 +82,16 @@ public partial class BlockActionViewModel : ObservableObject
 
     /// <summary>Statement count, shown in the program header.</summary>
     public int StatementCount => Statements.Count;
+
+    /// <summary>
+    /// The workspace the statements currently on the canvas belong to, or null when there is none.
+    /// </summary>
+    /// <remarks>
+    /// This is what tells a plain navigation apart from a real workspace switch. Without it the
+    /// canvas could not tell "the user went to another page and came back" from "the user opened a
+    /// different plugin", and had to reload for both - which is what threw the work away.
+    /// </remarks>
+    private string? _canvasWorkspace;
 
     // New-statement form state.
     [ObservableProperty]
@@ -135,7 +166,7 @@ public partial class BlockActionViewModel : ObservableObject
     private string _newHostValue = "";
 
     [ObservableProperty]
-    private string _newIconActionId = TargetActionId;
+    private string _newIconActionId = DefaultTargetActionId;
 
     [ObservableProperty]
     private string _newModalViewId = "my-plugin.view";
@@ -160,6 +191,7 @@ public partial class BlockActionViewModel : ObservableObject
         // closed, so leaving it on screen let the user save one workspace's blocks into another,
         // or press Save with no workspace and read a confusing message.
         Statements.Clear();
+        _canvasWorkspace = ws?.PluginProjectDirectory;
         StatusText = "";
         if (ws is null)
         {
@@ -169,20 +201,57 @@ public partial class BlockActionViewModel : ObservableObject
             return;
         }
 
-        foreach (var statement in ReadPersisted()?.Statements ?? [])
+        // Read once: this parses the sidecar off disk, and it was being read twice - once for the
+        // statements and again for the target - so every load paid for two reads of the same file.
+        var persisted = ReadPersisted();
+
+        foreach (var statement in persisted?.Statements ?? [])
         {
             Statements.Add(statement);
+        }
+
+        // The target is restored with the statements. It used to be dropped, so reopening a saved
+        // program aimed the canvas back at the example action instead of the action it was written
+        // for, and the next save quietly moved the blocks somewhere else.
+        if (persisted?.TargetActionId is { Length: > 0 } savedTarget)
+        {
+            TargetActionId = savedTarget;
         }
 
         Recompile();
     }
 
     /// <summary>Shell hook.</summary>
-    public void RefreshOnNavigate() => Load();
+    /// <remarks>
+    /// Navigating to another page and coming back used to call <see cref="Load"/>, which clears the
+    /// canvas and refills it from the sidecar on disk. A canvas that has never been saved has no
+    /// sidecar, so the refill found nothing and the work was gone: build a few statements, glance at
+    /// another page, come back, and the canvas is empty, with no warning and no undo.
+    ///
+    /// So a plain navigation now only reloads when the workspace behind the canvas is not the one
+    /// already on screen. A genuine workspace switch is still handled, because that is what raises
+    /// <c>WorkspaceChanged</c>, which calls <see cref="Load"/> directly.
+    /// </remarks>
+    public void RefreshOnNavigate()
+    {
+        if (string.Equals(
+                _canvasWorkspace,
+                _workspaces.Current?.PluginProjectDirectory,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        Load();
+    }
 
     private BlockProgram Program() => new()
     {
         TargetActionId = TargetActionId,
+        // Derived from the target id, by the same rule the Actions page and the generator use. It
+        // used to be left unset, so BlockProgram's default of "LogMessageAction.cs" applied to every
+        // program and the save always went to the example action, whatever the canvas was aimed at.
+        TargetFile = TargetFileName,
         Statements = [.. Statements],
     };
 
@@ -543,7 +612,14 @@ public partial class BlockActionViewModel : ObservableObject
         var actionFile = Path.Combine(ws.PluginProjectDirectory, program.TargetFile);
         if (!File.Exists(actionFile))
         {
-            StatusText = $"{program.TargetFile} not found. Set the target action on the Blocks page first.";
+            // Naming the file that is actually missing, and how to get it, instead of telling the
+            // user to "set the target action on the Blocks page": there is no such control on the
+            // page, so the instruction sent them looking for something that does not exist and left
+            // them with no way to fix it.
+            StatusText =
+                $"{program.TargetFile} not found. This workspace has no action with the id " +
+                $"'{TargetActionId}'. Create an action with that id on the Actions page, or point " +
+                "the canvas at an action this workspace already has.";
             return;
         }
 

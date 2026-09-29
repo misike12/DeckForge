@@ -36,7 +36,7 @@
                 <TextBlock Text="Blocks" FontSize="26" FontWeight="SemiBold" />
                 <TextBlock TextWrapping="Wrap" MaxWidth="820" HorizontalAlignment="Left"
                            Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
-                           Text="Compose the action executor from statement blocks. Save writes real C# into LogMessageAction.cs inside macrodeck-blocks markers, so your hand-written code outside them stays untouched." />
+                            Text="{Binding TargetFileName, StringFormat='Compose the action executor from statement blocks. Save writes real C# into {0} inside macrodeck-blocks markers, so your hand-written code outside them stays untouched.'}" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,0,0,0">
                 <ui:Button Content="Docs - Actions" Icon="{ui:SymbolIcon Book24}" Margin="0,0,8,0"
@@ -277,6 +277,9 @@
                             <TextBlock FontSize="11.5" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
                                        Text="{Binding StatementCount, StringFormat='{}{0} statement(s), run top to bottom.'}" />
+                            <TextBlock FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0"
+                                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                       Text="{Binding TargetFileName, StringFormat='Writing into {0}.'}" />
                         </StackPanel>
                         <ui:Button Grid.Column="1" Content="Clear all" VerticalAlignment="Top"
                                    Command="{Binding ClearCommand}"
