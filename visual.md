@@ -69,14 +69,14 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P1b complete (block catalog). Next: P1c — validator, metrics, stack layout, drop resolver.**
+**Current position: P1c complete (validator, metrics, layout, drop resolver). Next: P2 — emitters.**
 
 | Phase | Status | Evidence |
 |---|---|---|
 | P0 — Ground truth | ✅ **complete** | Appendix A filled from the real assembly; Part 7.16 records the verdicts; baseline build and tests recorded below |
 | P1a — Core document model | ✅ **complete** | `Core/Visual/{BlockShapes,Block,VisualProject,VisualProjectJson}.cs` + `Migrations/BlocksV1Migration.cs`; 38 new tests, full suite 387 green |
-| P1b — Block catalog | ✅ **complete** | `BlockCatalog.cs` + `BlockCatalogRows.cs`: **156 shipping blocks** across 11 palette categories (Media stays empty by design), 7 deferred, 28 dropped, 1 placeholder; 7 discovered blocks included in the 156. 31 new tests in `BlockCatalogTests`, full suite **444 green**. As-built §7.17 records the drift from the §7.3–§7.14 tables and the design decisions the tests forced |
-| P1c — Validator, metrics, stack layout, drop resolver | ⬜ not started | |
+| P1b — Block catalog | ✅ **complete** | `BlockCatalog.cs` + `BlockCatalogRows.cs`: **156 shipping blocks** across 11 palette categories (Media stays empty by design), 7 deferred, 28 dropped, 1 placeholder; 7 discovered blocks included in the 156. 31 new tests in `BlockCatalogTests`, full suite 444 green. As-built §7.17 records the drift from the §7.3–§7.14 tables and the design decisions the tests forced |
+| P1c — Validator, metrics, stack layout, drop resolver | ✅ **complete** | `VisualValidator.cs` (+ `VisualValidationContext.cs`): Appendix F document-level diagnostics — shape, required, menu keys, control flow, reachability, name references, the placeholder's info note; a disabled block still has its names checked. `BlockMetrics.cs` / `StackLayout.cs`: pure geometry, cached heights, one geometry for canvas + export + resolver. `DropResolver.cs`: shape hard-filter, distance + stability bonus, magnet radius 40px × zoom, candidate enumeration per script. 42 new tests (`VisualValidatorTests`, `StackLayoutTests`) |
 | P2 — Emitters | ⬜ not started | |
 | P3 — Palette and rendering | ⬜ not started | |
 | P4 — Drag and drop | ⬜ not started | |
@@ -101,6 +101,7 @@ inspected.
 | Date | Completed | Commit |
 |---|---|---|
 | 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
+| 2026-09-29 | **P1c**: the validator and the geometry — `VisualValidator` checks a document against the catalog and produces the Appendix F codes a document can own (shape mismatch as error, type coercion as warning, unbound required slots, unknown menu keys, break/continue depth via a walk that carries loop depth, return-inside-procedure, forever-without-yield, unreachable-after-cap, name references against declared parameters/host variables/procedures, reserved-name collisions). Setters and `list.define` declare their names *as the walk reaches them*, so `set x to x + 1` reads clean and a genuinely-forward reference is caught. `BlockMetrics` + `StackLayout` give canvas, export and resolver one geometry; `DropResolver` filters by shape, scores by distance plus a stability bonus, snaps inside 40px × zoom. Design notes recorded in §9.5-as-built (§9.10) | **milestone 4 — see commit** |
 | 2026-09-29 | **P1b**: the block catalog — 156 shipping blocks in 11 categories, `Search`, per-category counts pinned by test, every expression checked against the Appendix A surface dump, capabilities cross-checked against `CapabilityCatalog`. The migration was rewritten: slot values now land in `inputs` (they were in `fields`, which parsed fine and emitted nothing), variants are chosen by what the legacy block actually set (`ui.log-with-param`, `ui.notify-key`, `sensing.run-script-with-inputs`), `read-variable` migrates to `var.set-from-host`, literals lose their redundant `valueKind`/`type` menu, `==` normalises to `=`, error codes normalise case-insensitively against the real nine. Design changes recorded in §6.2.1 and §7.17 | **milestone 3 — see commit** |
 | 2026-09-29 | **P1a**: the visual document model — `Block`/`BlockInput`, the document types, hand-written JSON converters, structural legacy detection, and the 18-kind migration. 38 new tests (`VisualModelTests`, `VisualMigrationTests`); full suite 387 green. The class hierarchy in §6.2 became one generic node (§6.2.1) | **milestone 2 — see commit** |
 | 2026-09-29 | **P0**: added `tools/SdkInventory` (re-runnable surface dumper) and dumped `MacroDeck.Sdk` + `MacroDeck.Localization` at the pin; recorded the baseline; filled Appendix A; added Part 7.16 verdicts (28 blocks dropped, 6 deferred, 7 discovered) | **milestone 1 — `c23f67d`** |
@@ -1114,6 +1115,26 @@ with no window.
    two equidistant gaps.
 5. A magnet radius of 40px at 100% zoom, scaled by zoom factor. Inside it, the ghost's notch aligns
    exactly with the target's tab and free-follow is suspended.
+
+### 9.5.1 As built (P1c) — the resolver in Core
+
+`DropResolver.cs` implements rules 1, 3, 4 and 5 exactly as written; it takes the candidates the
+canvas enumerates and returns the winner plus the snapped ghost position. Two notes for the next
+reader:
+
+- **A shared boundary offers two gaps.** "After block *n*" and "before block *n+1*" are different
+  candidates at the same coordinates — they differ in which block the document editor anchors the
+  insert to. The stability bonus is what decides between them, which is the situation rule 4 was
+  written for; the test suite pins the tie, not just the winner.
+- **Distance weights y over x** (`|Δy| + |Δx|/2`): a stack is a vertical list, so a pointer slightly
+  left of a gap should still land in it, while a pointer slightly above or below is probably aiming
+  at the neighbouring gap. Rule 2's horizontal overlap is enforced by the canvas when enumerating
+  candidates rather than in the scorer — Core sees only zones the pointer could plausibly mean.
+
+`StackLayout.cs` is the third consumer of the same geometry the canvas draws and the exporter renders:
+rects per block id, notch positions, body indents, cached heights by id when the caller has measured
+ones. Layout is a pure function of (document, zoom, font scale), which is what makes the Appendix H
+layout budget a stopwatch test instead of a feeling.
 
 **Gesture rules**
 

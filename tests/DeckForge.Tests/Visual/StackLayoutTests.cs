@@ -1,0 +1,357 @@
+using DeckForge.Core.Visual;
+using NUnit.Framework;
+
+namespace DeckForge.Tests.Visual;
+
+/// <summary>
+/// Geometry and drop resolution, the two pure pieces the canvas is a thin shell over.
+/// </summary>
+/// <remarks>
+/// <para>
+/// These are the tests that make the drag-and-drop promise testable at all: the same
+/// <see cref="StackLayout"/> and <see cref="DropResolver"/> the WPF layer calls on every pointer move
+/// are called here, with rectangles asserted rather than pixels eyeballed. When a snap goes wrong on
+/// screen, one of these tests gains a case.
+/// </para>
+/// </remarks>
+[TestFixture]
+public sealed class StackLayoutTests
+{
+    // ---- layout -------------------------------------------------------------------------------------
+
+    [Test]
+    public void A_stack_of_two_blocks_lays_out_top_to_bottom_with_a_gap()
+    {
+        var script = Script(
+            Stack("ui.log", b => b.WithText("template", "a")),
+            Stack("ui.log", b => b.WithText("template", "b")));
+
+        var rects = StackLayout.Layout(script);
+
+        var first = rects[script.Body[0].Id];
+        var second = rects[script.Body[1].Id];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(second.Y, Is.GreaterThan(first.Y));
+            Assert.That(first.X, Is.EqualTo(second.X), "a plain stack does not indent");
+            Assert.That(second.Y, Is.GreaterThanOrEqualTo(first.Y + first.Height),
+                "the second block starts at or below the first's bottom");
+        });
+    }
+
+    [Test]
+    public void A_container_lays_out_its_body_indented_and_its_notch_below_the_body()
+    {
+        var script = Script(
+            Stack("control.forever", b => { }, body =>
+            {
+                body.Add(Stack("ui.log", lb => lb.WithText("template", "inner")));
+            }),
+            Stack("ui.log", b => b.WithText("template", "after")));
+
+        var rects = StackLayout.Layout(script);
+
+        var container = rects[script.Body[0].Id];
+        var inner = rects[script.Body[0].Body("body")[0].Id];
+        var after = rects[script.Body[1].Id];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(inner.X, Is.GreaterThan(container.X),
+                "the body's statements sit on the indent rail");
+            Assert.That(inner.Y, Is.GreaterThan(container.Y));
+            Assert.That(container.Height, Is.GreaterThan(44),
+                "a C-block is taller than its label line once it has a body");
+            Assert.That(container.NotchY, Is.EqualTo(container.Y + container.Height).Within(0.001),
+                "the next statement lands below the whole container, not below its label");
+            Assert.That(after.Y, Is.GreaterThanOrEqualTo(container.NotchY));
+        });
+    }
+
+    [Test]
+    public void Two_bodies_of_an_if_else_do_not_overlap()
+    {
+        var script = Script(
+            Stack("control.if-else", b => b.WithBlock("condition", Compare()),
+                then: then =>
+                {
+                    then.Add(Stack("ui.log", lb => lb.WithText("template", "in then")));
+                    then.Add(Stack("ui.log", lb => lb.WithText("template", "still then")));
+                },
+                otherwise: otherwise =>
+                {
+                    otherwise.Add(Stack("ui.log", lb => lb.WithText("template", "in else")));
+                }));
+
+        var rects = StackLayout.Layout(script);
+        var container = script.Body[0];
+        var thenBlocks = container.Body("then");
+        var elseBlocks = container.Body("else");
+        var thenLast = rects[thenBlocks[^1].Id];
+        var elseFirst = rects[elseBlocks[0].Id];
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(elseFirst.Y, Is.GreaterThan(thenLast.Y),
+                "the else body starts below everything in the then body");
+            Assert.That(rects[container.Id].NotchY, Is.GreaterThan(elseLast(rects, elseBlocks).Y));
+        });
+
+        static BlockRect elseLast(IReadOnlyDictionary<string, BlockRect> rects, List<Block> blocks) =>
+            rects[blocks[^1].Id];
+    }
+
+    [Test]
+    public void An_empty_body_still_takes_a_mouths_height()
+    {
+        var script = Script(
+            Stack("control.forever", b => { }));
+
+        var rects = StackLayout.Layout(script);
+
+        Assert.That(rects[script.Body[0].Id].Height, Is.GreaterThan(44),
+            "the canvas must draw an openable gap, so layout reserves one");
+    }
+
+    [Test]
+    public void Zoom_scales_every_rect()
+    {
+        var script = Script(
+            Stack("ui.log", b => b.WithText("template", "a")),
+            Stack("ui.log", b => b.WithText("template", "b")));
+
+        var at1 = StackLayout.Layout(script, 1);
+        var at2 = StackLayout.Layout(script, 2);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(at2[script.Body[0].Id].Height, Is.EqualTo(at1[script.Body[0].Id].Height * 2).Within(0.5));
+            Assert.That(
+                StackLayout.TotalHeight(script, 2),
+                Is.EqualTo(StackLayout.TotalHeight(script, 1) * 2).Within(2),
+                "zoom scales the whole script's height, gaps included");
+        });
+    }
+
+    [Test]
+    public void A_cached_height_is_used_when_the_caller_supplies_one()
+    {
+        // Appendix H: 200 blocks under 0.5ms warm. The cache contract is that the layout uses the
+        // caller's height when it has one, so a measured WPF height beats the estimate.
+        var script = Script(
+            Stack("ui.log", b => b.WithText("template", "a")),
+            Stack("ui.log", b => b.WithText("template", "b")));
+
+        var rects = StackLayout.Layout(script, heightOf: new Dictionary<string, double>
+        {
+            [script.Body[0].Id] = 100,
+        });
+
+        Assert.That(rects[script.Body[0].Id].Height, Is.EqualTo(100));
+        Assert.That(rects[script.Body[1].Id].Y, Is.GreaterThanOrEqualTo(100),
+            "the next block starts below the cached height, not below the estimate");
+    }
+
+    // ---- candidates ----------------------------------------------------------------------------------
+
+    [Test]
+    public void A_flat_script_offers_gaps_at_the_top_between_and_after_every_block()
+    {
+        var script = Script(
+            Stack("ui.log", b => b.WithText("template", "a")),
+            Stack("ui.log", b => b.WithText("template", "b")));
+
+        var rects = StackLayout.Layout(script);
+        var candidates = DropResolver.CandidatesFor(script, rects);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.HatSlot).ToList(), Has.Count.EqualTo(1));
+            // Four, not three: the middle boundary offers two coincident gaps - "insert before the
+            // second" and "insert after the first". They land in the same place and differ only in
+            // which block the document editor anchors to; the stability bonus is what decides between
+            // them, which is exactly the situation the bonus was designed for.
+            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.StackGap).ToList(), Has.Count.EqualTo(4));
+        });
+    }
+
+    [Test]
+    public void A_container_offers_a_mouth_and_inner_gaps()
+    {
+        var script = Script(
+            Stack("control.forever", b => { }, body =>
+                body.Add(Stack("ui.log", lb => lb.WithText("template", "inner")))));
+
+        var rects = StackLayout.Layout(script);
+        var candidates = DropResolver.CandidatesFor(script, rects);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.Mouth).ToList(), Has.Count.EqualTo(1),
+                "the container's empty top is the wrap gesture");
+            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.StackGap).ToList(), Has.Count.GreaterThanOrEqualTo(2),
+                "one inside the body, one below the container");
+        });
+    }
+
+    // ---- scoring -------------------------------------------------------------------------------------
+
+    [Test]
+    public void A_reporter_is_refused_by_every_stack_zone_and_accepted_by_a_slot()
+    {
+        var reporter = BlockCatalog.Find("var.get")!;
+        var stack = BlockCatalog.Find("ui.log")!;
+        var hat = BlockCatalog.Find("hat.action-runs")!;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.StackGap, "p"), reporter), Is.False);
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.Mouth, "p"), reporter), Is.False);
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.HatSlot, "p"), reporter), Is.False);
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.ValueSlot, "p", SlotName: "v"), reporter), Is.True);
+
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.StackGap, "p"), stack), Is.True);
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.ValueSlot, "p", SlotName: "v"), stack), Is.False);
+
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.HatSlot, "p"), hat), Is.True);
+            Assert.That(DropResolver.Accepts(new DropCandidate(DropTargetKind.StackGap, "p"), hat), Is.False);
+        });
+    }
+
+    [Test]
+    public void The_nearest_gap_wins()
+    {
+        var script = Script(
+            Stack("ui.log", b => b.WithText("template", "a")),
+            Stack("ui.log", b => b.WithText("template", "b")),
+            Stack("ui.log", b => b.WithText("template", "c")));
+
+        var rects = StackLayout.Layout(script);
+        var candidates = DropResolver.CandidatesFor(script, rects);
+
+        var middleGap = candidates
+            .Where(c => c.Kind == DropTargetKind.StackGap)
+            .OrderBy(c => c.Y)
+            .ToList()[1];
+
+        var resolution = DropResolver.Resolve("ui.log", middleGap.X, middleGap.Y, candidates);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(resolution, Is.Not.Null);
+            Assert.That(resolution!.Candidate.ParentId, Is.EqualTo(middleGap.ParentId));
+            Assert.That(resolution.Magnetic, Is.True, "the pointer is exactly on the notch");
+            Assert.That(resolution.SnapY, Is.EqualTo(middleGap.Y).Within(0.001),
+                "a magnetic snap aligns the ghost's notch with the target's");
+        });
+    }
+
+    [Test]
+    public void The_stability_bonus_breaks_a_tie()
+    {
+        // Two gaps at the same distance: the one the pointer was already over wins, so the indicator
+        // cannot flicker between them. This is Part 9.5's rule 4, and it is only observable as a
+        // tie-break, which is why the test builds an exact tie.
+        var left = new DropCandidate(DropTargetKind.StackGap, "left", X: 100, Y: 100);
+        var right = new DropCandidate(DropTargetKind.StackGap, "right", X: 100, Y: 100);
+        var candidates = new[] { left, right };
+
+        var resolving = DropResolver.Resolve("ui.log", 100, 100, candidates, recentParentId: "right");
+
+        Assert.That(resolving!.Candidate.ParentId, Is.EqualTo("right"));
+    }
+
+    [Test]
+    public void Outside_the_magnet_radius_the_ghost_follows_the_pointer()
+    {
+        var candidate = new DropCandidate(DropTargetKind.StackGap, "p", X: 100, Y: 100);
+        var resolution = DropResolver.Resolve("ui.log", 400, 400, [candidate], zoom: 1);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(resolution, Is.Not.Null);
+            Assert.That(resolution!.Magnetic, Is.False);
+            Assert.That(resolution.SnapX, Is.EqualTo(400));
+            Assert.That(resolution.SnapY, Is.EqualTo(400));
+        });
+    }
+
+    [Test]
+    public void The_magnet_radius_scales_with_zoom()
+    {
+        var candidate = new DropCandidate(DropTargetKind.StackGap, "p", X: 100, Y: 100);
+
+        // 35px away along y: inside the radius at 100% (40px), outside at 50% (20px).
+        Assert.Multiple(() =>
+        {
+            Assert.That(DropResolver.Resolve("ui.log", 100, 135, [candidate], zoom: 1)!.Magnetic, Is.True);
+            Assert.That(DropResolver.Resolve("ui.log", 100, 135, [candidate], zoom: 0.5)!.Magnetic, Is.False);
+        });
+    }
+
+    [Test]
+    public void An_unknown_dragged_kind_resolves_to_nothing()
+    {
+        var candidate = new DropCandidate(DropTargetKind.StackGap, "p", X: 0, Y: 0);
+
+        Assert.That(DropResolver.Resolve("no.such.kind", 0, 0, [candidate]), Is.Null);
+    }
+
+    [Test]
+    public void No_candidates_means_no_resolution()
+    {
+        Assert.That(DropResolver.Resolve("ui.log", 0, 0, []), Is.Null);
+    }
+
+    // ---- helpers ------------------------------------------------------------------------------------
+
+    private static VisualScript Script(params Block[] body)
+    {
+        var script = new VisualScript
+        {
+            Id = "s1",
+            Name = "main",
+            Hat = new Block { Kind = "hat.action-runs", Id = "b0" },
+        };
+
+        var next = 1;
+        foreach (var statement in body)
+        {
+            Number(statement, ref next);
+            script.Body.Add(statement);
+        }
+
+        return script;
+
+        static void Number(Block block, ref int next)
+        {
+            block.Id = "b" + next++;
+            foreach (var child in block.Bodies.Values.SelectMany(b => b))
+            {
+                Number(child, ref next);
+            }
+        }
+    }
+
+    private static Block Stack(
+        string kind,
+        Action<Block>? configure = null,
+        Action<List<Block>>? body = null,
+        Action<List<Block>>? then = null,
+        Action<List<Block>>? otherwise = null)
+    {
+        var block = new Block { Kind = kind };
+        configure?.Invoke(block);
+        body?.Invoke(block.Body("body"));
+        then?.Invoke(block.Body("then"));
+        otherwise?.Invoke(block.Body("else"));
+        return block;
+    }
+
+    private static Block Compare() => new()
+    {
+        Kind = "ops.compare",
+        Inputs = { ["a"] = BlockInput.Of(string.Empty) },
+    };
+}
