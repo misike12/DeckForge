@@ -69,12 +69,14 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P0 complete. Next: P1 — Core model and catalog.**
+**Current position: P1a complete (Core document model). Next: P1b — the 153-block catalog.**
 
 | Phase | Status | Evidence |
 |---|---|---|
 | P0 — Ground truth | ✅ **complete** | Appendix A filled from the real assembly; Part 7.16 records the verdicts; baseline build and tests recorded below |
-| P1 — Model and catalog | ⬜ not started | |
+| P1a — Core document model | ✅ **complete** | `Core/Visual/{BlockShapes,Block,VisualProject,VisualProjectJson}.cs` + `Migrations/BlocksV1Migration.cs`; 38 new tests, full suite 387 green |
+| P1b — Block catalog (153 rows) | ⬜ not started | |
+| P1c — Validator, metrics, stack layout, drop resolver | ⬜ not started | |
 | P2 — Emitters | ⬜ not started | |
 | P3 — Palette and rendering | ⬜ not started | |
 | P4 — Drag and drop | ⬜ not started | |
@@ -99,7 +101,8 @@ inspected.
 | Date | Completed | Commit |
 |---|---|---|
 | 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
-| 2026-09-29 | **P0**: added `tools/SdkInventory` (re-runnable surface dumper) and dumped `MacroDeck.Sdk` + `MacroDeck.Localization` at the pin; recorded the baseline; filled Appendix A; added Part 7.16 verdicts (28 blocks dropped, 6 deferred, 7 discovered) | milestone 1 |
+| 2026-09-29 | **P1a**: the visual document model — `Block`/`BlockInput`, the document types, hand-written JSON converters, structural legacy detection, and the 18-kind migration. 38 new tests (`VisualModelTests`, `VisualMigrationTests`); full suite 387 green. The class hierarchy in §6.2 became one generic node (§6.2.1) | **milestone 2 — see commit** |
+| 2026-09-29 | **P0**: added `tools/SdkInventory` (re-runnable surface dumper) and dumped `MacroDeck.Sdk` + `MacroDeck.Localization` at the pin; recorded the baseline; filled Appendix A; added Part 7.16 verdicts (28 blocks dropped, 6 deferred, 7 discovered) | **milestone 1 — `c23f67d`** |
 
 ---
 
@@ -387,6 +390,44 @@ Statement node families:
 - **Cap:** the four `Finish*` blocks and `StopScript` / `StopAll` / `ReturnValue`.
 - **Modifiers:** `Comment`, `Disable`.
 - Plus one node per non-reporter catalog entry (Part 7).
+
+### 6.2.1 As built (P1) — one node, described by the catalog
+
+The sketch above describes a class hierarchy. The first implementation replaced it with **one generic
+node**, and the reason is worth keeping: a class per block is right for eighteen statement kinds and
+absurd for a hundred and fifty-three. Every one would be a file of properties the catalog already
+declares, every new block would need a new class plus a serializer registration, and the emitter would
+switch on a C# type — where a forgotten case is a silent fall-through rather than a failing test.
+
+What shipped instead:
+
+| Type | Role |
+|---|---|
+| `Block` | one node: `Kind`, `Id`, `Inputs`, `Fields`, `Bodies`, `Disabled`, `Comment` — plus `Walk`, `Body`, `Clone`, `VariableUses` |
+| `BlockInput` | the slot union: `{slot: Block}`, `{var: name}`, `{text: …}`, `{number: …}`, `{bool: …}` — exactly one member, `Kind` decides which |
+| `BlockShape` / `SlotType` / `BlockCategory` | the shape grammar, slot preferences and palette groups |
+| `SlotDescriptor` / `MenuDescriptor` / `BodyDescriptor` / `SdkMapping` | what a catalog row declares about its block |
+| `VisualProject` / `VisualTarget` / `VisualScript` / `VariableDeclaration` / `ListDeclaration` / `ProcedureDeclaration` | the document |
+| `VisualProjectJson` | the format, with hand-written converters for `Block` and `BlockInput` |
+
+Three consequences, each of which changed a decision in this document:
+
+1. **An unknown block kind needs no placeholder type.** The kind is a string, so a block from a newer
+   build already round-trips intact; the validator reports it. The earlier `PlaceholderBlock` idea is
+   unnecessary, and dropping it removes a type whose only job was to hold data the document can hold
+   itself.
+2. **The document's variable vocabulary is the SDK's** (`Text`, `Numeric`, `Boolean` — `VariableType`),
+   not C#'s `string`/`number`/`bool`. A host variable is created through `IUserVariableApi.CreateAsync`,
+   which takes that enum, so keeping both spellings would mean translating in two places for ever.
+3. **Menu keys are stable identifiers, not display text.** The emitter switches on them and the
+   document stores them, so renaming a label (which Part 21 localizes) never invalidates a document.
+
+Two defects the first test run caught, recorded because both are the kind that a compiler cannot see:
+
+- A static factory named `Variable` collided with the `Variable` property on the same type (CS0102).
+  The factory is `OfVariable`.
+- The migration normalised a variable's type twice — reading back an already-normalised `Numeric`
+  through the legacy spellings produced `Text`, so every numeric local was silently redeclared as text.
 
 ### 6.3 Why a nested tree, not Scratch's flat map
 
@@ -2757,6 +2798,7 @@ What a reviewer checks on any pull request that touches Visual.
 | Date | Change |
 |---|---|
 | 2026-09-29 | Initial design: analysis, decisions, model, 187-block catalog, codegen, UI, simulator, testing, ten-phase plan, file manifest, SDK-inventory gate. |
+| 2026-09-29 | **P1a.** Added the Core document model (§6.2.1 records what changed and why): `BlockShapes.cs`, `Block.cs`, `VisualProject.cs`, `VisualProjectJson.cs`, `Migrations/BlocksV1Migration.cs`, and the two test files. Design changes recorded: an unknown kind needs no placeholder type; the document's variable vocabulary is the SDK's; menu keys are identifiers. Two defects found by the tests are written down in §6.2.1. |
 | 2026-09-29 | **P0 complete.** Added the progress tracker and baseline. Added `tools/SdkInventory` and committed the assembly dumps under `tools/SdkInventory/surface/`. Filled Appendix A (§A.1 the ten members of `IIntegrationContext`, §A.2 per-surface members, §A.3 provider-side surfaces deliberately not blocks, §A.4 also-inspected). Added §7.16 with verdicts on every ⚠: **153 ship, 6 deferred, 7 discovered, 28 dropped**. Added §16.1 answers. Recorded into the design: C4 media cannot be blocks at all, issue reporting and event acknowledgement do not exist, host variable read and write are different APIs, `ActionErrorCodes` is a static class of string constants, `LocalizedText` converts from a raw string, and the "29 editor types" claim should read 27. |
 | 2026-09-29 | Extended: table of contents and reading order; Part 17 gap analysis against Scratch; Part 18 full interaction and keyboard specification; Part 19 motion and animation; Part 20 settings; Part 21 block-label localization and RTL; Part 22 versioning and deprecation policy; Part 23 the third-party block-provider contract; Part 24 round-trip from existing code; Part 25 `.dfblock`, clipboard, PNG and SVG export; Part 26 Scratch `.sb3` import design; Part 27 safety, secrets and threat model; Part 28 acceptance criteria and metrics; Appendices D–E worked examples with sidecar JSON, generated C# and interpreter traces; Appendix F diagnostics catalogue; Appendix G undo/redo command catalogue; Appendix H performance budget; Appendix I contributor review checklist. |
 
