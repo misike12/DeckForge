@@ -1,0 +1,153 @@
+<Page x:Class="DeckForge.App.Pages.VisualEditorPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      xmlns:blocks="clr-namespace:DeckForge.App.Controls.Blocks"
+      xmlns:conv="clr-namespace:DeckForge.App.Converters">
+
+    <Page.Resources>
+        <conv:BoolToVisibilityConverter x:Key="TrueVisible" />
+        <conv:BoolToInverseVisibilityConverter x:Key="TrueHidden" />
+    </Page.Resources>
+
+        <Grid x:Name="Layout" Margin="20,16,20,16">
+            <!--
+                The four panels' rows and columns are assigned in code, not here, because they change with
+                the window width. At the application's minimum width the four columns do not fit beside
+                each other, and a page with no horizontal scrolling does not push its right-hand content
+                off the edge — it hides it, and the diagnostics pane with it. Part 9.2 asks for every
+                panel to collapse; this is that, as a breakpoint rather than as four little toggle
+                buttons.
+            -->
+            <Grid x:Name="HeaderRow" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel x:Name="Header">
+                    <TextBlock Text="Visual" FontSize="26" FontWeight="SemiBold" />
+                    <TextBlock Text="Drag blocks into a script. Phase 3 draws the palette, the canvas and the sample document; dragging, editing and saving arrive with the next phases."
+                               TextWrapping="Wrap" Margin="0,4,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                    <TextBlock Text="{Binding DocumentLine}" FontSize="11.5" Margin="0,4,0,0"
+                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                </StackPanel>
+
+                <ui:Button x:Name="DocsButton" Grid.Column="1" Content="Docs" Padding="10,4"
+                           Click="OpenDocs_Click" VerticalAlignment="Top" Margin="12,0,0,0"
+                           ToolTip="Open the documentation for actions" />
+            </Grid>
+
+            <Border x:Name="RailPanel" CornerRadius="12" Margin="0,0,10,0"
+                    Background="{DynamicResource Liquid.BlockRailBrush}"
+                    BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
+                <blocks:CategoryRail DataContext="{Binding Palette}" />
+            </Border>
+
+            <Border x:Name="PalettePanel" CornerRadius="12" Margin="0,0,10,0"
+                    Background="{DynamicResource Liquid.AcrylicBrush}"
+                    BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
+                <blocks:PaletteList DataContext="{Binding Palette}" />
+            </Border>
+
+            <Border x:Name="CanvasPanel" CornerRadius="12"
+                    BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
+                <blocks:BlockWorkspace />
+            </Border>
+
+            <Border x:Name="InspectorPanel" CornerRadius="12" Padding="0"
+                    Background="{DynamicResource Liquid.AcrylicBrush}"
+                    BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Selected block" Margin="12,12,12,0"
+                               FontSize="13" FontWeight="SemiBold" />
+
+                    <StackPanel Grid.Row="1" Margin="12,6,12,8">
+                        <TextBlock Text="Nothing selected. Click a block to see what it does."
+                                   TextWrapping="Wrap" FontSize="12"
+                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                   Visibility="{Binding HasSelection, Converter={StaticResource TrueHidden}}" />
+                        <StackPanel DataContext="{Binding Selected}"
+                                    Visibility="{Binding HasSelection, Converter={StaticResource TrueVisible}}">
+                            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="12.5"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0"
+                                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                            <TextBlock Text="{Binding Kind}" FontFamily="Cascadia Mono, Consolas" FontSize="11"
+                                       Margin="0,6,0,0"
+                                       Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                            <TextBlock Text="{Binding Sdk}" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"
+                                       Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Grid.Row="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!--
+                            A grid rather than a horizontal StackPanel: a stacking panel measures its
+                            children with infinite width, so the wrapped summary has nothing to wrap to
+                            and its tail is cut off in a narrow window.
+                        -->
+                        <Grid Margin="12,0,12,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Diagnostics" FontSize="13" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1" Text="{Binding StatusText}" Margin="8,2,0,0" FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Diagnostics}" Margin="8,0,8,8">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Width="6" Height="6" CornerRadius="3"
+                                                    VerticalAlignment="Top" Margin="0,4,8,0">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                                                                <Setter Property="Background" Value="{DynamicResource Liquid.WarningBrush}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding Severity}" Value="Error">
+                                                                <Setter Property="Background" Value="{DynamicResource Liquid.DangerBrush}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                            </Border>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11.5" />
+                                                <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" FontSize="11"
+                                                           Margin="0,2,0,0"
+                                                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+</Page>

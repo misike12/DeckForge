@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using DeckForge.App.Services;
 
 namespace DeckForge.App.Themes;
@@ -147,7 +148,92 @@ public static class LiquidTheme
         Set("Liquid.FontSizeDisplay", 34.0);
 
         Set("Liquid.IsDark", isDark);
+
+        ApplyBlockTokens(resources, isDark);
     }
+
+    /// <summary>
+    /// The tokens the Visual block editor draws with: the canvas it sits on, and one set of brushes per
+    /// palette category.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Generated from <see cref="BlockCatalog.Categories"/> rather than written out, for the same reason
+    /// the catalogue itself is data: eleven categories times four brushes is forty-four lines of colour
+    /// that a new category would silently not have, and a block whose category has no token draws with
+    /// no fill and reads as an empty row. Here a category cannot exist without its colours.
+    /// </para>
+    /// <para>
+    /// The fills are the category hue from Part 7.2, pulled down in dark mode and lightened in light
+    /// mode, and the ink on top is chosen to clear contrast against whichever of those is in use. That
+    /// is the one number here that is not the design's: a hue that reads white-on-blue in light mode
+    /// reads blue-on-white in dark mode if the fill is not also inverted, and Part 9.3's "a light-mode
+    /// variant" is exactly this pair.
+    /// </para>
+    /// </remarks>
+    private static void ApplyBlockTokens(ResourceDictionary resources, bool isDark)
+    {
+        void Set(string key, object value) => resources[key] = value;
+
+        var canvas = isDark ? Color.FromRgb(0x0E, 0x0F, 0x14) : Color.FromRgb(0xDD, 0xE1, 0xEA);
+        var grid = isDark ? Color.FromArgb(0x2A, 0xFF, 0xFF, 0xFF) : Color.FromArgb(0x22, 0x1A, 0x1D, 0x26);
+
+        Set("Liquid.BlockCanvasBrush", new SolidColorBrush(canvas));
+
+        var dot = new GeometryDrawing
+        {
+            Geometry = new EllipseGeometry(new System.Windows.Point(1, 1), 1, 1),
+            Brush = new SolidColorBrush(grid),
+        };
+        dot.Freeze();
+        var gridTile = new DrawingBrush(dot)
+        {
+            TileMode = TileMode.Tile,
+            Viewport = new System.Windows.Rect(0, 0, 24, 24),
+            ViewboxUnits = BrushMappingMode.Absolute,
+            Stretch = Stretch.None,
+        };
+        gridTile.Freeze();
+        Set("Liquid.BlockGridBrush", gridTile);
+
+        Set("Liquid.BlockSheenBrush", new SolidColorBrush(
+            Color.FromArgb(isDark ? (byte)0x26 : (byte)0x66, 0xFF, 0xFF, 0xFF)));
+
+        Set("Liquid.BlockSlotBrush", new SolidColorBrush(
+            isDark ? Color.FromRgb(0x12, 0x14, 0x1A) : Color.FromRgb(0xFF, 0xFF, 0xFF)));
+        Set("Liquid.BlockSlotStrokeBrush", new SolidColorBrush(
+            isDark ? Color.FromRgb(0x3C, 0x42, 0x50) : Color.FromRgb(0xA9, 0xB2, 0xC2)));
+        Set("Liquid.BlockMenuBrush", new SolidColorBrush(
+            isDark ? Color.FromArgb(0x99, 0x0A, 0x0B, 0x10) : Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)));
+        Set("Liquid.BlockRailBrush", new SolidColorBrush(
+            isDark ? Color.FromRgb(0x16, 0x18, 0x1E) : Color.FromRgb(0xF4, 0xF6, 0xF9)));
+
+        foreach (var category in Core.Visual.BlockCatalog.Categories)
+        {
+            var hue = ParseHue(category.Hue);
+            var top = isDark ? Darken(hue, 0.30f) : Lighten(hue, 0.52f);
+            var bottom = isDark ? Darken(hue, 0.48f) : Lighten(hue, 0.28f);
+
+            var fill = new LinearGradientBrush
+            {
+                StartPoint = new System.Windows.Point(0, 0),
+                EndPoint = new System.Windows.Point(0.15, 1),
+            };
+            fill.GradientStops.Add(new GradientStop(top, 0));
+            fill.GradientStops.Add(new GradientStop(bottom, 1));
+            fill.Freeze();
+
+            var suffix = category.Category.ToString();
+            Set($"Liquid.BlockFill.{suffix}", fill);
+            Set($"Liquid.BlockStroke.{suffix}", new SolidColorBrush(Darken(hue, isDark ? 0.58f : 0.06f)));
+            Set($"Liquid.BlockInk.{suffix}", new SolidColorBrush(
+                isDark ? Color.FromRgb(0xF7, 0xF9, 0xFC) : Color.FromRgb(0x14, 0x16, 0x1C)));
+        }
+    }
+
+    /// <summary>Reads a catalogue hue, which is written as <c>#RRGGBB</c>.</summary>
+    private static Color ParseHue(string hue) =>
+        ColorConverter.ConvertFromString(hue) is Color color ? color : Colors.Gray;
 
     /// <summary>Moves a colour towards white by <paramref name="amount"/>.</summary>
     internal static Color Lighten(Color color, float amount) => Color.FromRgb(

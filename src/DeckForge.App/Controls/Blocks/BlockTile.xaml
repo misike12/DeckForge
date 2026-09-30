@@ -1,0 +1,127 @@
+<UserControl x:Class="DeckForge.App.Controls.Blocks.BlockTile"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:blocks="clr-namespace:DeckForge.App.Controls.Blocks"
+             xmlns:conv="clr-namespace:DeckForge.App.Converters"
+             xmlns:visual="clr-namespace:DeckForge.App.ViewModels.Visual"
+             Background="Transparent"
+             Focusable="False"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True">
+
+    <!--
+        One tile, laid out for every shape.
+
+        The silhouette itself is not in here: BlockTile draws it in OnRender from the geometry Core
+        describes, because the size that geometry needs is the size this element was given, and a
+        ControlTemplate cannot ask its own element how big it turned out. What is left in markup is the
+        two things the design actually asks for — a header row holding the label's pieces, and one
+        ItemsControl per wrapped body — which is what makes the recursion below possible.
+
+        The body template's item template is this same tile, referenced by key. That reference is
+        resolved when the template is *applied*, not when this dictionary is parsed, which is the only
+        reason a resource can refer to itself.
+    -->
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="TrueVisible" />
+        <conv:BoolToInverseVisibilityConverter x:Key="TrueHidden" />
+        <conv:StringToVisibilityConverter x:Key="TextVisible" />
+
+        <DataTemplate x:Key="LabelWords">
+            <TextBlock Text="{Binding Text}"
+                       FontFamily="{DynamicResource Liquid.FontFamily}"
+                       FontSize="{DynamicResource Liquid.FontSizeBody}"
+                       VerticalAlignment="Center"
+                       Foreground="{Binding Ink, RelativeSource={RelativeSource AncestorType={x:Type blocks:BlockTile}}}" />
+        </DataTemplate>
+
+        <DataTemplate x:Key="LabelSlot">
+            <blocks:InputSlotView Data="{Binding Slot}" />
+        </DataTemplate>
+
+        <DataTemplate x:Key="LabelMenu">
+            <Border CornerRadius="6" Padding="6,1" Margin="2,0"
+                    Background="{DynamicResource Liquid.BlockMenuBrush}"
+                    BorderBrush="{Binding Stroke, RelativeSource={RelativeSource AncestorType={x:Type blocks:BlockTile}}}"
+                    BorderThickness="1">
+                <TextBlock Text="{Binding Menu.Display}"
+                           FontFamily="{DynamicResource Liquid.FontFamily}"
+                           FontSize="12"
+                           Foreground="{Binding Ink, RelativeSource={RelativeSource AncestorType={x:Type blocks:BlockTile}}}" />
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="StatementTemplate">
+            <blocks:BlockTile />
+        </DataTemplate>
+
+        <DataTemplate x:Key="BodyTemplate">
+            <StackPanel>
+                <TextBlock Text="{Binding Label}"
+                           FontFamily="{DynamicResource Liquid.FontFamily}"
+                           FontSize="11"
+                           Margin="1,0,0,2"
+                           Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                           Visibility="{Binding HasLabel, Converter={StaticResource TrueVisible}}" />
+                <ItemsControl ItemsSource="{Binding Statements}"
+                              ItemTemplate="{StaticResource StatementTemplate}"
+                              Focusable="False" />
+                <!--
+                    An empty mouth says so. Part 9.3 asks for real empty states, and a C-block with
+                    nothing in it otherwise looks like a block whose body failed to render. A Rectangle
+                    rather than a Border because the dashed outline Part 9.3 asks a disabled block for
+                    is a Shape property.
+                -->
+                <Rectangle Height="22" RadiusX="4" RadiusY="4" Margin="0,2"
+                           StrokeThickness="1" StrokeDashArray="3 3"
+                           Stroke="{DynamicResource Liquid.BlockSlotStrokeBrush}"
+                           Visibility="{Binding IsEmpty, Converter={StaticResource TrueVisible}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- Declared after the templates it returns: a StaticResource lookup here happens while this
+             dictionary is parsed, and the templates are only complete once they have been. -->
+        <blocks:LabelPartTemplateSelector x:Key="LabelPartSelector"
+                                          Words="{StaticResource LabelWords}"
+                                          Slot="{StaticResource LabelSlot}"
+                                          Menu="{StaticResource LabelMenu}" />
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- The header is a constant, not a share of the tile: a container's mouth starts at
+                 BlockOutline.HeaderHeight, and a header that moved with the tile would move the mouth
+                 with it and stop the two agreeing. -->
+            <RowDefinition Height="{Binding HeaderHeight}" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--
+            Hit testing. Nothing inside a tile is hit-testable by itself - a TextBlock with no
+            background and a Panel with no background are both transparent to the mouse - so a click on
+            a block's words falls straight through it to the canvas behind. This one transparent border,
+            declared first so it sits under the label and paints nothing, is what makes the whole tile a
+            target. Phase 4's drag ghost needs it too.
+        -->
+        <Border Background="Transparent" Grid.RowSpan="2" />
+
+        <ItemsControl Grid.Row="0"
+                      ItemsSource="{Binding LabelParts}"
+                      ItemTemplateSelector="{StaticResource LabelPartSelector}"
+                      Margin="{Binding HeaderMargin}"
+                      Focusable="False">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+        </ItemsControl>
+
+        <ItemsControl Grid.Row="1"
+                      ItemsSource="{Binding Bodies}"
+                      ItemTemplate="{StaticResource BodyTemplate}"
+                      Margin="{Binding BodyMargin}"
+                      Focusable="False"
+                      Visibility="{Binding HasBodies, Converter={StaticResource TrueVisible}}" />
+    </Grid>
+</UserControl>

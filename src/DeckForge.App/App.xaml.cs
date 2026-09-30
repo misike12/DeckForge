@@ -79,8 +79,10 @@ public partial class App : Application
         services.AddSingleton<ViewModels.CapabilityGalleryViewModel>();
         services.AddSingleton<Pages.ExplorerPage>();
         services.AddSingleton<ViewModels.ExplorerViewModel>();
-        services.AddSingleton<Pages.BlockActionPage>();
+services.AddSingleton<Pages.BlockActionPage>();
         services.AddSingleton<ViewModels.BlockActionViewModel>();
+        services.AddSingleton<ViewModels.Visual.VisualEditorViewModel>();
+        services.AddSingleton<Pages.VisualEditorPage>();
         services.AddSingleton<Pages.IconStudioPage>();
         services.AddSingleton<ViewModels.IconStudioViewModel>();
         services.AddSingleton<Pages.ShipPage>();

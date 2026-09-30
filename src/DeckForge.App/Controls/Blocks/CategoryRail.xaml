@@ -1,0 +1,90 @@
+<UserControl x:Class="DeckForge.App.Controls.Blocks.CategoryRail"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:DeckForge.App.Converters"
+             xmlns:blocks="clr-namespace:DeckForge.App.Controls.Blocks"
+             xmlns:visual="clr-namespace:DeckForge.App.ViewModels.Visual"
+             Background="Transparent">
+
+    <!--
+        The rail. Eleven rows, each with the catalogue's own glyph and hue.
+
+        Selected and unselected are distinguished by the fill and by a leading bar rather than by colour
+        alone, because Part 9.8 says colour is never the only signal — and eleven coloured rows in a
+        narrow strip are exactly the place that matters.
+    -->
+    <UserControl.Resources>
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+        <conv:StringToVisibilityConverter x:Key="SummaryVisible" />
+    </UserControl.Resources>
+
+    <ListBox ItemsSource="{Binding Categories}"
+             SelectedItem="{Binding SelectedCategory}"
+             Background="Transparent"
+             BorderThickness="0"
+             Padding="0"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+             HorizontalContentAlignment="Stretch">
+        <ListBox.ItemContainerStyle>
+            <Style TargetType="ListBoxItem">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Margin" Value="4,2" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="Row"
+                                    CornerRadius="8"
+                                    Padding="8,6"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    BorderBrush="Transparent">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border x:Name="Mark" Width="3" Margin="0,2" CornerRadius="2"
+                                            Background="{Binding FillKey, Converter={StaticResource KeyToBrush}}"
+                                            Opacity="0" />
+
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:SymbolIcon Symbol="{Binding Glyph}" FontSize="13"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{Binding FillKey, Converter={StaticResource KeyToBrush}}" />
+                                            <TextBlock Text="{Binding Name}" Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       FontWeight="SemiBold" FontSize="12.5" />
+                                            <TextBlock Text="{Binding Count}" Margin="6,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Summary}" Margin="21,2,0,0"
+                                                   FontSize="10.5" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                                   Visibility="{Binding Summary, Converter={StaticResource SummaryVisible}}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Row" Property="Background"
+                                            Value="{DynamicResource Liquid.AccentWashBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Row" Property="Background"
+                                            Value="{DynamicResource Liquid.AccentHoverBrush}" />
+                                    <Setter TargetName="Mark" Property="Opacity" Value="1" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ListBox.ItemContainerStyle>
+    </ListBox>
+</UserControl>

@@ -108,6 +108,31 @@ public sealed class XamlMarkupTests
         Assert.That(icons, Is.GreaterThan(0), "No SymbolIcon usages were found; the check is vacuous.");
     }
 
+    [Test]
+    public void Every_category_glyph_is_one_the_icon_library_actually_defines()
+    {
+        // The same defect, a different route. A rail that draws its icons by binding a catalogue string
+        // to SymbolIcon.Symbol is not caught by the regex above, because the icon is not named in the
+        // markup at all - and WPF's string-to-enum conversion of a name that does not exist fails
+        // quietly, so the row draws with no icon and nothing anywhere says why.
+        //
+        // The glyph is held in data rather than in XAML, which is what makes it worth checking: a
+        // literal in markup is readable, and a literal in a catalogue is only correct until the next
+        // upgrade of the icon library.
+        var known = Enum.GetNames<SymbolRegular>().ToHashSet(StringComparer.Ordinal);
+
+        var unknown = DeckForge.Core.Visual.BlockCatalog.Categories
+            .Where(category => !known.Contains(category.Glyph))
+            .Select(category => $"{category.Name}: {category.Glyph}")
+            .ToList();
+
+        Assert.That(
+            unknown,
+            Is.Empty,
+            "These category glyphs are not members of SymbolRegular, so the palette rail draws them "
+            + "with no icon and no error:" + Environment.NewLine + string.Join(Environment.NewLine, unknown));
+    }
+
     /// <summary>
     /// Total fixed column widths that still fit beside a minimum-width window, with the page margin
     /// and the navigation rail taken off. A row over this pushes its right-hand content off the edge

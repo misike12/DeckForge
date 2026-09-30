@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P2 complete (emitters, writer, runtime template — compile-verified against the real SDK). Next: P3 — palette and rendering.**
+**Current position: P3 complete (palette, canvas, theme tokens, sample document — driven in the real window in dark and light). Next: P4 — drag and drop.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -78,7 +78,7 @@ inspected.
 | P1b — Block catalog | ✅ **complete** | `BlockCatalog.cs` + `BlockCatalogRows.cs`: **156 shipping blocks** across 11 palette categories (Media stays empty by design), 7 deferred, 28 dropped, 1 placeholder; 7 discovered blocks included in the 156. 31 new tests in `BlockCatalogTests`, full suite 444 green. As-built §7.17 records the drift from the §7.3–§7.14 tables and the design decisions the tests forced |
 | P1c — Validator, metrics, stack layout, drop resolver | ✅ **complete** | `VisualValidator.cs` (+ `VisualValidationContext.cs`): Appendix F document-level diagnostics — shape, required, menu keys, control flow, reachability, name references, the placeholder's info note; a disabled block still has its names checked. `BlockMetrics.cs` / `StackLayout.cs`: pure geometry, cached heights, one geometry for canvas + export + resolver. `DropResolver.cs`: shape hard-filter, distance + stability bonus, magnet radius 40px × zoom, candidate enumeration per script. 42 new tests (`VisualValidatorTests`, `StackLayoutTests`) |
 | P2 — Emitters | ✅ **complete** | `VisualEmitter.cs` (template-driven: the catalog row's expression IS the emission), `VisualProgramWriter.cs` (splice + async + host check), `VisualRuntimeTemplate.cs` (the §8.4 support file — **compile-verified against the real MacroDeck.Sdk 3.0.0-beta.14**, which caught five latent defects before any user saw them). Procedures as hoisted local functions with parameters bound into `Locals` by name; `name=value` call args bound positionally in declaration order. 25 new tests (24 emitter + 1 `EnsureAsyncExecutor` regression), full suite **511 green**. As-built §8.6 records the drift from §8.1–§8.4 |
-| P3 — Palette and rendering | ⬜ not started | |
+| P3 — Palette and rendering | ✅ **complete** | `Core/Visual/{BlockOutline,BlockLabel,BlockFactory,VisualSampleProject}.cs`, `App/Controls/Blocks/*` (BlockTile, InputSlotView, CategoryRail, PaletteList, ScriptStrip, BlockWorkspace, BlockShapeGeometry, BlockTheme, LabelPartTemplateSelector), `App/ViewModels/Visual/*`, `Pages/VisualEditorPage`, `Liquid.Block*` theme tokens generated from the catalogue. 49 new tests (BlockOutlineTests 21, BlockLabelTests 11, VisualSampleProjectTests 8, plus one new markup assertion), full suite **561 green**. Driven in the real window: all 11 categories, search (including the no-match state), block selection from both surfaces, the empty-mouth state, light and dark, and at 960×640 and 1400×850. §9.10 records the design changes this forced |
 | P4 — Drag and drop | ⬜ not started | |
 | P5 — Editing, code, save | ⬜ not started | |
 | P6 — Shell integration, retire Blocks | ⬜ not started | |
@@ -100,6 +100,7 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
+| 2026-09-30 | **P3**: the palette, the canvas and the shapes. `BlockOutline` decides every silhouette as numbers — notch, tab, dome, pill, hexagon, one hole per mouth — and `BlockShapeGeometry` only walks the list, because geometry written in a template is geometry nothing can test and the whole reason the shapes are in Core is that a notch that stops lining up with the tab above it is invisible until a screenshot. `BlockLabel` splits a row's `repeat {count}` into words and holes (and a hole naming something the row does not declare renders as the raw marker, which is now a failing test over all 156 rows); `BlockFactory` builds a fresh block of any row filled in with plausible defaults, so the palette and the sample are projections of the catalogue rather than two hand-written lists. `VisualSampleProject` builds one script per category containing every shipping block, and a test fails when a new row is missing from it. The tile draws its own silhouette in `OnRender` from the size it was actually given and hosts the label in markup; the recursive template refers to itself by key, which is only legal because template content is instantiated after the dictionary is parsed. Clicking a block selects it through a bubbling routed event whose *arguments* carry the block, not its `Source` — WPF builds the route by walking the tree from `Source`, so a view model there sends the event nowhere. `Liquid.Block*` tokens are generated from the catalogue's hues, so a category cannot exist without its colours. 49 new tests; full suite 561 green. Design changes, and four defects the real window found that reading the code did not, are in §9.10 | **milestone 6 — see commit** |
 | 2026-09-30 | **P2**: the emitters — one data-driven `VisualEmitter` replaces the spec's three classes (a row's template *is* the emission, so catalog and generator cannot disagree); braced `{holes}` and bare slot-name holes filled per slot type; control flow special-cased with Scratch semantics (repeat-until tests after the body); procedures hoisted as local functions whose parameters are bound into `Locals` by name and called positionally from parsed `name=value` lines; guards deduped at flush; the writer reuses `Splice`/`EnsureAsyncExecutor` with a substring-safe anchor. The runtime template was compile-checked end to end against the real SDK (throwaway plugin probe) — it had never been compiled, and the check caught a duplicate `IsNumeric` (CS0102), `System.Json` for `System.Text.Json`, `System.ActionExecutionContext` for `MacroDeck.Sdk.Actions.ActionExecutionContext`, an invalid `List<string>(comparer)` construction, and the class's own `Convert` shadowing `System.Convert`. `EnsureAsyncExecutor` hardened: an already-async body with `SucceededTask`/`Task.FromResult` returns is now repaired instead of skipped (regression test added). 25 new tests; full suite 511 green. Design changes recorded in §8.6 | **milestone 5 — see commit** || 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
 | 2026-09-29 | **P1c**: the validator and the geometry — `VisualValidator` checks a document against the catalog and produces the Appendix F codes a document can own (shape mismatch as error, type coercion as warning, unbound required slots, unknown menu keys, break/continue depth via a walk that carries loop depth, return-inside-procedure, forever-without-yield, unreachable-after-cap, name references against declared parameters/host variables/procedures, reserved-name collisions). Setters and `list.define` declare their names *as the walk reaches them*, so `set x to x + 1` reads clean and a genuinely-forward reference is caught. `BlockMetrics` + `StackLayout` give canvas, export and resolver one geometry; `DropResolver` filters by shape, scores by distance plus a stability bonus, snaps inside 40px × zoom. Design notes recorded in §9.5-as-built (§9.10) | **milestone 4 — see commit** |
 | 2026-09-29 | **P1b**: the block catalog — 156 shipping blocks in 11 categories, `Search`, per-category counts pinned by test, every expression checked against the Appendix A surface dump, capabilities cross-checked against `CapabilityCatalog`. The migration was rewritten: slot values now land in `inputs` (they were in `fields`, which parsed fine and emitted nothing), variants are chosen by what the legacy block actually set (`ui.log-with-param`, `ui.notify-key`, `sensing.run-script-with-inputs`), `read-variable` migrates to `var.set-from-host`, literals lose their redundant `valueKind`/`type` menu, `==` normalises to `=`, error codes normalise case-insensitively against the real nine. Design changes recorded in §6.2.1 and §7.17 | **milestone 3 — see commit** |
@@ -1259,6 +1260,75 @@ preview. Selecting a block in the canvas selects it in the inspector and vice ve
 - **Budget: 60fps drag with 500 visible tiles.** Measured by the user-driver harness and logged with
   a regression threshold.
 
+### 9.10 As built (P3) — where the shapes live, and what the window found
+
+Four pieces of Part 9 turned out to be Core rather than XAML, and each moved for the same reason:
+`tests/DeckForge.Tests` cannot reference WPF, so anything written in a template is anything nothing can
+check.
+
+1. **`BlockOutline` decides the silhouettes (§9.3, §9.4).** It takes a shape and a width and height and
+   returns closed contours of straight edges and elliptical arcs, plus the notch's position and, for a
+   container, its header height and arm width. `BlockShapeGeometry` converts that to a
+   `StreamGeometry`; a container's body is a *hole* in the same figure, filled even-odd, so one `Path`
+   draws a C-block and its border without the edge showing through the mouth. Arcs are sampled rather
+   than emitted as `ArcTo` segments: WPF measures arc angles the other way round from Core's, and a
+   half-circle facing the wrong way is invisible in a build and obvious on screen.
+2. **The size is an argument, not a property.** WPF measures first and asks afterwards, so the tile hands
+   over the rectangle it actually got and the outline is exact. §9.4's `BlockMetrics` estimates stay for
+   the layout engine and the drop resolver, which have to work before anything is measured — and P4 will
+   pass the tile's measured heights back in through the `heightOf` parameter that `StackLayout` already
+   takes.
+3. **`BlockLabel` splits the label; `BlockFactory` builds the block.** A row's `repeat {count}` is
+   written once and read from two places, so it is parsed once into words and holes, in Core, and a test
+   walks all 156 rows asserting that no hole names a slot or menu the row does not declare — because a
+   hole that does renders as the literal text `{count}` on a block, which looks like a block with a bug
+   in its name rather than a catalogue error. A fresh block of any row is then derived from that row, so
+   the palette and the sample document are projections of the catalogue rather than two hundred and
+   fifty hand-written objects that a new row would be missing from.
+4. **`VisualSampleProject` is the page's regression test.** One script per palette category containing
+   every shipping block that can sit in a stack, with the declarations it needs collected from the blocks
+   themselves so it validates without a single error. Hats are the four rows it cannot contain — a hat
+   may only sit at the top of a script, and one per script means two of them have nowhere to go — and
+   they reach the page through the palette, where all 156 are drawn.
+
+Three things the real window found that reading the code did not, kept here because each is a class of
+mistake this repository has already paid for once:
+
+- **A `DataContext` assigned from a property-changed callback is overwritten when the element joins the
+  tree.** `InputSlotView` took its slot that way, so every value hole rendered as an empty pill: the
+  control was there, the text was not, and nothing anywhere said why. The data context is now set in
+  markup on the child, where nothing can replace it.
+- **A `RoutedEventArgs.Source` must be the element raising the event.** WPF builds the route by walking
+  the visual tree from it, so putting a view model there — the obvious way to carry "which block was
+  clicked" — builds a route from an object that is not in the tree and delivers the event to nobody. The
+  block travels in a `BlockSelectedEventArgs` instead. Selection looks broken rather than failing, which
+  is worse.
+- **`ItemsControl.ItemTemplate` takes a `DataTemplate`; a selector needs `ItemTemplateSelector`.** The
+  wrong one throws during measure, once per tile, and a hundred and fifty of them is a crash loop.
+
+Two layout facts, both from driving the window at 960×640 rather than from reading §9.2:
+
+- **The four panels do not fit side by side at the application's own minimum window**, and this
+  application has no horizontal scrolling, so the diagnostics pane was drawn past the right-hand edge
+  with no way to reach it. `XamlMarkupTests`' fixed-column budget cannot see it — every column is
+  proportional — which is why §12's "real window" row exists. There is now a breakpoint at a page width
+  of 1080: above it the canvas is a column between the palette and the diagnostics pane, below it the
+  canvas takes a row of its own under the other three. That is §9.2's "every panel collapses", as a
+  breakpoint rather than as four buttons, because a button that hides a panel has to be found again to
+  bring it back and at that width there is no room for one per panel.
+- **A horizontal `StackPanel` measures its children with infinite width**, so a wrapped string in one has
+  nothing to wrap to and its tail is cut off. The diagnostics heading is a grid now.
+
+Two smaller as-built notes:
+
+- The tile's `Background` is `Transparent` and its children are not hit-testable — a `TextBlock` with no
+  background and a `Panel` with no background are both invisible to the mouse — so a click on a block's
+  words fell straight through it. One transparent `Border`, declared first so it paints nothing, makes
+  the whole tile a target, which P4's drag ghost needs too.
+- The category hues are turned into theme resources **by iterating `BlockCatalog.Categories`**, not by
+  writing forty-four lines of colour. A new category that had no tokens would draw with no fill and read
+  as an empty row, which is the same failure as a catalogue row the palette does not know.
+
 ---
 
 ## 10. Simulator, dry-run tracer and debugger
@@ -1355,8 +1425,8 @@ Pure core means most of this is ordinary unit testing.
 | **Compile** | extend `GeneratedCodeCompilesTests`: a corpus of ~40 sample documents written into `src/<Project>/`, built, error-free — writing inside the project directory, because writing outside makes the assertion vacuous |
 | **Geometry** | `StackLayout` heights and notch positions; `DropResolver` scoring including shape compatibility, stability bonus, magnet radius at zoom, detach, re-parent, wrap, unwrap, and replace-on-top |
 | **Interpreter** | step sequences per block; coercion parity with the runtime library; breakpoints; cancellation; seeded randomness; watch semantics; disabled blocks skipped |
-| **Markup** | `XamlMarkupTests` keeps passing: real icon members, no method bindings, no grid cell beyond the definitions, fixed-column budget, no attribute value split across lines |
-| **Real window** | the `%TEMP%\uidriver` harness drives the actual window: drag a block from the palette into a loop body, split a stack, wrap, undo, save — screenshotting each step for visual review. Necessary because `Process.Responding` cannot tell whether a window appeared, and WebView2 surfaces need screen capture rather than `GetWindowDC`. |
+| **Markup** | `XamlMarkupTests` keeps passing: real icon members (named literally *and* bound from the catalogue), no method bindings, no grid cell beyond the definitions, fixed-column budget, no attribute value split across lines |
+| **Real window** | the `%TEMP%\uidriver` harness drives the actual window: drag a block from the palette into a loop body, split a stack, wrap, undo, save — screenshotting each step for visual review. Necessary because `Process.Responding` cannot tell whether a window appeared, and WebView2 surfaces need screen capture rather than `GetWindowDC`. Phase 3 ran it against the Visual page before writing any drag code, which is how the diagnostics pane drawn off the right-hand edge of a 960-pixel window was found (§9.10) — neither the markup tests nor a screenshot of a maximized window would have shown it |
 | **Performance** | 500-tile document: drag frame budget, save timing, render timing, with a regression threshold |
 
 Commands (unchanged from `SESSION-STATE.md`):
@@ -1412,14 +1482,31 @@ contributor, `BlockCompiler` as a facade, legacy aliases.
 **Exit criteria.** A hand-written sample program compiles; golden C# for ~40 sample documents;
 determinism test green; the generated plugin builds with `macrodeck-plugin validate` clean.
 
-### P3 — Palette and rendering
+### P3 — Palette and rendering — ✅ complete
 
-**Scope.** `BlockTile` and shape geometry, recursive stack rendering, category rail, searchable
-palette, read-only script strip, theme tokens, a static sample document on the page. Page reachable
-through a temporary tag.
+**Done.** Every shipping block renders, nested, on a canvas beside a searchable palette, in dark and
+light. 49 new tests; full suite 561 green; the window driven at 1400×850 and at 960×640, in both themes,
+with every category clicked, a search typed, blocks selected from both surfaces and the no-match state
+reached. §9.10 records what moved into Core and what the window found.
 
-**Exit criteria.** Every catalog block renders, nested, in dark and light; markup tests green;
-screenshots reviewed.
+**Scope, as built.** `BlockOutline` / `BlockLabel` / `BlockFactory` / `VisualSampleProject` in Core;
+`BlockShapeGeometry`, `BlockTheme`, `BlockTile`, `InputSlotView`, `CategoryRail`, `PaletteList`,
+`ScriptStrip`, `BlockWorkspace`, `LabelPartTemplateSelector` and `BlockSelectedEventArgs` in the App;
+five view models; the page; `Liquid.Block*` tokens; one markup assertion for bound icon names. A block's
+shape is chosen by a `DataTemplateSelector` over the catalogue row rather than a template per shape —
+see §9.10.
+
+**Exit criteria, checked.** Every catalog block renders ✔ (the sample holds every one of them and a test
+fails when it does not; the palette draws all 156 including the hats). Nested ✔ (the recursive template
+is the tile itself). Dark and light ✔ (both reviewed in a screenshot). Markup tests green ✔.
+
+**Not in this phase, and why.** Dragging is P4 — the palette says so rather than offering a drag that
+does nothing. Field editing, the inspector's editors and the live C# pane are P5; the inspector here
+shows what the block is and which SDK member it was verified against, which is the read-only half of
+§9.6. Clicking a diagnostic to select its block is P5 with the pane's editors. Zoom, pan and the
+minimap are P10, and the canvas is a column of scripts rather than a free-positioned one until then;
+script positions are already in the document (§6.1) and shown, so P10 adds the transform rather than the
+data.
 
 ### P4 — Drag and drop
 
@@ -1519,6 +1606,18 @@ src/DeckForge.Core/Visual/Runtime/ScriptInterpreter.cs
 src/DeckForge.Core/Visual/Runtime/VisualList.cs
 ```
 
+**Core — new in P3** (see §9.10 for why each is here rather than in the App)
+
+```
+src/DeckForge.Core/Visual/BlockOutline.cs        the silhouettes, as numbers
+src/DeckForge.Core/Visual/BlockLabel.cs          the label split, words and holes
+src/DeckForge.Core/Visual/BlockFactory.cs        a fresh block of any row, filled in
+src/DeckForge.Core/Visual/VisualSampleProject.cs the document the page draws
+```
+
+`BlockValue.cs` and `VisualBlocks.cs` were §6.2's class-per-block hierarchy, which P1 replaced with one
+generic node (§6.2.1) and are not written. `DropResolver.cs` and `StackLayout.cs` landed in P1c.
+
 **CodeGen — new**
 
 ```
@@ -1539,8 +1638,8 @@ src/DeckForge.App/ViewModels/Visual/ScriptViewModel.cs
 src/DeckForge.App/ViewModels/Visual/BlockNodeViewModel.cs
 src/DeckForge.App/ViewModels/Visual/SlotViewModel.cs
 src/DeckForge.App/ViewModels/Visual/PaletteViewModel.cs
-src/DeckForge.App/ViewModels/Visual/DiagnosticsViewModel.cs
-src/DeckForge.App/ViewModels/Visual/StageViewModel.cs
+src/DeckForge.App/ViewModels/Visual/DiagnosticsViewModel.cs        (P5, with the editors)
+src/DeckForge.App/ViewModels/Visual/StageViewModel.cs              (P8)
 src/DeckForge.App/Controls/Blocks/BlockWorkspace.xaml(.cs)
 src/DeckForge.App/Controls/Blocks/ScriptStrip.xaml(.cs)
 src/DeckForge.App/Controls/Blocks/CategoryRail.xaml(.cs)
@@ -1549,19 +1648,25 @@ src/DeckForge.App/Controls/Blocks/BlockTile.xaml(.cs)
 src/DeckForge.App/Controls/Blocks/InputSlotView.xaml(.cs)
 src/DeckForge.App/Controls/Blocks/BlockShapeGeometry.cs
 src/DeckForge.App/Controls/Blocks/BlockTheme.cs
-src/DeckForge.App/Controls/Blocks/DragAdorner.cs
-src/DeckForge.App/Services/BlockDragService.cs
-src/DeckForge.App/Services/VisualDocumentService.cs
-src/DeckForge.App/Services/SimulationService.cs
+src/DeckForge.App/Controls/Blocks/LabelPartTemplateSelector.cs      (P3)
+src/DeckForge.App/Controls/Blocks/BlockSelectedEventArgs.cs        (P3)
+src/DeckForge.App/Controls/Blocks/DragAdorner.cs                    (P4)
+src/DeckForge.App/Services/BlockDragService.cs                      (P4)
+src/DeckForge.App/Services/VisualDocumentService.cs                 (P5)
+src/DeckForge.App/Services/SimulationService.cs                     (P8)
 ```
+
+`SlotViewModel.cs` also holds `MenuViewModel` and `BodyViewModel`: the slot union from §6.2, in one file,
+because they are three views of the same node and separating them would put a four-block family across
+four files.
 
 **App — changed**
 
 ```
-src/DeckForge.App/MainWindow.xaml               (+ Visual nav item, − Blocks)
-src/DeckForge.App/MainWindow.xaml.cs            (PageRegistry: + visual, − blocks)
-src/DeckForge.App/App.xaml.cs                   (DI registrations; − old page/VM)
-src/DeckForge.App/Themes/LiquidTheme.cs         (+ Liquid.Block* tokens)
+src/DeckForge.App/MainWindow.xaml               (+ Visual nav item, − Blocks in P6)
+src/DeckForge.App/MainWindow.xaml.cs            (PageRegistry: + visual, − blocks in P6)
+src/DeckForge.App/App.xaml.cs                   (DI registrations; − old page/VM in P6)
+src/DeckForge.App/Themes/LiquidTheme.cs         (+ Liquid.Block* tokens, generated from the catalogue)
 ```
 
 **App — deleted (P6)**
@@ -1592,7 +1697,16 @@ tests/DeckForge.Tests/Visual/StackLayoutTests.cs
 tests/DeckForge.Tests/Visual/DropResolverTests.cs
 tests/DeckForge.Tests/Visual/ScriptInterpreterTests.cs
 tests/DeckForge.Tests/Visual/VisualRuntimeSurfaceTests.cs
+tests/DeckForge.Tests/Visual/BlockOutlineTests.cs               (P3)
+tests/DeckForge.Tests/Visual/BlockLabelTests.cs                 (P3)
+tests/DeckForge.Tests/Visual/VisualSampleProjectTests.cs       (P3)
 ```
+
+`ExpressionEmitterTests.cs` and `StatementEmitterTests.cs` became the one `VisualEmitterTests.cs` (§8.6);
+the drop tests are inside `StackLayoutTests.cs` rather than a file of their own. P3 also added one
+assertion to `tests/DeckForge.Tests/XamlMarkupTests.cs`: that every category's glyph, which is held in
+the catalogue rather than in markup, is a real `SymbolRegular` member — the same defect the icon check
+above exists for, reached a different way, and a bad one renders as a missing glyph with no error.
 
 **Docs**
 

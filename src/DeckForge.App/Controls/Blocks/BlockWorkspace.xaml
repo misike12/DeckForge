@@ -1,0 +1,74 @@
+<UserControl x:Class="DeckForge.App.Controls.Blocks.BlockWorkspace"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:blocks="clr-namespace:DeckForge.App.Controls.Blocks"
+             xmlns:conv="clr-namespace:DeckForge.App.Converters"
+             Background="Transparent">
+
+    <!--
+        The canvas.
+
+        One Canvas per script, positioned at the script's own X and Y from the document, because Part 6.1
+        makes the position part of the document rather than something the canvas invents: a user who has
+        arranged their scripts expects that arrangement to still be there tomorrow.
+
+        Scripts are laid out left to right in one row with a column per script, each in its own scrollable
+        Canvas. A single shared canvas with pan and zoom is Phase 10's job, and adding it now would mean
+        building a second layout that Phase 10 then has to throw away.
+    -->
+    <UserControl.Resources>
+        <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                  Background="{DynamicResource Liquid.BlockCanvasBrush}">
+        <Grid Background="{DynamicResource Liquid.BlockGridBrush}">
+
+            <StackPanel Orientation="Horizontal">
+
+                <Border Width="180" VerticalAlignment="Stretch" Padding="0,8"
+                        Background="{DynamicResource Liquid.BlockRailBrush}">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.18" Color="Black" />
+                    </Border.Effect>
+                    <blocks:ScriptStrip />
+                </Border>
+
+                <Canvas Margin="16">
+                    <ItemsControl ItemsSource="{Binding Scripts}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Width="400" Margin="0,0,24,0" VerticalAlignment="Top">
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                                                Background="{Binding Hat.FillKey, Converter={StaticResource KeyToBrush}}" />
+                                        <TextBlock Text="{Binding Name}" Margin="8,0,0,0"
+                                                   FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                                    </StackPanel>
+
+                                    <StackPanel>
+                                        <blocks:BlockTile DataContext="{Binding Hat}" />
+                                        <ItemsControl ItemsSource="{Binding Body}" Margin="0,2,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <blocks:BlockTile />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Canvas>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
