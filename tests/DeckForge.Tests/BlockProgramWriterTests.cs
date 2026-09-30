@@ -968,4 +968,43 @@ public sealed class BlockProgramWriterTests
         Assert.That(regionStart, Is.LessThan(laterMember),
             "The region was spliced into the member after the executor, where it can never run.");
     }
+
+    [Test]
+    public void An_already_async_executor_with_task_returns_still_gets_them_repaired()
+    {
+        // A hand-edited executor can be async while still carrying the template's SucceededTask;
+        // the moment a visual region adds an await, that method no longer compiles (CS4016). The
+        // repair used to early-out on "already async" and leave the poisoned returns in place, so
+        // the second save broke the first save's file.
+        const string source = """
+            public sealed class Action
+            {
+                private sealed class Executor : IActionExecutor
+                {
+                    public async Task<ActionResult> ExecuteAsync(ActionExecutionContext context)
+                    {
+                        if (context.Parameters.Count > 0)
+                        {
+                            return Task.FromResult(ActionResult.Ok("early"));
+                        }
+
+                        return ActionResult.SucceededTask;
+                    }
+                }
+            }
+            """;
+
+        var repaired = BlockCompiler.EnsureAsyncExecutor(source);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(repaired, Does.Contain("return ActionResult.Ok(\"early\");"),
+                "a Task.FromResult return became a value return");
+            Assert.That(repaired, Does.Contain("return ActionResult.Success();"),
+                "the SucceededTask return became a value return");
+            Assert.That(repaired, Does.Not.Contain("SucceededTask"), "no task-returning return survived");
+            Assert.That(CountOccurrences(repaired, "async "), Is.EqualTo(1),
+                "the repair must not sign the method twice");
+        });
+    }
 }

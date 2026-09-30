@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P1c complete (validator, metrics, layout, drop resolver). Next: P2 — emitters.**
+**Current position: P2 complete (emitters, writer, runtime template — compile-verified against the real SDK). Next: P3 — palette and rendering.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -77,7 +77,7 @@ inspected.
 | P1a — Core document model | ✅ **complete** | `Core/Visual/{BlockShapes,Block,VisualProject,VisualProjectJson}.cs` + `Migrations/BlocksV1Migration.cs`; 38 new tests, full suite 387 green |
 | P1b — Block catalog | ✅ **complete** | `BlockCatalog.cs` + `BlockCatalogRows.cs`: **156 shipping blocks** across 11 palette categories (Media stays empty by design), 7 deferred, 28 dropped, 1 placeholder; 7 discovered blocks included in the 156. 31 new tests in `BlockCatalogTests`, full suite 444 green. As-built §7.17 records the drift from the §7.3–§7.14 tables and the design decisions the tests forced |
 | P1c — Validator, metrics, stack layout, drop resolver | ✅ **complete** | `VisualValidator.cs` (+ `VisualValidationContext.cs`): Appendix F document-level diagnostics — shape, required, menu keys, control flow, reachability, name references, the placeholder's info note; a disabled block still has its names checked. `BlockMetrics.cs` / `StackLayout.cs`: pure geometry, cached heights, one geometry for canvas + export + resolver. `DropResolver.cs`: shape hard-filter, distance + stability bonus, magnet radius 40px × zoom, candidate enumeration per script. 42 new tests (`VisualValidatorTests`, `StackLayoutTests`) |
-| P2 — Emitters | ⬜ not started | |
+| P2 — Emitters | ✅ **complete** | `VisualEmitter.cs` (template-driven: the catalog row's expression IS the emission), `VisualProgramWriter.cs` (splice + async + host check), `VisualRuntimeTemplate.cs` (the §8.4 support file — **compile-verified against the real MacroDeck.Sdk 3.0.0-beta.14**, which caught five latent defects before any user saw them). Procedures as hoisted local functions with parameters bound into `Locals` by name; `name=value` call args bound positionally in declaration order. 25 new tests (24 emitter + 1 `EnsureAsyncExecutor` regression), full suite **511 green**. As-built §8.6 records the drift from §8.1–§8.4 |
 | P3 — Palette and rendering | ⬜ not started | |
 | P4 — Drag and drop | ⬜ not started | |
 | P5 — Editing, code, save | ⬜ not started | |
@@ -100,7 +100,7 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
-| 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
+| 2026-09-30 | **P2**: the emitters — one data-driven `VisualEmitter` replaces the spec's three classes (a row's template *is* the emission, so catalog and generator cannot disagree); braced `{holes}` and bare slot-name holes filled per slot type; control flow special-cased with Scratch semantics (repeat-until tests after the body); procedures hoisted as local functions whose parameters are bound into `Locals` by name and called positionally from parsed `name=value` lines; guards deduped at flush; the writer reuses `Splice`/`EnsureAsyncExecutor` with a substring-safe anchor. The runtime template was compile-checked end to end against the real SDK (throwaway plugin probe) — it had never been compiled, and the check caught a duplicate `IsNumeric` (CS0102), `System.Json` for `System.Text.Json`, `System.ActionExecutionContext` for `MacroDeck.Sdk.Actions.ActionExecutionContext`, an invalid `List<string>(comparer)` construction, and the class's own `Convert` shadowing `System.Convert`. `EnsureAsyncExecutor` hardened: an already-async body with `SucceededTask`/`Task.FromResult` returns is now repaired instead of skipped (regression test added). 25 new tests; full suite 511 green. Design changes recorded in §8.6 | **milestone 5 — see commit** || 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
 | 2026-09-29 | **P1c**: the validator and the geometry — `VisualValidator` checks a document against the catalog and produces the Appendix F codes a document can own (shape mismatch as error, type coercion as warning, unbound required slots, unknown menu keys, break/continue depth via a walk that carries loop depth, return-inside-procedure, forever-without-yield, unreachable-after-cap, name references against declared parameters/host variables/procedures, reserved-name collisions). Setters and `list.define` declare their names *as the walk reaches them*, so `set x to x + 1` reads clean and a genuinely-forward reference is caught. `BlockMetrics` + `StackLayout` give canvas, export and resolver one geometry; `DropResolver` filters by shape, scores by distance plus a stability bonus, snaps inside 40px × zoom. Design notes recorded in §9.5-as-built (§9.10) | **milestone 4 — see commit** |
 | 2026-09-29 | **P1b**: the block catalog — 156 shipping blocks in 11 categories, `Search`, per-category counts pinned by test, every expression checked against the Appendix A surface dump, capabilities cross-checked against `CapabilityCatalog`. The migration was rewritten: slot values now land in `inputs` (they were in `fields`, which parsed fine and emitted nothing), variants are chosen by what the legacy block actually set (`ui.log-with-param`, `ui.notify-key`, `sensing.run-script-with-inputs`), `read-variable` migrates to `var.set-from-host`, literals lose their redundant `valueKind`/`type` menu, `==` normalises to `=`, error codes normalise case-insensitively against the real nine. Design changes recorded in §6.2.1 and §7.17 | **milestone 3 — see commit** |
 | 2026-09-29 | **P1a**: the visual document model — `Block`/`BlockInput`, the document types, hand-written JSON converters, structural legacy detection, and the 18-kind migration. 38 new tests (`VisualModelTests`, `VisualMigrationTests`); full suite 387 green. The class hierarchy in §6.2 became one generic node (§6.2.1) | **milestone 2 — see commit** |
@@ -1006,6 +1006,58 @@ reference — an emitter cannot name a helper that does not exist.
 
 Each reuses `Splice`, `MatchingBrace` and `LastTopLevelReturn` rather than re-implementing anchoring —
 the last re-implementation of that logic produced a defect that only appeared on the *second* save.
+
+### 8.6 As built (P2) — one emitter, not three, and a compile-verified runtime
+
+As built, Part 8 shrank and hardened:
+
+- **One emitter, data-driven (§8.1 → one class).** `ExpressionEmitter` / `StatementEmitter` /
+  `ProcedureEmitter` collapsed into a single `VisualEmitter`: the catalog row's `SdkMapping.Expression`
+  *is* the emission, with holes filled per slot type. A new block therefore needs no emitter change,
+  and the risk that the catalog and the generator disagree about what a block does is designed away
+  rather than tested for. Control flow (repeat, forever, if family, caps, break/continue, return) is
+  special-cased in code because its emission is structure, not an expression. A reporter at statement
+  position is a compile problem, never a silently empty statement — except `proc.call-value`, which
+  the palette shapes like a reporter but which is a fire-and-forget call as a statement.
+- **Holes come in two spellings, filled identically.** Braced `{seconds}` is the documented form; a
+  bare hole — the slot's own name as a whole word, as in `VisualRuntime.ToNumber(ms)` — reads as if
+  the slot were a local, which is how the rows are written. Rendering is per slot type: a `List` slot
+  becomes the local's identifier, a `Variable`/`Parameter`/host-variable slot becomes the name as a
+  string literal (the runtime stores by name, which is what makes a rename-carrying canvas possible),
+  a `Procedure` slot becomes the local function's identifier with the `Async` suffix, and value slots
+  become literals converted at the use site or a nested reporter's expression, recursively.
+- **Procedures: parameters travel as objects, bound by name at entry.** The spec's typed parameters
+  could not survive a call site that only knows `name=value` text (a `double? n` parameter and a call
+  `greetAsync("n=1")` cannot compile). As built, every parameter is `object?`, the body opens with
+  `VisualRuntime.Set(name, param)` lines that bind each into `Locals` under its own name, and the
+  call site parses its `name=value` lines into positional arguments in declaration order, verified
+  against the document's procedure declarations. An unknown procedure keeps the whole-string
+  behaviour *and* reports a problem, so intent is never silently scrambled. Emission stays hoisted
+  local functions (Finding 1), emitted only into regions that reference them, `Async`-suffixed.
+- **Guards dedupe at flush, not at emission.** Blocks note `WantsHostGuard` / `WantsInteractionGuard`
+  on the emit state; `Flush()` prefixes the deduplicated guards. `sensing.session-established` reads
+  `_integration is not null` directly, so its row suppresses the guard (`SuppressHostGuard`) rather
+  than swallowing itself.
+- **The writer reuses the old writer's proven parts.** `VisualProgramWriter` = compile → host check
+  (region names `_integration` but the plugin has none → refuse with the Capabilities-page remedy) →
+  wrap in `// <macrodeck-blocks>` → `BlockCompiler.Splice` → `EnsureAsyncExecutor`. The executor
+  anchor is a substring (`Task<ActionResult> ExecuteAsync(…)`) precisely so it still matches after
+  the first save made the method `async` — the exact second-save defect the old compiler once had.
+- **`VisualRuntimeTemplate` is compile-verified against the real SDK (§8.4 kept).** The template is
+  one raw string literal, so nothing compiled it until now. A throwaway probe materialized it into a
+  minimal plugin project referencing `MacroDeck.Sdk 3.0.0-beta.14` and built: **five latent defects
+  surfaced and were fixed** — a duplicate `IsNumeric` (CS0102 waiting to happen), `System.Json` for
+  `System.Text.Json`, `System.ActionExecutionContext` for `MacroDeck.Sdk.Actions.ActionExecutionContext`,
+  an invalid `new List<string>(StringComparer.Ordinal)` construction, and the runtime's own `Convert`
+  method shadowing `System.Convert` inside `ToNumber`. The emitter-surface cross-check test (§8.4's
+  "an emitter cannot name a helper that does not exist") scans the template against every
+  `VisualRuntime.*` call the catalog makes and fails naming the missing member. The generated file's shape is unchanged from §8.4 (`internal static class VisualRuntime`,
+  auto-generated header, `HttpResponseRecord`); `VisualList` became plain `List<string>` helpers.
+- **`EnsureAsyncExecutor` hardened (§8.2's async invariant).** The old early-out on "already async"
+  left `return ActionResult.SucceededTask;` in place when a user had made their executor async by
+  hand — the moment a visual region adds an `await`, that method is CS4016. Both paths now repair
+  task-returning returns through one `RepairReturns` helper; a regression test pins it.
+- **Test count:** 24 emitter tests + 1 writer regression test; full suite 486 → **511 green**.
 
 ---
 

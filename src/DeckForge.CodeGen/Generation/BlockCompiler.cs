@@ -575,11 +575,23 @@ public static partial class BlockCompiler
             return source;
         }
 
-        // Already async: nothing to do.
+        // Already async: nothing to do about the signature, but the body may still return tasks -
+        // a hand-edited executor can carry `return ActionResult.SucceededTask;` and then a visual
+        // region's awaits make that invalid (CS4016). In an async method those returns are always
+        // wrong or pointless, so repairing them is safe whatever put them there.
         var lineStart = source.LastIndexOf('\n', Math.Max(index - 1, 0)) + 1;
         if (source[lineStart..index].TrimEnd().EndsWith("async", StringComparison.Ordinal))
         {
-            return source;
+            var asyncOpen = source.IndexOf('{', index);
+            var asyncClose = MatchingBrace(source, asyncOpen);
+            if (asyncOpen < 0 || asyncClose < 0)
+            {
+                return source;
+            }
+
+            return source[..(asyncOpen + 1)]
+                + RepairReturns(source[(asyncOpen + 1)..asyncClose])
+                + source[asyncClose..];
         }
 
         var open = source.IndexOf('{', index);
@@ -589,10 +601,14 @@ public static partial class BlockCompiler
             return source;
         }
 
-        var body = ReturnSucceededTaskPattern().Replace(source[(open + 1)..close], "return ActionResult.Success();");
-        body = ReturnFromResultPattern().Replace(body, "return $1;");
+        return source[..index] + "async " + source[index..(open + 1)] + RepairReturns(source[(open + 1)..close]) + source[close..];
+    }
 
-        return source[..index] + "async " + source[index..(open + 1)] + body + source[close..];
+    /// <summary>Turns task-returning returns into value returns. Used by both async paths.</summary>
+    private static string RepairReturns(string body)
+    {
+        body = ReturnSucceededTaskPattern().Replace(body, "return ActionResult.Success();");
+        return ReturnFromResultPattern().Replace(body, "return $1;");
     }
 
     [GeneratedRegex(@"return\s+ActionResult\.SucceededTask\s*;", RegexOptions.CultureInvariant)]
