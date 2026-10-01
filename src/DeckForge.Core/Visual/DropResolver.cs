@@ -12,6 +12,16 @@ public enum DropTargetKind
     /// <summary>A value slot on a block: reporters land here.</summary>
     ValueSlot,
 
+    /// <summary>
+    /// On top of a statement, which replaces it.
+    /// </summary>
+    /// <remarks>
+    /// Part 9.5's last zone. Offered only by the canvas, and only for a block the pointer is genuinely
+    /// over the body of rather than beside, because the gap above and below the same statement are two
+    /// ordinary gaps and stealing either of them would make ordinary drops unpredictable.
+    /// </remarks>
+    OntoStatement,
+
     /// <summary>The top of a script: only hats may land here.</summary>
     HatSlot,
 
@@ -19,12 +29,21 @@ public enum DropTargetKind
     Canvas,
 }
 
-/// <summary>One place the dragged block could land.</summary>
+/// <summary>
+/// One place the dragged block could land.
+/// </summary>
 /// <param name="Kind">What kind of place it is.</param>
-/// <param name="ParentId">The block that owns the slot or body, or the id of the block the gap sits after.</param>
-/// <param name="BodyName">The body the gap or mouth opens into, when one does.</param>
+/// <param name="ParentId">
+/// The block that owns the body, slot or script, or the id of the block the gap sits against.
+/// </param>
+/// <param name="BodyName">
+/// The body the gap opens into. Empty for a script body, which a hat's id addresses on its own.
+/// </param>
 /// <param name="SlotName">The slot, for a value-slot candidate.</param>
-/// <param name="Index">The insertion index within the body, for a stack gap.</param>
+/// <param name="Index">
+/// Where in the body. A candidate is therefore self-sufficient: the canvas turns one into a
+/// <see cref="BodyRef"/> and an index without having to remember where it was standing.
+/// </param>
 /// <param name="X">The notch's x, in canvas coordinates.</param>
 /// <param name="Y">The notch's y, in canvas coordinates.</param>
 public sealed record DropCandidate(
@@ -151,6 +170,7 @@ public static class DropResolver
 
             case DropTargetKind.Mouth:
             case DropTargetKind.StackGap:
+            case DropTargetKind.OntoStatement:
                 return !dragged.IsReporter && !dragged.IsHat;
 
             case DropTargetKind.Canvas:
@@ -162,15 +182,23 @@ public static class DropResolver
     }
 
     /// <summary>
-    /// Enumerates the drop candidates of one laid-out script.
+    /// Enumerates the drop candidates of one laid-out script: the hat slot, and a gap above and below
+    /// every laid-out statement including the ones nested inside containers.
     /// </summary>
     /// <param name="script">The script.</param>
     /// <param name="rects">The layout from <see cref="StackLayout.Layout"/>.</param>
     /// <param name="zoom">Canvas zoom.</param>
     /// <remarks>
-    /// Gaps sit at the notch of every laid-out block (landing "after" it) plus one at the top of the
-    /// body. The canvas calls this per pointer-move over the visible scripts only, which is how the
-    /// Appendix H budget of 2ms holds: candidates are O(visible blocks), not O(document).
+    /// <para>
+    /// Every candidate carries the body it belongs to and the index it would insert at, which is what
+    /// makes a candidate self-sufficient: the canvas turns one into a <see cref="BodyRef"/> and an index
+    /// without keeping its own record of where it was walking. P1c's version left the index at zero
+    /// throughout, which was fine while nothing acted on a candidate and is not now.
+    /// </para>
+    /// <para>
+    /// The canvas calls this per pointer-move over the visible scripts only, which is how the Appendix H
+    /// budget of 2ms holds: candidates are O(visible blocks), not O(document).
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<DropCandidate> CandidatesFor(
         VisualScript script,
@@ -180,30 +208,57 @@ public static class DropResolver
         var candidates = new List<DropCandidate>();
 
         // The hat slot: only hats, always at the top.
-        if (rects.TryGetValue(script.Hat.Id, out var hatRect))
+        if (!rects.TryGetValue(script.Hat.Id, out var hatRect))
         {
-            candidates.Add(new DropCandidate(
-                DropTargetKind.HatSlot, script.Hat.Id, X: hatRect.X, Y: hatRect.Y));
+            return candidates;
         }
 
+        candidates.Add(new DropCandidate(
+            DropTargetKind.HatSlot, script.Hat.Id, X: hatRect.X, Y: hatRect.Y));
+
+        var body = BodyRef.ScriptBody(script.Hat.Id);
         var y = hatRect.Height;
-        var first = true;
-        foreach (var statement in script.Body)
+
+        for (var index = 0; index < script.Body.Count; index++)
         {
-            Collect(statement, x: 0, ref y, script.Hat.Id, null, first, rects, candidates, zoom);
-            first = false;
+            Collect(script.Body[index], body, index, 0, ref y, rects, candidates, zoom);
         }
 
         return candidates;
     }
 
+    /// <summary>
+    /// Turns the value slots the canvas located into candidates.
+    /// </summary>
+    /// <param name="slots">Each slot's owning block, its name, and its top-left in canvas coordinates.</param>
+    /// <remarks>
+    /// <para>
+    /// A slot is exactly as wide as the text in it, which Core cannot know and should not guess: the
+    /// canvas measures, and this turns those measurements into candidates the scorer understands. The
+    /// scoring, the shape filter and the magnet radius stay in one place either way, and that is the
+    /// property that matters — a reporter refused from a value slot has to be refused the same way
+    /// whether the hole was measured on screen or estimated.
+    /// </para>
+    /// <para>
+    /// Slots inside a collapsed body are simply not passed in, which is correct: there is nowhere on
+    /// screen to drop into them.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<DropCandidate> ValueSlotCandidates(
+        IEnumerable<(string BlockId, string SlotName, double X, double Y)> slots) =>
+        [.. slots.Select(slot => new DropCandidate(
+            DropTargetKind.ValueSlot,
+            slot.BlockId,
+            SlotName: slot.SlotName,
+            X: slot.X,
+            Y: slot.Y))];
+
     private static void Collect(
         Block block,
+        BodyRef where,
+        int index,
         double x,
         ref double y,
-        string parentId,
-        string? bodyName,
-        bool isFirst,
         IReadOnlyDictionary<string, BlockRect> rects,
         List<DropCandidate> candidates,
         double zoom)
@@ -214,34 +269,47 @@ public static class DropResolver
             return;
         }
 
-        // The gap above this statement: landing here inserts before it. The first statement of a body
-        // is also the mouth's landing spot.
+        // The gap above this statement: landing here inserts before it. The first statement of a wrapped
+        // body is also the mouth's landing spot, which is what makes "drop a stack into an empty loop" one
+        // gesture rather than a special case.
         candidates.Add(new DropCandidate(
-            isFirst && bodyName is not null ? DropTargetKind.Mouth : DropTargetKind.StackGap,
-            parentId,
-            BodyName: bodyName,
-            Index: 0,
+            index == 0 && !where.IsScriptBody ? DropTargetKind.Mouth : DropTargetKind.StackGap,
+            where.OwnerId,
+            BodyName: where.BodyName,
+            Index: index,
             X: x,
             Y: y));
 
         if (descriptor.IsContainer)
         {
-            var innerY = y + rect.Height;
-            var indent = x + BlockMetrics.BodyIndent * zoom;
-            foreach (var (name, body) in block.Bodies)
+            var innerY = rect.NotchY;
+            var indent = x + BlockOutline.ArmWidth * zoom;
+
+            foreach (var (name, children) in block.Bodies)
             {
-                var first = true;
-                foreach (var child in body)
+                var childWhere = new BodyRef(block.Id, name);
+
+                for (var childIndex = 0; childIndex < children.Count; childIndex++)
                 {
-                    Collect(child, indent, ref innerY, block.Id, name, first, rects, candidates, zoom);
-                    first = false;
+                    Collect(children[childIndex], childWhere, childIndex, indent, ref innerY, rects, candidates, zoom);
                 }
+
+                // The gap below the last statement of a body, which is the mouth's own bottom edge. Without
+                // it a C-block's mouth can only ever be filled from the top, which is not how Scratch
+                // behaves: a run dropped at the foot of a loop's body belongs inside the loop.
+                if (children.Count > 0)
+                {
+                    candidates.Add(new DropCandidate(
+                        DropTargetKind.Mouth, childWhere.OwnerId, BodyName: name, Index: children.Count, X: indent, Y: innerY));
+                }
+
+                innerY += (BlockOutline.FooterHeight + BlockOutline.NotchDepth) * zoom;
             }
         }
 
         // The gap below this statement: landing here inserts after it.
         y = rect.NotchY;
         candidates.Add(new DropCandidate(
-            DropTargetKind.StackGap, block.Id, X: x, Y: y));
+            DropTargetKind.StackGap, where.OwnerId, BodyName: where.BodyName, Index: index + 1, X: x, Y: y));
     }
 }

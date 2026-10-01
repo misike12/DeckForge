@@ -188,10 +188,72 @@ public sealed class StackLayoutTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.Mouth).ToList(), Has.Count.EqualTo(1),
-                "the container's empty top is the wrap gesture");
+            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.Mouth).ToList(), Has.Count.EqualTo(2),
+                "a mouth is offered at the top of the body and again at its foot, so a run dropped "
+                + "below the contents goes inside the loop rather than after it");
             Assert.That(candidates.Where(c => c.Kind == DropTargetKind.StackGap).ToList(), Has.Count.GreaterThanOrEqualTo(2),
                 "one inside the body, one below the container");
+        });
+    }
+
+    [Test]
+    public void Every_gap_says_where_it_would_insert()
+    {
+        // P1c left every candidate's index at zero, which was harmless while nothing acted on one. Now
+        // something does, and a candidate that cannot say where it goes is a candidate the canvas has to
+        // keep its own notes about - which is how a drop ends up two gaps from where the indicator was.
+        var script = Script(
+            Stack("ui.log", b => b.WithText("template", "one")),
+            Stack("control.forever", b => { }, body =>
+            {
+                body.Add(Stack("ui.log", lb => lb.WithText("template", "inner")));
+            }),
+            Stack("ui.log", b => b.WithText("template", "three")));
+
+        var candidates = DropResolver.CandidatesFor(script, StackLayout.Layout(script));
+        var gaps = candidates.Where(c => c.Kind == DropTargetKind.StackGap).ToList();
+        var inScript = gaps.Where(c => c.BodyName is not { Length: > 0 });
+        var inLoop = gaps.Where(c => c.BodyName == "body");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(inScript.Select(c => c.Index), Is.EquivalentTo(new[] { 0, 1, 1, 2, 2, 3 }),
+                "the script's own gaps are numbered against the script's body, and the loop's two "
+                + "statements contribute a gap above and below each");
+            Assert.That(inLoop.Select(c => c.Index), Is.EqualTo(new[] { 1 }),
+                "the gap below the loop's one statement is the loop's body's own second index, not the "
+                + "script's - which is the difference between dropping inside the loop and after it");
+            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.Mouth).Select(c => c.Index),
+                Is.EquivalentTo(new[] { 0, 1 }), "the mouth is filled from the top or the foot");
+            Assert.That(inLoop.All(c => c.ParentId == script.Body[1].Id),
+                Is.True, "a nested gap names the container it opens into");
+        });
+    }
+
+    [Test]
+    public void A_value_slot_the_canvas_measured_becomes_a_candidate()
+    {
+        var slots = DropResolver.ValueSlotCandidates(
+        [
+            ("b1", "condition", 120, 40),
+            ("b2", "seconds", 12, 96),
+        ]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(slots, Has.Count.EqualTo(2));
+            Assert.That(slots[0].SlotName, Is.EqualTo("condition"));
+            Assert.That(slots[0].X, Is.EqualTo(120));
+        });
+
+        var reporter = DropResolver.Resolve("deck.current-folder", 121, 41, slots);
+        var stack = DropResolver.Resolve("ui.log", 121, 41, slots);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(reporter?.Candidate.Kind, Is.EqualTo(DropTargetKind.ValueSlot),
+                "a reporter belongs in a hole");
+            Assert.That(stack, Is.Null, "and a statement does not, however close the pointer is");
         });
     }
 

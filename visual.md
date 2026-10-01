@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P3 complete (palette, canvas, theme tokens, sample document — driven in the real window in dark and light). Next: P4 — drag and drop.**
+**Current position: P4a complete (the document can be edited by machine — 11 reversible commands behind one undo stack, 26 new tests, 587 green). Next: P4b — the pointer: drag service, ghost, drop indicator, auto-scroll.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -79,7 +79,8 @@ inspected.
 | P1c — Validator, metrics, stack layout, drop resolver | ✅ **complete** | `VisualValidator.cs` (+ `VisualValidationContext.cs`): Appendix F document-level diagnostics — shape, required, menu keys, control flow, reachability, name references, the placeholder's info note; a disabled block still has its names checked. `BlockMetrics.cs` / `StackLayout.cs`: pure geometry, cached heights, one geometry for canvas + export + resolver. `DropResolver.cs`: shape hard-filter, distance + stability bonus, magnet radius 40px × zoom, candidate enumeration per script. 42 new tests (`VisualValidatorTests`, `StackLayoutTests`) |
 | P2 — Emitters | ✅ **complete** | `VisualEmitter.cs` (template-driven: the catalog row's expression IS the emission), `VisualProgramWriter.cs` (splice + async + host check), `VisualRuntimeTemplate.cs` (the §8.4 support file — **compile-verified against the real MacroDeck.Sdk 3.0.0-beta.14**, which caught five latent defects before any user saw them). Procedures as hoisted local functions with parameters bound into `Locals` by name; `name=value` call args bound positionally in declaration order. 25 new tests (24 emitter + 1 `EnsureAsyncExecutor` regression), full suite **511 green**. As-built §8.6 records the drift from §8.1–§8.4 |
 | P3 — Palette and rendering | ✅ **complete** | `Core/Visual/{BlockOutline,BlockLabel,BlockFactory,VisualSampleProject}.cs`, `App/Controls/Blocks/*` (BlockTile, InputSlotView, CategoryRail, PaletteList, ScriptStrip, BlockWorkspace, BlockShapeGeometry, BlockTheme, LabelPartTemplateSelector), `App/ViewModels/Visual/*`, `Pages/VisualEditorPage`, `Liquid.Block*` theme tokens generated from the catalogue. 49 new tests (BlockOutlineTests 21, BlockLabelTests 11, VisualSampleProjectTests 8, plus one new markup assertion), full suite **561 green**. Driven in the real window: all 11 categories, search (including the no-match state), block selection from both surfaces, the empty-mouth state, light and dark, and at 960×640 and 1400×850. §9.10 records the design changes this forced |
-| P4 — Drag and drop | ⬜ not started | |
+| P4a — Document editing, undo/redo | ✅ **complete** | `Core/Visual/DocumentCommands.cs` (BodyRef + 11 reversible commands + DocumentTransaction) and `Core/Visual/DocumentEditor.cs` (Execute, Transaction with rollback, Undo, Redo, ClearHistory, the refusal rules). `DropResolver.cs` gained index-carrying gap candidates and `DropTargetKind.OntoStatement`. 26 new tests (`DocumentEditorTests`, incl. a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte), full suite **587 green**. Typed text coalesces into one undo; a refused or throwing transaction unwinds itself. The P4a as-built record lists the four things that were wrong first |
+| P4b/P4c — Pointer and keyboard | ⬜ not started | |
 | P5 — Editing, code, save | ⬜ not started | |
 | P6 — Shell integration, retire Blocks | ⬜ not started | |
 | P7 — Procedures and multi-script | ⬜ not started | |
@@ -100,6 +101,7 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
+| 2026-10-01 | **P4a**: the editing engine — eleven reversible commands (`InsertRun`, `DeleteRun`, `MoveRun`, `WrapRun`, `UnwrapRun`, `EditField`, `BindSlot`, `ToggleDisable`, `AddScript`, `DeleteScript`, `MoveScript`) behind one `DocumentEditor`, plus `DocumentTransaction` and `DocumentLists`. Each command captures the index it needs to put itself back, because "put it back where it was" cannot be recomputed after the fact. `RunFrom` returns the grabbed block *and everything below it*, which is what makes a stack drag one run — and why a downward move within its own stack is a no-op rather than a reorder. A transaction applies in order and reverts the earlier commands when a later one is refused: refusals are returns, not exceptions, so it has to unwind by hand. `EditField` coalesces with the command already on top (keeping the older `Before`, the newer `After`) so a typed word is one undo rather than one per keystroke. `DropResolver`'s gaps now carry the body and the index they would insert at — they could not be acted on before, and P1c's `Index: 0` throughout was a stub that only became obvious once something wanted to act on it; a container's mouth is offered at the foot of its body as well as the top. 26 new tests, including a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte against the start; full suite **587 green**. The P4a as-built record lists the four things that were wrong first, including a test generator that threw on an empty stack — a legal state, since a drag that takes everything can empty one | **milestone 7 — see commit** |
 | 2026-09-30 | **P3**: the palette, the canvas and the shapes. `BlockOutline` decides every silhouette as numbers — notch, tab, dome, pill, hexagon, one hole per mouth — and `BlockShapeGeometry` only walks the list, because geometry written in a template is geometry nothing can test and the whole reason the shapes are in Core is that a notch that stops lining up with the tab above it is invisible until a screenshot. `BlockLabel` splits a row's `repeat {count}` into words and holes (and a hole naming something the row does not declare renders as the raw marker, which is now a failing test over all 156 rows); `BlockFactory` builds a fresh block of any row filled in with plausible defaults, so the palette and the sample are projections of the catalogue rather than two hand-written lists. `VisualSampleProject` builds one script per category containing every shipping block, and a test fails when a new row is missing from it. The tile draws its own silhouette in `OnRender` from the size it was actually given and hosts the label in markup; the recursive template refers to itself by key, which is only legal because template content is instantiated after the dictionary is parsed. Clicking a block selects it through a bubbling routed event whose *arguments* carry the block, not its `Source` — WPF builds the route by walking the tree from `Source`, so a view model there sends the event nowhere. `Liquid.Block*` tokens are generated from the catalogue's hues, so a category cannot exist without its colours. 49 new tests; full suite 561 green. Design changes, and four defects the real window found that reading the code did not, are in §9.10 | **milestone 6 — see commit** |
 | 2026-09-30 | **P2**: the emitters — one data-driven `VisualEmitter` replaces the spec's three classes (a row's template *is* the emission, so catalog and generator cannot disagree); braced `{holes}` and bare slot-name holes filled per slot type; control flow special-cased with Scratch semantics (repeat-until tests after the body); procedures hoisted as local functions whose parameters are bound into `Locals` by name and called positionally from parsed `name=value` lines; guards deduped at flush; the writer reuses `Splice`/`EnsureAsyncExecutor` with a substring-safe anchor. The runtime template was compile-checked end to end against the real SDK (throwaway plugin probe) — it had never been compiled, and the check caught a duplicate `IsNumeric` (CS0102), `System.Json` for `System.Text.Json`, `System.ActionExecutionContext` for `MacroDeck.Sdk.Actions.ActionExecutionContext`, an invalid `List<string>(comparer)` construction, and the class's own `Convert` shadowing `System.Convert`. `EnsureAsyncExecutor` hardened: an already-async body with `SucceededTask`/`Task.FromResult` returns is now repaired instead of skipped (regression test added). 25 new tests; full suite 511 green. Design changes recorded in §8.6 | **milestone 5 — see commit** || 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
 | 2026-09-29 | **P1c**: the validator and the geometry — `VisualValidator` checks a document against the catalog and produces the Appendix F codes a document can own (shape mismatch as error, type coercion as warning, unbound required slots, unknown menu keys, break/continue depth via a walk that carries loop depth, return-inside-procedure, forever-without-yield, unreachable-after-cap, name references against declared parameters/host variables/procedures, reserved-name collisions). Setters and `list.define` declare their names *as the walk reaches them*, so `set x to x + 1` reads clean and a genuinely-forward reference is caught. `BlockMetrics` + `StackLayout` give canvas, export and resolver one geometry; `DropResolver` filters by shape, scores by distance plus a stability bonus, snaps inside 40px × zoom. Design notes recorded in §9.5-as-built (§9.10) | **milestone 4 — see commit** |
@@ -1508,10 +1510,55 @@ minimap are P10, and the canvas is a column of scripts rather than a free-positi
 script positions are already in the document (§6.1) and shown, so P10 adds the transform rather than the
 data.
 
-### P4 — Drag and drop
+### P4a — Document editing and undo/redo — ✅ complete
 
-**Scope.** Drag service, ghost and indicator adorners, drop zones, magnetic snapping, stack
-split and merge, wrap and unwrap, auto-scroll, undo/redo, keyboard moves.
+**Done.** The document can now be edited by machine rather than by hand: insert, delete, move, wrap,
+unwrap, edit a field, bind a slot, toggle disabled, add/delete/move scripts — each as a reversible
+command behind one `DocumentEditor` with a linear undo stack. 26 new tests, including a 1000-gesture
+random property test that undoes everything and compares the serialized document byte for byte with
+where it started. Full suite 587 green.
+
+**Scope, as built.** `DocumentCommands.cs` (`BodyRef`, the command types, `DocumentTransaction`,
+`DocumentLists`) and `DocumentEditor.cs` (`DocumentEditResult`, `Execute`, `Transaction`, `Undo`,
+``Redo`, `ClearHistory`) in Core; `DropTargetKind.OntoStatement` and index-carrying gap candidates in
+`DropResolver.cs`. No App code — P4b wires these to the pointer.
+
+**Four things this phase had to get right, and did get wrong first.**
+
+1. *Undo is inverse by construction.* Every command captures the index it will need to put things back,
+   because "put it back where it was" cannot be recomputed after the move: by the time you undo, the
+   list has already changed. `MoveRun` captures source and destination, `DeleteRun` its index, `WrapRun`
+   the anchor's index at the time.
+2. *A run is everything from the grabbed block down.* `RunFrom` returns the tail, not one block, so a
+   drag that takes the top three statements takes all three. This is why moving a run downward within
+   its own stack is a no-op rather than a reorder — there is nothing below it to be above.
+3. *A transaction is not atomic unless it rolls itself back.* `Transaction` applies in order and, if a
+   later command is refused or throws, reverts the earlier ones. Refusals are ordinary returns, not
+   exceptions, so a refused second command has to unwind the first by hand.
+4. *Typing is one undo, not one per keystroke.* `EditField` coalesces by `Before`/`After` and
+   `DocumentEditor.Execute` merges a new `EditField` into the previous command when the previous one
+   still has it on top, keeping the original `Before` and the newest `After`. Without that, undo walks
+   backwards through a word one letter at a time — the single most common way an editor like this
+   feels broken.
+
+**Refusals, and why each one exists.** Moving a body into itself or into its own descendant (that is a
+copy, not a move); dropping a reporter onto a stack zone or a hat anywhere but the top of a script;
+deleting the hat; binding a slot to the wrong shape; adding a script under a script. All of them return
+`Refused` with a reason instead of throwing, so the drag layer can show one and move on.
+
+**The one place the tests had to be corrected, not the code.** The 1000-gesture property test hit
+`ArgumentOutOfRangeException` on an empty stack — reachable, because a drag that takes everything can
+empty one. That was a gap in the test's generator, not in the editor: an empty stack is a legal state
+the run has to survive. It now re-seeds and keeps going, because a property test that stops half way
+passes for the wrong reason.
+
+**Not in this phase, and why.** Pointer capture, the ghost, the indicator, auto-scroll and the keyboard
+moves are P4b and P4c — all App. The editor has no idea any of them exist, which is the point: it is the
+thing they will all call.
+
+### P4b/P4c — the pointer and the keyboard
+
+**Scope.** Drag service, ghost and indicator adorners, auto-scroll, keyboard moves.
 
 **Exit criteria.** Resolver tests and user-driver drag scenarios green; 500-tile performance budget
 met.
