@@ -44,7 +44,25 @@ public partial class BlockTile : UserControl
         MouseEnter += (_, _) => InvalidateVisual();
         MouseLeave += (_, _) => InvalidateVisual();
         MouseLeftButtonDown += OnMouseLeftButtonDown;
+
+        // Focusable, and taking focus on click, because the keyboard gestures in Part 9.5 are routed
+        // through whatever holds keyboard focus. A `UserControl` is not focusable by default, so without
+        // this a click selects a block and focus stays wherever it was - on the navigation list, or
+        // nowhere - and every arrow key then goes to a control that has never heard of a block. The
+        // symptom is a canvas where selection visibly works and the keyboard visibly does nothing.
+        Focusable = true;
+        IsTabStop = true;
     }
+
+    /// <summary>
+    /// Moves keyboard focus onto this block, for a click or for Tab.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Focus"/> and not <c>Keyboard.Focus</c> on an inner element: focus has to land on the tile
+    /// so that the page's <c>PreviewKeyDown</c> sees an event whose route passes through it, and so the
+    /// selection ring is drawn by the element that actually has focus.
+    /// </remarks>
+    public void TakeFocus() => Focus();
 
     /// <summary>Whether the pointer is over this tile.</summary>
     /// <remarks>
@@ -79,6 +97,11 @@ public partial class BlockTile : UserControl
 
     private void OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
     {
+        // Focus, then raise. Both are here and neither is enough alone: the click that selects a block has
+        // to hand the keyboard to it as well, or "click a block, press Down, nothing moves" is what the
+        // canvas does.
+        TakeFocus();
+
         if (Node is { } node)
         {
             RaiseEvent(new BlockSelectedEventArgs(SelectionRequestedEvent, this, node));

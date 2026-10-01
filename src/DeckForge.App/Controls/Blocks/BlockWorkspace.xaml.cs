@@ -141,6 +141,17 @@ public partial class BlockWorkspace : UserControl
         _vm.Select(node);
         Attach();
         Surface.CaptureMouse();
+
+        // Focus the tile here rather than leaving it to the tile's own MouseLeftButtonDown, because this
+        // is a *preview* handler and it marks the event handled - which stops the bubbling one from being
+        // raised at all. The tile's focus-on-click therefore never ran, the keyboard went wherever it had
+        // been, and every arrow key addressed something other than the block the user had just clicked.
+        // Selecting and focusing belong together, and this is the only place both can happen.
+        if (CanvasHitTest.TileAt(Surface, point) is { } tile)
+        {
+            tile.TakeFocus();
+        }
+
         args.Handled = true;
     }
 
@@ -238,6 +249,78 @@ public partial class BlockWorkspace : UserControl
 
         return [.. gaps, .. slots];
     }
+
+    /// <summary>
+    /// Brings a block into view and gives it keyboard focus.
+    /// </summary>
+    /// <param name="blockId">The block's id.</param>
+    /// <remarks>
+    /// Both halves matter and they are one method because they are one gesture. The arrow keys move the
+    /// selection, and a selection that has walked off the edge of a scroll viewer is a selection the user
+    /// cannot see; and a block that is selected but not focused is a block the next keystroke will not
+    /// reach, because the keyboard goes to focus rather than to selection.
+    /// </remarks>
+    public void ScrollTo(string blockId)
+    {
+        var tile = CanvasHitTest.Tiles(Surface)
+            .FirstOrDefault(candidate => candidate.DataContext is BlockNodeViewModel node
+                && string.Equals(node.Id, blockId, StringComparison.Ordinal));
+
+        if (tile is null)
+        {
+            return;
+        }
+
+        tile.BringIntoView();
+        tile.TakeFocus();
+    }
+
+    /// <summary>
+    /// Shows or hides the drag adornments for whatever the editor says is in progress.
+    /// </summary>
+    /// <remarks>
+    /// Called from the page on every change notification, because the keyboard's carry mode is owned by the
+    /// editor and not by any pointer event. One adorner serves both paths and its <c>OnRender</c> decides
+    /// which of them to draw, so "is anything in hand" is one question with one answer rather than two
+    /// adorners that have to be kept in step.
+    /// </remarks>
+    public void Refresh()
+    {
+        // Re-focus the selected block, because every edit rebuilds the canvas and the rebuild replaces
+        // every tile. Without this the keyboard has focus on an element that no longer exists, WPF drops
+        // it, and the *next* keystroke goes to whatever else claims focus - which is how "Ctrl+Z did
+        // nothing" happens one keystroke after a drag that worked perfectly.
+        //
+        // Guarded on "something is selected" and on the tile actually being found, so a selection that
+        // has left the document does not spin here trying to focus nothing.
+        if (_vm?.Selected is { } selected)
+        {
+            var tile = CanvasHitTest.Tiles(Surface)
+                .FirstOrDefault(candidate => candidate.DataContext is BlockNodeViewModel node
+                    && string.Equals(node.Id, selected.Id, StringComparison.Ordinal));
+
+            if (tile is not null && !tile.IsKeyboardFocused)
+            {
+                tile.TakeFocus();
+            }
+        }
+
+        var wanted = _vm is not null && InHand();
+
+        if (wanted)
+        {
+            Attach();
+            _adorner?.InvalidateVisual();
+        }
+        else if (_adorner is not null && AdornerLayer.GetAdornerLayer(Surface) is { } layer)
+        {
+            layer.Remove(_adorner);
+            _adorner = null;
+        }
+    }
+
+    /// <summary>Whether a pointer drag or a keyboard carry is in progress.</summary>
+    private bool InHand() => _drag is { IsActive: true } || _vm is { IsCarrying: true };
 
     /// <summary>Puts the ghost in the adorner layer, once one exists.</summary>
     private void Attach()

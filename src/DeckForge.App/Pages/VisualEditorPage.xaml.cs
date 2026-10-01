@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using DeckForge.App.Services;
 
 namespace DeckForge.App.Pages;
@@ -40,6 +41,8 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
             new RoutedEventHandler(Tile_SelectionRequested));
 
         Palette.RowPressed += Palette_RowPressed;
+        PreviewKeyDown += OnPreviewKeyDown;
+        _vm.PropertyChanged += (_, args) => Workspace.Refresh();
         SizeChanged += (_, args) => ApplyLayout(args.NewSize.Width);
         ApplyLayout(ActualWidth);
     }
@@ -190,6 +193,7 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
         if (args is Controls.Blocks.BlockSelectedEventArgs selected)
         {
             _vm.Select(selected.Block);
+            Workspace.ScrollTo(selected.Block.Id);
         }
     }
 
@@ -233,4 +237,163 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
 
     /// <summary>Redoes, for the same reason.</summary>
     private void Redo_Click(object sender, RoutedEventArgs e) => _vm.RedoCommand.Execute(null);
+
+    /// <summary>
+    /// Every keyboard gesture in Part 9.5, on one handler.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On the page rather than on the tiles, for the same reason the click is: the tiles live inside data
+    /// templates four levels down and each one cannot reach the editor from its own data context. A page
+    /// that is an ancestor of all of them needs exactly one handler.
+    /// </para>
+    /// <para>
+    /// <c>Preview</c> rather than bubbling, because the arrow keys have to be ours before the palette's
+    /// search box or a scroll viewer sees them — a Ctrl+Down that a <c>ScrollViewer</c> consumed as "page
+    /// down" would move the block and scroll the canvas at once.
+    /// </para>
+    /// <para>
+    /// Every decision is delegated to <see cref="KeyboardMoves"/> in Core, which is where they can be
+    /// tested. This handler's whole job is turning keystrokes into method calls and marking them handled.
+    /// </para>
+    /// </remarks>
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+        if (e.Key == Key.Escape)
+        {
+            // Escape cancels a keyboard drag before anything else, which is the one key that has to work
+            // with the worst possible state: a user holding a block they cannot get rid of.
+            if (_vm.CancelKeyboardDrag())
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        // Undo and redo come before the carrying check, and they work whether or not a block is in hand.
+        //
+        // The carrying check is the reason this is not simply further down the list: a user who picks a
+        // block up, moves the cursor a few zones, and then realises they wanted to undo the edit they made
+        // before picking it up has no way to ask, because the carry swallows every key. Being able to undo
+        // while holding something is what makes the carry mode safe to explore in — you can always get
+        // back to where you were.
+        if (ctrl && e.Key == Key.Z)
+        {
+            if (shift)
+            {
+                _vm.RedoCommand.Execute(null);
+            }
+            else
+            {
+                _vm.UndoCommand.Execute(null);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Key.Y)
+        {
+            _vm.RedoCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (_vm.IsCarrying)
+        {
+            if (HandleCarryingKey(e))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (ctrl && e.Key == Key.D)
+        {
+            _vm.DuplicateSelected();
+            e.Handled = true;
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Up when ctrl:
+                _vm.MoveSelected(up: true);
+                e.Handled = true;
+                break;
+
+            case Key.Down when ctrl:
+                _vm.MoveSelected(up: false);
+                e.Handled = true;
+                break;
+
+            case Key.Up:
+                _vm.StepSelection(up: true);
+                e.Handled = true;
+                break;
+
+            case Key.Down:
+                _vm.StepSelection(up: false);
+                e.Handled = true;
+                break;
+
+            case Key.Delete:
+            case Key.Back:
+                _vm.DeleteSelected();
+                e.Handled = true;
+                break;
+
+            case Key.Space:
+                // Pick up. The only key that needs something to be selected first, so it declines
+                // silently rather than doing nothing with an error.
+                _vm.PickUpSelected();
+                e.Handled = true;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /// <summary>The keys that mean something while a block is in hand.</summary>
+    /// <returns>Whether the key was a gesture and should be marked handled.</returns>
+    private bool HandleCarryingKey(KeyEventArgs e)
+    {
+        var backwards = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+            case Key.Space:
+                return _vm.DropCarried();
+
+            case Key.Escape:
+                return _vm.CancelKeyboardDrag();
+
+            case Key.Tab:
+                _vm.StepKeyboardDropZone(backwards ? -1 : 1);
+                return true;
+
+            // Left and right walk the same cursor as up and down. A keyboard has no pointer, so the only
+            // thing a direction can mean is "the next zone that way through the list", and pretending the
+            // cursor is two-dimensional would be a lie about what the arrows do.
+            case Key.Up:
+            case Key.Left:
+                _vm.StepKeyboardDropZone(-1);
+                return true;
+
+            case Key.Down:
+            case Key.Right:
+                _vm.StepKeyboardDropZone(1);
+                return true;
+
+            default:
+                return false;
+        }
+    }
 }

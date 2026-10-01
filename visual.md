@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P4b complete (drag works end to end — palette to canvas, canvas to canvas, into a loop's mouth, with a ghost, an indicator and undo; 601 green). Next: P4c — the keyboard.**
+**Current position: P4 complete (drag and keyboard, 618 green). Next: P5 — editing, the inspector's editors, live C#, and save/load.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -81,7 +81,7 @@ inspected.
 | P3 — Palette and rendering | ✅ **complete** | `Core/Visual/{BlockOutline,BlockLabel,BlockFactory,VisualSampleProject}.cs`, `App/Controls/Blocks/*` (BlockTile, InputSlotView, CategoryRail, PaletteList, ScriptStrip, BlockWorkspace, BlockShapeGeometry, BlockTheme, LabelPartTemplateSelector), `App/ViewModels/Visual/*`, `Pages/VisualEditorPage`, `Liquid.Block*` theme tokens generated from the catalogue. 49 new tests (BlockOutlineTests 21, BlockLabelTests 11, VisualSampleProjectTests 8, plus one new markup assertion), full suite **561 green**. Driven in the real window: all 11 categories, search (including the no-match state), block selection from both surfaces, the empty-mouth state, light and dark, and at 960×640 and 1400×850. §9.10 records the design changes this forced |
 | P4a — Document editing, undo/redo | ✅ **complete** | `Core/Visual/DocumentCommands.cs` (BodyRef + 11 reversible commands + DocumentTransaction) and `Core/Visual/DocumentEditor.cs` (Execute, Transaction with rollback, Undo, Redo, ClearHistory, the refusal rules). `DropResolver.cs` gained index-carrying gap candidates and `DropTargetKind.OntoStatement`. 26 new tests (`DocumentEditorTests`, incl. a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte), full suite **587 green**. Typed text coalesces into one undo; a refused or throwing transaction unwinds itself. The P4a as-built record lists the four things that were wrong first |
 | P4b — Drag service, ghost, indicator | ✅ **complete** | `Core/Visual/DropPlan.cs` (a landing zone and a payload become the commands that carry it out — pure, window-free) + `Core/Visual/StackLayout.LayoutRun` (a hatless run, for the ghost). `App/Controls/Blocks/CanvasHitTest.cs` measures the live tiles, `DragController.cs` owns the pointer state, `DragAdorner.cs` draws the ghost and the indicator, `AutoScroll.cs` scrolls at the edges, and `BlockWorkspace` is the host. The view model now owns the `DocumentEditor`, projects the document rather than the sample, and keeps the selection pointed at the same block across a rebuild. 14 new tests (13 `DropPlanTests` incl. a 1000-gesture random round trip, 1 geometry test pinning the corrections below), full suite **601 green**. Driven in the real window: palette → canvas into a loop's mouth, canvas → canvas moving a run, a drop released in empty space, and undo — all with a screenshot taken *mid-drag*, because the ghost and the indicator exist only between the press and the release |
-| P4c — Keyboard | ⬜ not started | |
+| P4c — Keyboard | ✅ **complete** | `Core/Visual/KeyboardMoves.cs`: traversal, moving, deleting, duplicating, cycling, and the drop-zone cursor — all pure and all tested without a window. `DocumentLists.Locate` moved from the editor to Core so a keyboard gesture can be aimed with a document rather than a constructed history. The page has one `PreviewKeyDown`; tiles take keyboard focus on click and the canvas re-focuses the selection after every rebuild; the view model owns the carry state and the header shows it. 17 new tests, full suite **618 green**. Driven in the real window: Down walks the stack, Ctrl+D duplicates, Ctrl+Z and Ctrl+Y undo and redo, Space picks up, arrows move the cursor, Enter drops — and four defects the window found that 601 passing tests did not |
 | P5 — Editing, code, save | ⬜ not started | |
 | P6 — Shell integration, retire Blocks | ⬜ not started | |
 | P7 — Procedures and multi-script | ⬜ not started | |
@@ -102,6 +102,7 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
+| 2026-10-01 | **P4c**: the keyboard. Part 9.5's "nothing requires a mouse" — every decision about where the cursor is and what the gesture means lives in `KeyboardMoves` in Core, stateless, so the whole layer is a pure function of (document, selection, key) and 17 tests cover the ends of stacks, nested bodies, and the shapes that fit nothing. Two gestures deliberately disagree with the drag: Ctrl+↓ moves **one** block and swaps it, and Delete removes **one** block, because carrying the tail makes Ctrl+↓ a no-op for every block except the top and turns Delete into a data-loss trap. Both were written the drag's way first and the tests caught it. `DocumentLists.Locate` moved out of the editor so a gesture can be aimed with a document rather than a constructed history. The page has one `PreviewKeyDown`; the workspace re-focuses the selection after every rebuild. **Four defects the window found**: no tile could take focus at all, because the workspace's preview handler marks the event handled and so the tile's own bubbling handler never ran — selection worked and the keyboard addressed something else; the keyboard was lost after the first edit, because every rebuild replaces the focused tile, so "drag works, then Ctrl+Z does nothing"; Ctrl+Z did nothing while carrying, because the carry branch returned first; and the ghost's pitch for nested blocks. A fifth was in the *driver*: a swallowed key-up left Ctrl held for the rest of the session, so a shortcut worked once and then silently stopped — evidence that points squarely at the application. The driver now releases stale modifiers before each keystroke and accepts key *names*, since mapping "down" to the letter D sends Ctrl+D for every arrow key. 17 new tests; full suite **618 green** | **milestone 9 — see commit** |
 | 2026-10-01 | **P4b**: the pointer. `DropPlan` in Core is the decision half of a drop — payload plus landing zone becomes the commands — and has no WPF in it, because what a zone *does* to the document is the half with the interesting failures and the half a window cannot test; the 1000-gesture round trip through it is the P4a property test with the drag's four command shapes in front of it. `CanvasHitTest` measures the live tiles rather than computing them, so a candidate is compared against where WPF actually put the block. The ghost is drawn from real `BlockOutline` silhouettes laid out by a new `StackLayout.LayoutRun` — a hatless run, which the Part 25 thumbnails want anyway — and the indicator is a bar rather than a real gap, because opening one would reflow the canvas on every pointer move. **Four defects the window found and 601 passing tests did not**: a drop put a block in the *wrong script*, because every candidate claimed `x = 0` and the scorer weighs x at half a point per pixel; a loop's mouth opened at its *foot*, because a y walk reported a container's inner gaps at the container's bottom; a drag released in empty space *teleported* the block, because the scorer always names a nearest candidate; and a drag out of the palette that never crossed the canvas *did nothing at all*, because the workspace only captured the pointer when the press started over it. The first two were one cause — candidates computed a geometry that could disagree with the canvas's — and are now read off the blocks' own rectangles instead. The harness gained `press`/`move`/`release` so a screenshot can be taken mid-drag; without that the ghost and the indicator are unobservable, and a canvas drawing nothing looks like a screenshot taken too late. 14 new tests; full suite **601 green** | **milestone 8 — see commit** |
 | 2026-10-01 | **P4a**: the editing engine — eleven reversible commands (`InsertRun`, `DeleteRun`, `MoveRun`, `WrapRun`, `UnwrapRun`, `EditField`, `BindSlot`, `ToggleDisable`, `AddScript`, `DeleteScript`, `MoveScript`) behind one `DocumentEditor`, plus `DocumentTransaction` and `DocumentLists`. Each command captures the index it needs to put itself back, because "put it back where it was" cannot be recomputed after the fact. `RunFrom` returns the grabbed block *and everything below it*, which is what makes a stack drag one run — and why a downward move within its own stack is a no-op rather than a reorder. A transaction applies in order and reverts the earlier commands when a later one is refused: refusals are returns, not exceptions, so it has to unwind by hand. `EditField` coalesces with the command already on top (keeping the older `Before`, the newer `After`) so a typed word is one undo rather than one per keystroke. `DropResolver`'s gaps now carry the body and the index they would insert at — they could not be acted on before, and P1c's `Index: 0` throughout was a stub that only became obvious once something wanted to act on it; a container's mouth is offered at the foot of its body as well as the top. 26 new tests, including a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte against the start; full suite **587 green**. The P4a as-built record lists the four things that were wrong first, including a test generator that threw on an empty stack — a legal state, since a drag that takes everything can empty one | **milestone 7 — see commit** |
 | 2026-09-30 | **P3**: the palette, the canvas and the shapes. `BlockOutline` decides every silhouette as numbers — notch, tab, dome, pill, hexagon, one hole per mouth — and `BlockShapeGeometry` only walks the list, because geometry written in a template is geometry nothing can test and the whole reason the shapes are in Core is that a notch that stops lining up with the tab above it is invisible until a screenshot. `BlockLabel` splits a row's `repeat {count}` into words and holes (and a hole naming something the row does not declare renders as the raw marker, which is now a failing test over all 156 rows); `BlockFactory` builds a fresh block of any row filled in with plausible defaults, so the palette and the sample are projections of the catalogue rather than two hand-written lists. `VisualSampleProject` builds one script per category containing every shipping block, and a test fails when a new row is missing from it. The tile draws its own silhouette in `OnRender` from the size it was actually given and hosts the label in markup; the recursive template refers to itself by key, which is only legal because template content is instantiated after the dictionary is parsed. Clicking a block selects it through a bubbling routed event whose *arguments* carry the block, not its `Source` — WPF builds the route by walking the tree from `Source`, so a view model there sends the event nowhere. `Liquid.Block*` tokens are generated from the catalogue's hues, so a category cannot exist without its colours. 49 new tests; full suite 561 green. Design changes, and four defects the real window found that reading the code did not, are in §9.10 | **milestone 6 — see commit** |
@@ -1606,11 +1607,55 @@ indicator: both exist between the press and the release and neither survives it,
 presses-moves-releases-and-looks can never show either, and a canvas that draws no indicator looks exactly
 like a screenshot taken too late. With it, defects 1 and 2 were visible in a single frame.
 
-### P4c — the keyboard
+### P4c — the keyboard — ✅ complete
 
-**Scope.** ↑/↓ traverse a stack, Ctrl+↑/↓ move the block, Delete, Ctrl+D duplicate, Ctrl+Z / Ctrl+Y,
-Tab cycles slots, Enter opens a menu, Space picks up and drops (reusing the same resolver), Ctrl+K adds a
-block. **Nothing requires a mouse.**
+**Done.** Part 9.5's "nothing requires a mouse": ↑/↓ traverse a stack, Ctrl+↑/↓ move a block, Delete,
+Ctrl+D duplicates, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y undo and redo, Tab cycles, Space picks up and drops,
+Escape puts it back. 17 new tests; full suite 618 green; every binding driven in the real window.
+
+**Scope, as built.** `KeyboardMoves` in Core holds every decision and no state — each method takes the
+selection and returns the next one, which makes the whole keyboard layer a pure function of (document,
+selection, key) and therefore exhaustively testable. The page has one `PreviewKeyDown` handler whose only
+job is turning keystrokes into method calls.
+
+**Two decisions that go against the drag, deliberately.** A keyboard's Ctrl+↓ moves **one block** and
+swaps it with its neighbour; a drag carries the whole tail. And Delete removes **one block**, not the run.
+Both were written the drag's way first, and both were wrong for the keyboard: carrying the tail makes
+Ctrl+↓ a no-op for every block except the top of the stack, since everything below a block is already at
+the bottom; and deleting the tail turns a keystroke meant to remove one block into the loss of everything
+after it. A drag carries the tail because grabbing statement *n* and leaving 1..n-1 behind orphans them,
+and neither keyboard gesture has that problem to solve — the user has already named which block they mean.
+
+**Four defects the window found and 601 passing tests did not.**
+
+1. *Nothing on the canvas could be reached with the keyboard.* `BlockTile` is a `UserControl`, which is not
+   focusable, and the workspace's `PreviewMouseLeftButtonDown` marks the event handled — which stops the
+   tile's own bubbling `MouseLeftButtonDown` from running at all. So no click ever gave a tile focus, the
+   keyboard went wherever it had been, and selection visibly worked while every arrow key addressed
+   something else. Tiles take focus on click, and the workspace does it itself for the same reason.
+2. *The keyboard went away after the first edit.* Every edit rebuilds the canvas, which replaces every
+   tile, so the focused element no longer exists and WPF drops focus. The symptom was "drag works
+   perfectly, then Ctrl+Z does nothing" — one keystroke after a gesture that had just succeeded. The
+   workspace re-focuses the selection on every rebuild.
+3. *Ctrl+Z did nothing at all* while the Undo button beside it worked. The carry-mode branch returned
+   before the undo keys were considered, so a user who picked a block up and then wanted to undo the edit
+   from before that had no way to ask. Undo and redo now work while carrying — which is also what makes the
+   carry mode safe to explore in, since you can always get back.
+4. *The ghost's own pitch was wrong for nested blocks*, found earlier in P4b and fixed there.
+
+**One defect the test driver had, not the app.** A scripted shortcut worked once and then silently stopped
+working for the rest of the session. The key-up for a modifier was going to whichever window held focus at
+that moment, was sometimes swallowed, and left Ctrl held in the system's view; the next `ctrl+d` then
+arrived as "Ctrl already down, and here is another Ctrl" and Windows swallowed the pair as a repeat. The
+driver now releases every modifier and button before each keystroke. It is worth recording because the
+evidence points squarely at the application — "Ctrl+D duplicated a block once and never again" reads as a
+bug report against a working feature, and the fix belongs in the harness.
+
+**Verification that mattered.** `hotkey` accepts key *names* (`down`, `delete`, `ctrl+shift+z`) rather
+than the first character of them, because mapping "down" to the letter D sends Ctrl+D for every arrow key
+and makes a working binding look broken. And each keystroke needed the driver to release stale modifiers
+first. Both were in the harness; neither was in the application, and both would have been filed against the
+application.
 
 **Exit criteria.** Resolver tests and user-driver drag scenarios green; 500-tile performance budget
 met.

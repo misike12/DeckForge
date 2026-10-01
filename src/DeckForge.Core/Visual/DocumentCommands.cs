@@ -722,6 +722,60 @@ public static class DocumentLists
     public static Block? Find(VisualProject project, string blockId) =>
         project.Blocks().FirstOrDefault(block => string.Equals(block.Id, blockId, StringComparison.Ordinal));
 
+    /// <summary>
+    /// The body a block is a statement of, or null for a hat, a nested reporter, or nothing at all.
+    /// </summary>
+    /// <remarks>
+    /// On <see cref="DocumentEditor"/> rather than here originally, which made it unavailable to every
+    /// caller that had a document and not an editor. It is a lookup over the document and asks nothing of
+    /// the history, so a static is the honest shape — and a keyboard gesture that can only be aimed with a
+    /// constructed editor is a keyboard gesture whose aiming cannot be tested.
+    /// </remarks>
+    public static BodyRef? Locate(VisualProject project, Block block)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(block);
+
+        foreach (var target in project.Targets)
+        {
+            foreach (var script in target.Scripts)
+            {
+                if (script.Body.Contains(block))
+                {
+                    return BodyRef.ScriptBody(script.Hat.Id);
+                }
+
+                if (LocatedIn(script.Body, block) is { } nested)
+                {
+                    return nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static BodyRef? LocatedIn(IReadOnlyList<Block> statements, Block block)
+    {
+        foreach (var statement in statements)
+        {
+            foreach (var (name, children) in statement.Bodies)
+            {
+                if (children.Contains(block))
+                {
+                    return new BodyRef(statement.Id, name);
+                }
+
+                if (LocatedIn(children, block) is { } nested)
+                {
+                    return nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Every id in a run's subtrees, which is how a move into its own descendant is refused.</summary>
     public static HashSet<string> IdsOf(IEnumerable<Block> run) =>
         [.. run.SelectMany(block => block.Walk()).Select(block => block.Id)];

@@ -327,47 +327,7 @@ public sealed class DocumentEditor
     }
 
     /// <summary>Which body a block is in, or null when it is not in a stack at all.</summary>
-    public BodyRef? Locate(Block block)
-    {
-        foreach (var target in _project.Targets)
-        {
-            foreach (var script in target.Scripts)
-            {
-                if (script.Hat.Id == block.Id || script.Body.Contains(block))
-                {
-                    return BodyRef.ScriptBody(script.Hat.Id);
-                }
-
-                if (LocatedInNested(script.Body, block) is { } nested)
-                {
-                    return nested;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private BodyRef? LocatedInNested(List<Block> body, Block block)
-    {
-        foreach (var statement in body)
-        {
-            foreach (var (name, inner) in statement.Bodies)
-            {
-                if (inner.Contains(block))
-                {
-                    return new BodyRef(statement.Id, name);
-                }
-
-                if (LocatedInNested(inner, block) is { } found)
-                {
-                    return found;
-                }
-            }
-        }
-
-        return null;
-    }
+    public BodyRef? Locate(Block block) => DocumentLists.Locate(_project, block);
 
     /// <summary>The block immediately above one in the same body, or null.</summary>
     public Block? Above(Block block)

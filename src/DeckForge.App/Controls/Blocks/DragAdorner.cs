@@ -55,6 +55,17 @@ public sealed class DragAdorner : Adorner
         {
             DrawGhost(context, resolution);
             DrawIndicator(context, resolution.Candidate);
+            return;
+        }
+
+        if (_vm is { IsCarrying: true, CarriedZone: { } zone })
+        {
+            // The keyboard's cursor, drawn with the pointer's indicator and nothing else.
+            //
+            // No ghost: there is no pointer to follow, and a ghost at a fixed spot would imply a position
+            // the user has no way to steer. The indicator alone says "this is where it goes", which is
+            // exactly what a keyboard user needs and the only thing they could act on.
+            DrawIndicator(context, zone);
         }
     }
 

@@ -169,6 +169,174 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     /// <summary>Says why an edit was refused.</summary>
     public void Report(string problem) => Message = problem;
 
+    // ---- the keyboard --------------------------------------------------------------------------------
+
+    /// <summary>
+    /// What the keyboard is carrying, or null when it is carrying nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A pick-up-and-drop mode that reuses <see cref="DropPlan"/> rather than reimplementing it, which is
+    /// what makes "nothing requires a mouse" true rather than aspirational: the keyboard's Enter does
+    /// exactly what the pointer's release does, because both end up in the same place.
+    /// </para>
+    /// <para>
+    /// The cursor is a real <see cref="DropCandidate"/>, walked by <see cref="KeyboardMoves.StepZone"/>.
+    /// It is shown on the canvas with the same indicator the pointer uses, so a keyboard user sees where
+    /// the block will go in the same terms as a mouse user does.
+    /// </para>
+    /// </remarks>
+    public DragPayload? Carrying { get; private set; }
+
+    /// <summary>The zone the keyboard's block would land in right now, or null.</summary>
+    public DropCandidate? CarriedZone { get; private set; }
+
+    /// <summary>Whether a block is in hand.</summary>
+    public bool IsCarrying => Carrying is not null;
+
+    /// <summary>What the header says while a block is in hand, so the mode is visible.</summary>
+    public string CarryingLine => Carrying is null
+        ? string.Empty
+        : $"Holding {BlockCatalog.Find(Carrying.Kind)?.Label ?? Carrying.Kind}. "
+          + "Arrows choose where it goes, Enter drops it, Escape puts it back.";
+
+    /// <summary>Whether the header should be showing the carrying line.</summary>
+    public bool IsCarryingLine => Carrying is not null;
+
+    /// <summary>Moves the selection one statement up or down, within its own body.</summary>
+    public void StepSelection(bool up) =>
+        SelectBlock(KeyboardMoves.Step(Document, Selected?.Block, up));
+
+    /// <summary>Moves the selected block one place up or down in its body.</summary>
+    public void MoveSelected(bool up) => Apply(KeyboardMoves.Nudge(Document, Selected!.Block, up));
+
+    /// <summary>Deletes the selected block.</summary>
+    public void DeleteSelected() => Apply(KeyboardMoves.Delete(Document, Selected!.Block));
+
+    /// <summary>Duplicates the selected block and its run.</summary>
+    public void DuplicateSelected() => Apply(KeyboardMoves.Duplicate(Document, Selected!.Block));
+
+    /// <summary>Selects the next block, wrapping round.</summary>
+    public void CycleSelection(bool forward) =>
+        SelectBlock(KeyboardMoves.Cycle(Document, Selected?.Block, forward).FirstOrDefault());
+
+    /// <summary>
+    /// Picks the selected block up, or puts it down if it was already in hand.
+    /// </summary>
+    /// <remarks>
+    /// One key for both, so a user does not have to remember which of Space and Enter lifts and which
+    /// sets down. The cursor starts at the first zone the shape fits, which is the top of the script the
+    /// block came from when there is one — the place a user who has just picked something up expects to
+    /// be looking.
+    /// </remarks>
+    public void PickUpSelected()
+    {
+        if (Carrying is not null)
+        {
+            DropCarried();
+            return;
+        }
+
+        if (Selected is not { } node)
+        {
+            return;
+        }
+
+        Carrying = node.IsPaletteRow
+            ? DragPayload.FromPalette(node.Kind)
+            : DragPayload.FromDocument(Editor, DocumentLists.Locate(Document, node.Block)!.Value, node.Block);
+
+        CarriedZone = KeyboardMoves.StepZone(Document, null, Carrying.Kind);
+        RaiseCarrying();
+    }
+
+    /// <summary>Moves the keyboard's cursor to the next or previous zone the block would fit.</summary>
+    public void StepKeyboardDropZone(int step)
+    {
+        if (Carrying is not { } payload)
+        {
+            return;
+        }
+
+        CarriedZone = KeyboardMoves.StepZone(Document, CarriedZone, payload.Kind, step);
+        RaiseCarrying();
+    }
+
+    /// <summary>Drops the carried block where the cursor is.</summary>
+    /// <returns>Whether a drop happened, so the page can mark the key handled.</returns>
+    public bool DropCarried()
+    {
+        if (Carrying is not { } payload)
+        {
+            return false;
+        }
+
+        if (CarriedZone is not { } zone)
+        {
+            // Nothing this shape fits. Keeping the block in hand is the right answer: the user can keep
+            // looking rather than losing what they picked up because they pressed the wrong key.
+            return true;
+        }
+
+        var result = DropPlan.Apply(Editor, Target, payload, zone, zone.X, zone.Y);
+        if (!result.Applied && result.Problem is { } problem)
+        {
+            Report(problem);
+        }
+
+        CancelKeyboardDrag();
+        return true;
+    }
+
+    /// <summary>Puts a carried block back where it was and forgets it.</summary>
+    public bool CancelKeyboardDrag()
+    {
+        if (Carrying is null)
+        {
+            return false;
+        }
+
+        // The document was never touched while carrying - DropPlan runs at the drop - so putting it back
+        // is forgetting. A carry that had already removed the block would need a real inverse here, and
+        // this is the reason it does not.
+        Carrying = null;
+        CarriedZone = null;
+        RaiseCarrying();
+        return true;
+    }
+
+    private void RaiseCarrying()
+    {
+        OnPropertyChanged(nameof(Carrying));
+        OnPropertyChanged(nameof(CarriedZone));
+        OnPropertyChanged(nameof(IsCarrying));
+        OnPropertyChanged(nameof(CarryingLine));
+        OnPropertyChanged(nameof(IsCarryingLine));
+    }
+
+    /// <summary>Selects a document block, by id.</summary>
+    private void SelectBlock(Block? block) =>
+        Select(AllNodes().FirstOrDefault(node => node.Id == block?.Id));
+
+    /// <summary>Applies a command from the keyboard, saying why if it was refused.</summary>
+    private void Apply(DocumentCommand? command)
+    {
+        if (command is null)
+        {
+            return;
+        }
+
+        var result = Editor.Execute(command);
+        if (!result.Applied && result.Problem is { } problem)
+        {
+            Report(problem);
+        }
+        else
+        {
+            Message = string.Empty;
+        }
+    }
+
     /// <summary>Undoes one gesture.</summary>
     [RelayCommand]
     private void Undo()

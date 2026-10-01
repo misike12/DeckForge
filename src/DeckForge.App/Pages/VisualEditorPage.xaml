@@ -30,6 +30,9 @@
                     <TextBlock Text="Drag blocks into a script, or out of one. Alt narrows a stack drag to the block under the pointer; Ctrl+Z takes a whole gesture back."
                                TextWrapping="Wrap" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                    <TextBlock Text="Nothing needs a mouse: arrows walk the stack, Ctrl+arrows move a block, Space picks it up, Tab and the arrows choose where it goes, Enter drops it, Escape puts it back."
+                               TextWrapping="Wrap" Margin="0,2,0,0" FontSize="11.5"
+                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
                     <TextBlock Text="{Binding DocumentLine}" FontSize="11.5" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
 
@@ -42,6 +45,15 @@
                     <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11.5" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.WarningBrush}"
                                Visibility="{Binding HasMessage, Converter={StaticResource TrueVisible}}" />
+
+                    <!--
+                        The carrying line. A keyboard drag mode with no visible state is indistinguishable
+                        from the editor having swallowed a keystroke, and the first thing anyone would do is
+                        press Escape - which works, but only if they guessed it.
+                    -->
+                    <TextBlock Text="{Binding CarryingLine}" TextWrapping="Wrap" FontSize="11.5"
+                               Margin="0,4,0,0" Foreground="{DynamicResource Liquid.AccentBrush}"
+                               Visibility="{Binding IsCarryingLine, Converter={StaticResource TrueVisible}}" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
