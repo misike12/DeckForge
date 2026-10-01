@@ -39,6 +39,7 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
             Controls.Blocks.BlockTile.SelectionRequestedEvent,
             new RoutedEventHandler(Tile_SelectionRequested));
 
+        Palette.RowPressed += Palette_RowPressed;
         SizeChanged += (_, args) => ApplyLayout(args.NewSize.Width);
         ApplyLayout(ActualWidth);
     }
@@ -194,4 +195,42 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
 
     private void OpenDocs_Click(object sender, RoutedEventArgs e) =>
         ShellMessenger.NavigateTo("docs::features/actions");
+
+    /// <summary>
+    /// Starts a drag from a palette row.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The press arrives here rather than being handled inside the palette because the drag has to be
+    /// drawn in the workspace's adorner layer — the canvas is the only element that can draw over both
+    /// panels without either knowing the other exists, and a ghost clipped to the palette is a ghost that
+    /// disappears the moment the pointer leaves the panel, which is the one place it is needed.
+    /// </para>
+    /// <para>
+    /// The point arrives in the palette's coordinates and is translated into the workspace's surface,
+    /// because that is the coordinate system the resolver, the hit test and the ghost all speak.
+    /// Translating here rather than inside the workspace keeps the workspace's entry point in one
+    /// coordinate system no matter which surface the drag came from.
+    /// </para>
+    /// </remarks>
+    private void Palette_RowPressed(ViewModels.Visual.BlockNodeViewModel row, Point point)
+    {
+        _vm.Select(row);
+
+        if (Workspace.SurfaceElement is not { } surface)
+        {
+            return;
+        }
+
+        Workspace.BeginDragFromPalette(row, Palette.TranslatePoint(point, surface));
+    }
+
+    /// <summary>The palette, named so a press on a row can find the workspace.</summary>
+    private Controls.Blocks.PaletteList Palette => (Controls.Blocks.PaletteList)PalettePanel.Child;
+
+    /// <summary>Undoes. The editor raises Changed, the page rebuilds, and the inspector follows.</summary>
+    private void Undo_Click(object sender, RoutedEventArgs e) => _vm.UndoCommand.Execute(null);
+
+    /// <summary>Redoes, for the same reason.</summary>
+    private void Redo_Click(object sender, RoutedEventArgs e) => _vm.RedoCommand.Execute(null);
 }

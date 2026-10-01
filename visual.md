@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P4a complete (the document can be edited by machine — 11 reversible commands behind one undo stack, 26 new tests, 587 green). Next: P4b — the pointer: drag service, ghost, drop indicator, auto-scroll.**
+**Current position: P4b complete (drag works end to end — palette to canvas, canvas to canvas, into a loop's mouth, with a ghost, an indicator and undo; 601 green). Next: P4c — the keyboard.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -80,7 +80,8 @@ inspected.
 | P2 — Emitters | ✅ **complete** | `VisualEmitter.cs` (template-driven: the catalog row's expression IS the emission), `VisualProgramWriter.cs` (splice + async + host check), `VisualRuntimeTemplate.cs` (the §8.4 support file — **compile-verified against the real MacroDeck.Sdk 3.0.0-beta.14**, which caught five latent defects before any user saw them). Procedures as hoisted local functions with parameters bound into `Locals` by name; `name=value` call args bound positionally in declaration order. 25 new tests (24 emitter + 1 `EnsureAsyncExecutor` regression), full suite **511 green**. As-built §8.6 records the drift from §8.1–§8.4 |
 | P3 — Palette and rendering | ✅ **complete** | `Core/Visual/{BlockOutline,BlockLabel,BlockFactory,VisualSampleProject}.cs`, `App/Controls/Blocks/*` (BlockTile, InputSlotView, CategoryRail, PaletteList, ScriptStrip, BlockWorkspace, BlockShapeGeometry, BlockTheme, LabelPartTemplateSelector), `App/ViewModels/Visual/*`, `Pages/VisualEditorPage`, `Liquid.Block*` theme tokens generated from the catalogue. 49 new tests (BlockOutlineTests 21, BlockLabelTests 11, VisualSampleProjectTests 8, plus one new markup assertion), full suite **561 green**. Driven in the real window: all 11 categories, search (including the no-match state), block selection from both surfaces, the empty-mouth state, light and dark, and at 960×640 and 1400×850. §9.10 records the design changes this forced |
 | P4a — Document editing, undo/redo | ✅ **complete** | `Core/Visual/DocumentCommands.cs` (BodyRef + 11 reversible commands + DocumentTransaction) and `Core/Visual/DocumentEditor.cs` (Execute, Transaction with rollback, Undo, Redo, ClearHistory, the refusal rules). `DropResolver.cs` gained index-carrying gap candidates and `DropTargetKind.OntoStatement`. 26 new tests (`DocumentEditorTests`, incl. a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte), full suite **587 green**. Typed text coalesces into one undo; a refused or throwing transaction unwinds itself. The P4a as-built record lists the four things that were wrong first |
-| P4b/P4c — Pointer and keyboard | ⬜ not started | |
+| P4b — Drag service, ghost, indicator | ✅ **complete** | `Core/Visual/DropPlan.cs` (a landing zone and a payload become the commands that carry it out — pure, window-free) + `Core/Visual/StackLayout.LayoutRun` (a hatless run, for the ghost). `App/Controls/Blocks/CanvasHitTest.cs` measures the live tiles, `DragController.cs` owns the pointer state, `DragAdorner.cs` draws the ghost and the indicator, `AutoScroll.cs` scrolls at the edges, and `BlockWorkspace` is the host. The view model now owns the `DocumentEditor`, projects the document rather than the sample, and keeps the selection pointed at the same block across a rebuild. 14 new tests (13 `DropPlanTests` incl. a 1000-gesture random round trip, 1 geometry test pinning the corrections below), full suite **601 green**. Driven in the real window: palette → canvas into a loop's mouth, canvas → canvas moving a run, a drop released in empty space, and undo — all with a screenshot taken *mid-drag*, because the ghost and the indicator exist only between the press and the release |
+| P4c — Keyboard | ⬜ not started | |
 | P5 — Editing, code, save | ⬜ not started | |
 | P6 — Shell integration, retire Blocks | ⬜ not started | |
 | P7 — Procedures and multi-script | ⬜ not started | |
@@ -101,6 +102,7 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
+| 2026-10-01 | **P4b**: the pointer. `DropPlan` in Core is the decision half of a drop — payload plus landing zone becomes the commands — and has no WPF in it, because what a zone *does* to the document is the half with the interesting failures and the half a window cannot test; the 1000-gesture round trip through it is the P4a property test with the drag's four command shapes in front of it. `CanvasHitTest` measures the live tiles rather than computing them, so a candidate is compared against where WPF actually put the block. The ghost is drawn from real `BlockOutline` silhouettes laid out by a new `StackLayout.LayoutRun` — a hatless run, which the Part 25 thumbnails want anyway — and the indicator is a bar rather than a real gap, because opening one would reflow the canvas on every pointer move. **Four defects the window found and 601 passing tests did not**: a drop put a block in the *wrong script*, because every candidate claimed `x = 0` and the scorer weighs x at half a point per pixel; a loop's mouth opened at its *foot*, because a y walk reported a container's inner gaps at the container's bottom; a drag released in empty space *teleported* the block, because the scorer always names a nearest candidate; and a drag out of the palette that never crossed the canvas *did nothing at all*, because the workspace only captured the pointer when the press started over it. The first two were one cause — candidates computed a geometry that could disagree with the canvas's — and are now read off the blocks' own rectangles instead. The harness gained `press`/`move`/`release` so a screenshot can be taken mid-drag; without that the ghost and the indicator are unobservable, and a canvas drawing nothing looks like a screenshot taken too late. 14 new tests; full suite **601 green** | **milestone 8 — see commit** |
 | 2026-10-01 | **P4a**: the editing engine — eleven reversible commands (`InsertRun`, `DeleteRun`, `MoveRun`, `WrapRun`, `UnwrapRun`, `EditField`, `BindSlot`, `ToggleDisable`, `AddScript`, `DeleteScript`, `MoveScript`) behind one `DocumentEditor`, plus `DocumentTransaction` and `DocumentLists`. Each command captures the index it needs to put itself back, because "put it back where it was" cannot be recomputed after the fact. `RunFrom` returns the grabbed block *and everything below it*, which is what makes a stack drag one run — and why a downward move within its own stack is a no-op rather than a reorder. A transaction applies in order and reverts the earlier commands when a later one is refused: refusals are returns, not exceptions, so it has to unwind by hand. `EditField` coalesces with the command already on top (keeping the older `Before`, the newer `After`) so a typed word is one undo rather than one per keystroke. `DropResolver`'s gaps now carry the body and the index they would insert at — they could not be acted on before, and P1c's `Index: 0` throughout was a stub that only became obvious once something wanted to act on it; a container's mouth is offered at the foot of its body as well as the top. 26 new tests, including a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte against the start; full suite **587 green**. The P4a as-built record lists the four things that were wrong first, including a test generator that threw on an empty stack — a legal state, since a drag that takes everything can empty one | **milestone 7 — see commit** |
 | 2026-09-30 | **P3**: the palette, the canvas and the shapes. `BlockOutline` decides every silhouette as numbers — notch, tab, dome, pill, hexagon, one hole per mouth — and `BlockShapeGeometry` only walks the list, because geometry written in a template is geometry nothing can test and the whole reason the shapes are in Core is that a notch that stops lining up with the tab above it is invisible until a screenshot. `BlockLabel` splits a row's `repeat {count}` into words and holes (and a hole naming something the row does not declare renders as the raw marker, which is now a failing test over all 156 rows); `BlockFactory` builds a fresh block of any row filled in with plausible defaults, so the palette and the sample are projections of the catalogue rather than two hand-written lists. `VisualSampleProject` builds one script per category containing every shipping block, and a test fails when a new row is missing from it. The tile draws its own silhouette in `OnRender` from the size it was actually given and hosts the label in markup; the recursive template refers to itself by key, which is only legal because template content is instantiated after the dictionary is parsed. Clicking a block selects it through a bubbling routed event whose *arguments* carry the block, not its `Source` — WPF builds the route by walking the tree from `Source`, so a view model there sends the event nowhere. `Liquid.Block*` tokens are generated from the catalogue's hues, so a category cannot exist without its colours. 49 new tests; full suite 561 green. Design changes, and four defects the real window found that reading the code did not, are in §9.10 | **milestone 6 — see commit** |
 | 2026-09-30 | **P2**: the emitters — one data-driven `VisualEmitter` replaces the spec's three classes (a row's template *is* the emission, so catalog and generator cannot disagree); braced `{holes}` and bare slot-name holes filled per slot type; control flow special-cased with Scratch semantics (repeat-until tests after the body); procedures hoisted as local functions whose parameters are bound into `Locals` by name and called positionally from parsed `name=value` lines; guards deduped at flush; the writer reuses `Splice`/`EnsureAsyncExecutor` with a substring-safe anchor. The runtime template was compile-checked end to end against the real SDK (throwaway plugin probe) — it had never been compiled, and the check caught a duplicate `IsNumeric` (CS0102), `System.Json` for `System.Text.Json`, `System.ActionExecutionContext` for `MacroDeck.Sdk.Actions.ActionExecutionContext`, an invalid `List<string>(comparer)` construction, and the class's own `Convert` shadowing `System.Convert`. `EnsureAsyncExecutor` hardened: an already-async body with `SucceededTask`/`Task.FromResult` returns is now repaired instead of skipped (regression test added). 25 new tests; full suite 511 green. Design changes recorded in §8.6 | **milestone 5 — see commit** || 2026-09-29 | The design document itself (Parts 1–28, Appendices A–I) | (doc only, uncommitted) |
@@ -1556,9 +1558,59 @@ passes for the wrong reason.
 moves are P4b and P4c — all App. The editor has no idea any of them exist, which is the point: it is the
 thing they will all call.
 
-### P4b/P4c — the pointer and the keyboard
+### P4b — the pointer — ✅ complete
 
-**Scope.** Drag service, ghost and indicator adorners, auto-scroll, keyboard moves.
+**Done.** A block can be dragged out of the palette into a script, or from one stack to another, or into a
+loop's mouth, with a ghost that shows the run and an indicator that shows the gap. 14 new tests; full suite
+601 green; the real window driven for all four gestures with a screenshot taken mid-drag.
+
+**Scope, as built.** `DropPlan` in Core — the decision half, no pixels in it. `CanvasHitTest` in the App —
+the measurement half, which walks the live visual tree. `DragController` — pointer state and the threshold.
+`DragAdorner` — the ghost and the indicator. `AutoScroll` — edge scrolling. `BlockWorkspace` — the host,
+and the only thing that translates mouse events. The view model owns the `DocumentEditor`.
+
+**The split is the design.** Part 9.5 asks for "the scorer is pure Core code so every rule is unit-testable
+with no window", and the natural reading is that the *scorer* is the pure part. It is not sufficient on
+its own: what a landing zone *does* to the document — move, insert, wrap, replace, bind, create a script,
+refuse — is the half with the interesting failures, and it is a question about the document rather than
+about the screen. So `DropPlan` is that half and it has no WPF in it, which is what let the 1000-gesture
+round-trip property test be written at all.
+
+**Four defects the window found that reading the code did not.** All four were invisible to 601 passing
+tests, and three of them were invisible to *using* the app without screenshots.
+
+1. *A drop put a block in the wrong script.* `CandidatesFor` walked a running `y` down from the hat and
+   reported every gap's `x` as an indent from the script's origin — which is zero, for every script in the
+   document. The scorer weighs x at half a point per pixel, so with every script claiming `x = 0` it had no
+   way to prefer the one under the pointer and picked whichever shared a y coordinate. Every candidate now
+   takes its coordinates from the block's own rectangle, which the canvas measures off the live tile.
+2. *A loop's mouth opened at its foot.* The same walk reported a container's inner gaps at the container's
+   bottom, because that is where the walk started. The indicator for the top of a loop's mouth appeared
+   below the loop's contents. Both ends now come from the statements' own rectangles.
+3. *A drag released in empty space teleported the block.* `Resolve` always names a nearest candidate,
+   because a scorer with no winner cannot distinguish "nothing is near" from "nothing near *that accepts
+   this*". A block let go over the inspector landed in whichever script was closest. `Drop` now refuses
+   outside the magnet radius, and the header says why.
+4. *A drag out of the palette that never crossed the canvas did nothing.* The workspace only captured the
+   pointer when the press started over it, so a drag that stayed in the palette or went straight to the
+   inspector received no move events at all: no ghost, no error, no drop. Capture is unconditional now.
+
+**Two smaller ones.** The ghost drew every block at its header height, so a C-block in a long run appeared
+to be a plain statement — `StackLayout.LayoutRun` lays out a hatless run for it, which the canvas
+thumbnails of Part 25 will want anyway. And the ghost's outline was white at full strength, which reads as
+a wireframe selection rather than as a block.
+
+**Verification that mattered.** The `uidriver` harness gained `press`, `move`, `release` and `drag`, split
+so a screenshot can be taken *while the button is still down*. That is the only way to see a ghost or an
+indicator: both exist between the press and the release and neither survives it, so a harness that only
+presses-moves-releases-and-looks can never show either, and a canvas that draws no indicator looks exactly
+like a screenshot taken too late. With it, defects 1 and 2 were visible in a single frame.
+
+### P4c — the keyboard
+
+**Scope.** ↑/↓ traverse a stack, Ctrl+↑/↓ move the block, Delete, Ctrl+D duplicate, Ctrl+Z / Ctrl+Y,
+Tab cycles slots, Enter opens a menu, Space picks up and drops (reusing the same resolver), Ctrl+K adds a
+block. **Nothing requires a mouse.**
 
 **Exit criteria.** Resolver tests and user-driver drag scenarios green; 500-tile performance budget
 met.

@@ -80,6 +80,45 @@ public static class StackLayout
         return max;
     }
 
+    /// <summary>
+    /// Lays out a loose run of statements, with no hat, starting at the origin.
+    /// </summary>
+    /// <param name="blocks">The statements to lay out, in order.</param>
+    /// <param name="zoom">Canvas zoom, 1 at 100%.</param>
+    /// <param name="fontScale">System font scale, 1 at the default size.</param>
+    /// <param name="heightOf">An optional measured-height override, keyed by block id.</param>
+    /// <remarks>
+    /// <para>
+    /// For the things that are not a script: the drag ghost, and the canvas thumbnails of Part 25. Both
+    /// need the pitch of a run, and both need it to include the bodies — a ghost that drew a C-block at
+    /// its header height would show a run whose spacing did not match the stack it is about to join, which
+    /// is precisely the impression a snapping ghost exists to remove.
+    /// </para>
+    /// <para>
+    /// A separate entry point rather than a flag on <see cref="Layout"/>, because "the first block is a
+    /// hat" is a statement about a script and not about a layout: there is no such thing as a hatless run
+    /// with a script's origin, and pretending otherwise is how a caller ends up with an off-by-one.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyDictionary<string, BlockRect> LayoutRun(
+        IReadOnlyList<Block> blocks,
+        double zoom = 1,
+        double fontScale = 1,
+        IReadOnlyDictionary<string, double>? heightOf = null)
+    {
+        ArgumentNullException.ThrowIfNull(blocks);
+
+        var rects = new Dictionary<string, BlockRect>(StringComparer.Ordinal);
+        var y = 0.0;
+
+        foreach (var block in blocks)
+        {
+            y = LayoutStatement(block, x: 0, y, zoom, fontScale, heightOf, rects);
+        }
+
+        return rects;
+    }
+
     /// <summary>Lays out one statement and everything inside it, returning the next free y.</summary>
     private static double LayoutStatement(
         Block block,

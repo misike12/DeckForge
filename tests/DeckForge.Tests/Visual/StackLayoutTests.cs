@@ -340,6 +340,51 @@ public sealed class StackLayoutTests
     }
 
     [Test]
+    public void A_gap_sits_where_the_block_actually_is_on_the_canvas()
+    {
+        // Every coordinate in a candidate comes from the block's own rectangle rather than from an
+        // arithmetic walk down from the hat. Two defects forced that, and both were invisible until the
+        // real window was driven with a screenshot taken mid-drag.
+        var script = Script(
+            Stack("ui.log", b => b.WithText("template", "one")),
+            Stack("control.forever", b => { }, body =>
+            {
+                body.Add(Stack("ui.log", lb => lb.WithText("template", "inner")));
+            }));
+
+        // The rectangles the canvas measures off the live tiles: the script sits well to the right, and
+        // the loop is taller than its label line because it has a statement in it.
+        var rects = new Dictionary<string, BlockRect>(StringComparer.Ordinal)
+        {
+            [script.Hat.Id] = new(700, 40, 180, 44, 84),
+            [script.Body[0].Id] = new(700, 84, 160, 44, 128),
+            [script.Body[1].Id] = new(700, 128, 200, 132, 260),
+            [script.Body[1].Body("body")[0].Id] = new(716, 172, 150, 44, 216),
+        };
+
+        var candidates = DropResolver.CandidatesFor(script, rects);
+
+        var innerTop = candidates.Single(c => c is { Kind: DropTargetKind.Mouth, Index: 0, BodyName: "body" });
+        var innerFoot = candidates.Single(c => c is { Kind: DropTargetKind.Mouth, Index: 1, BodyName: "body" });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(candidates.Where(c => c.Kind == DropTargetKind.StackGap && c.BodyName is not { Length: > 0 }),
+                Has.All.Property(nameof(DropCandidate.X)).EqualTo(700),
+                "the script's own gaps are at the script's x, not at the canvas origin - every script "
+                + "claiming x = 0 gave the scorer no way to prefer the one under the pointer");
+
+            Assert.That(innerTop.Y, Is.EqualTo(172), "the mouth's top is at the first statement's top");
+            Assert.That(innerTop.X, Is.EqualTo(716), "and inside the mouth, where that statement is");
+
+            Assert.That(innerFoot.Y, Is.EqualTo(216),
+                "the mouth's foot is just below the last statement. It used to be the container's own "
+                + "bottom - 260 - which put the top and the foot of the mouth in the same place");
+            Assert.That(innerFoot.X, Is.EqualTo(716));
+        });
+    }
+
+    [Test]
     public void The_magnet_radius_scales_with_zoom()
     {
         var candidate = new DropCandidate(DropTargetKind.StackGap, "p", X: 100, Y: 100);

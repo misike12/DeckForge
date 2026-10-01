@@ -9,10 +9,9 @@
     <!--
         The palette: a search box over real blocks.
 
-        Part 9.2 asks for "a live miniature of every block", which is why each row is the same
-        BlockTile the canvas uses rather than a list of strings. A palette that draws blocks one way and
-        the canvas another is a palette that lies about what dropping will produce, and the difference
-        is only visible once a user has dropped something.
+        Each row is the same BlockTile the canvas uses rather than a list of strings. A palette that draws
+        blocks one way and the canvas another is a palette that lies about what dropping will produce, and
+        the difference is only visible once a user has dropped something.
     -->
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="TrueVisible" />
@@ -35,7 +34,7 @@
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="10,0,10,6">
             <TextBlock Text="{Binding CountText}" FontSize="11"
                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
-            <TextBlock Text="Dragging arrives in Phase 4" Margin="10,0,0,0" FontSize="11"
+            <TextBlock Text="Drag a block onto the canvas" Margin="10,0,0,0" FontSize="11"
                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
                        Visibility="{Binding IsSearching, Converter={StaticResource TrueHidden}}" />
         </StackPanel>

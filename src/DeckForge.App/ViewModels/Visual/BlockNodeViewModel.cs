@@ -60,6 +60,19 @@ public sealed partial class BlockNodeViewModel : ObservableObject
     /// <summary>The document node this draws.</summary>
     public Block Block { get; }
 
+    /// <summary>
+    /// Whether this row is a palette miniature rather than a block in the document.
+    /// </summary>
+    /// <remarks>
+    /// Set by <see cref="BlockFactory.Preview"/> callers, and the only thing that separates the two.
+    /// Dragging from a palette row means "make a new block of this kind"; dragging from the canvas means
+    /// "move this one", and the second needs an id to find. Without this the drag controller has to be
+    /// told which surface it is on, and the palette rows and the canvas tiles are otherwise the same type
+    /// on purpose — a palette that draws blocks one way and the canvas another is a palette that lies
+    /// about what dropping will produce.
+    /// </remarks>
+    public bool IsPaletteRow { get; init; }
+
     /// <summary>Its catalogue row, or null for a kind from a newer build.</summary>
     public BlockDescriptor? Descriptor { get; }
 

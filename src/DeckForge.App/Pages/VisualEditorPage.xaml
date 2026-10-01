@@ -27,16 +27,31 @@
 
                 <StackPanel x:Name="Header">
                     <TextBlock Text="Visual" FontSize="26" FontWeight="SemiBold" />
-                    <TextBlock Text="Drag blocks into a script. Phase 3 draws the palette, the canvas and the sample document; dragging, editing and saving arrive with the next phases."
+                    <TextBlock Text="Drag blocks into a script, or out of one. Alt narrows a stack drag to the block under the pointer; Ctrl+Z takes a whole gesture back."
                                TextWrapping="Wrap" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                     <TextBlock Text="{Binding DocumentLine}" FontSize="11.5" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+
+                    <!--
+                        The refusal line. A drop that is not allowed is a thing a user does constantly while
+                        learning which shapes fit where, and the design's own answer is that the indicator
+                        simply does not appear. Saying why once, quietly, is what teaches the rule; an
+                        error dialog for every mistyped drop would teach it and then get in the way.
+                    -->
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11.5" Margin="0,4,0,0"
+                               Foreground="{DynamicResource Liquid.WarningBrush}"
+                               Visibility="{Binding HasMessage, Converter={StaticResource TrueVisible}}" />
                 </StackPanel>
 
-                <ui:Button x:Name="DocsButton" Grid.Column="1" Content="Docs" Padding="10,4"
-                           Click="OpenDocs_Click" VerticalAlignment="Top" Margin="12,0,0,0"
-                           ToolTip="Open the documentation for actions" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,0,0,0">
+                    <ui:Button Content="Undo" Padding="10,4" Click="Undo_Click"
+                               IsEnabled="{Binding CanUndo}" ToolTip="{Binding UndoLabel}" />
+                    <ui:Button Content="Redo" Padding="10,4" Margin="8,0,0,0" Click="Redo_Click"
+                               IsEnabled="{Binding CanRedo}" ToolTip="{Binding RedoLabel}" />
+                    <ui:Button x:Name="DocsButton" Content="Docs" Padding="10,4" Margin="8,0,0,0"
+                               Click="OpenDocs_Click" ToolTip="Open the documentation for actions" />
+                </StackPanel>
             </Grid>
 
             <Border x:Name="RailPanel" CornerRadius="12" Margin="0,0,10,0"
@@ -53,7 +68,7 @@
 
             <Border x:Name="CanvasPanel" CornerRadius="12"
                     BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
-                <blocks:BlockWorkspace />
+                <blocks:BlockWorkspace x:Name="Workspace" />
             </Border>
 
             <Border x:Name="InspectorPanel" CornerRadius="12" Padding="0"

@@ -134,7 +134,7 @@ partial void OnSearchTextChanged(string value) => Refilter();
         Rows.Clear();
         foreach (var descriptor in descriptors)
         {
-            Rows.Add(new BlockNodeViewModel(BlockFactory.Preview(descriptor)));
+            Rows.Add(new BlockNodeViewModel(BlockFactory.Preview(descriptor)) { IsPaletteRow = true });
         }
 
         OnPropertyChanged(nameof(HasRows));

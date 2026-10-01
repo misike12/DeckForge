@@ -1,38 +1,49 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DeckForge.Core.Visual;
 
 namespace DeckForge.App.ViewModels.Visual;
 
 /// <summary>
-/// The Visual page: a document, the scripts on the canvas, and the diagnostics they produce.
+/// The Visual page: a document, the editor that owns it, the scripts on the canvas, and the diagnostics
+/// they produce.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Phase 3 has no persistence, so the document is <see cref="VisualSampleProject"/> and the page is a
-/// viewer. The structure is already the one a real editor needs — a document, a target, scripts, a
-/// palette, a selected block — because building it twice would mean the second one is the first with the
-/// interesting parts removed.
+/// The page owns the <see cref="DocumentEditor"/>, and the canvas, the palette and the inspector all go
+/// through it. That is not tidiness: a second path to the document is a change with nothing on the undo
+/// stack, and an editor that can be bypassed is an editor whose history is a list of the edits somebody
+/// remembered to make.
 /// </para>
 /// <para>
-/// The diagnostics are real, from <see cref="VisualValidator"/>, and shown from the first phase. That is
-/// deliberate: a canvas that only looks right when nothing is wrong is a canvas nobody can trust, and
-/// the sample has warnings in it on purpose — a cap block followed by more statements is exactly what a
-/// user should be told about.
+/// The sample document stands in for a file until Phase 5. Every rebuild projects the document that is
+/// already there rather than calling the factory again, so a dropped block survives being re-projected;
+/// Phase 3 could rebuild from scratch on every change precisely because nothing changed it.
 /// </para>
 /// </remarks>
 public sealed partial class VisualEditorViewModel : ObservableObject
 {
+    private string _message = string.Empty;
+
     public VisualEditorViewModel()
     {
         Document = VisualSampleProject.Build();
         Validation = VisualSampleProject.ValidationContext;
         Palette = new PaletteViewModel();
+        Editor = new DocumentEditor(Document);
+        Editor.Changed += () => Build();
+
         Build();
     }
 
     /// <summary>The document on screen. The sample until Phase 5 gives it a file.</summary>
     public VisualProject Document { get; private set; }
+
+    /// <summary>
+    /// The only way the document is edited.
+    /// </summary>
+    public DocumentEditor Editor { get; }
 
     /// <summary>What the document refers to outside itself.</summary>
     public VisualValidationContext Validation { get; }
@@ -65,9 +76,53 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     /// <summary>Whether the document has nothing wrong with it.</summary>
     public bool IsClean => Diagnostics.All(diagnostic => diagnostic.Severity != VisualSeverity.Error);
 
+    /// <summary>Whether there is anything to undo.</summary>
+    public bool CanUndo => Editor.CanUndo;
+
+    /// <summary>Whether there is anything to redo.</summary>
+    public bool CanRedo => Editor.CanRedo;
+
+    /// <summary>What the next undo would revert, which is the tooltip on the button.</summary>
+    public string UndoLabel => Editor.UndoLabel is { } label ? $"Undo {label}" : "Nothing to undo";
+
+    /// <summary>What the next redo would re-apply.</summary>
+    public string RedoLabel => Editor.RedoLabel is { } label ? $"Redo {label}" : "Nothing to redo";
+
+    /// <summary>
+    /// The last thing the editor refused, or empty.
+    /// </summary>
+    /// <remarks>
+    /// Set by <see cref="Report"/> and cleared by the next edit. A refusal is information rather than an
+    /// error: dropping a boolean onto a stack gap is a thing a user does constantly while learning the
+    /// shapes, and the design's own answer is that the indicator simply does not appear. Saying why once,
+    /// quietly, teaches the shape rule faster than any amount of documentation.
+    /// </remarks>
+    public string Message
+    {
+        get => _message;
+        private set
+        {
+            if (string.Equals(_message, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+        _message = value;
+
+        // Both names spelled out rather than relying on CallerMemberName inside a setter, because a
+        // notification that fires under the wrong name is invisible: the binding silently does not
+        // update, the message never appears, and nothing anywhere reports an error.
+        OnPropertyChanged(nameof(Message));
+        OnPropertyChanged(nameof(HasMessage));
+    }
+    }
+
+    /// <summary>Whether there is anything to say in the message line.</summary>
+    public bool HasMessage => Message.Length > 0;
+
     /// <summary>A one-line summary for the header, which is where the design puts the honesty note.</summary>
     public string StatusText => Diagnostics.Count == 0
-        ? "Sample document. Every shipping block, one script per category."
+        ? "Every shipping block, one script per category."
         : $"{Diagnostics.Count(d => d.Severity == VisualSeverity.Error)} error(s), "
           + $"{Diagnostics.Count(d => d.Severity == VisualSeverity.Warning)} warning(s), "
           + $"{Diagnostics.Count(d => d.Severity == VisualSeverity.Info)} note(s).";
@@ -81,6 +136,11 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     };
 
     /// <summary>Rebuilds the scripts and the diagnostics from the document.</summary>
+    /// <remarks>
+    /// Projecting the document that is already there rather than rebuilding the sample. The difference is
+    /// invisible until something edits it, and then it is the difference between a drop surviving and
+    /// disappearing — so it is worth the line of comment that stops somebody "simplifying" it back.
+    /// </remarks>
     public void Build()
     {
         Scripts = new ObservableCollection<ScriptViewModel>(Target.Scripts.Select(script => new ScriptViewModel(script)));
@@ -94,13 +154,46 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(Diagnostics));
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(IsClean));
+
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRedo));
+        OnPropertyChanged(nameof(UndoLabel));
+        OnPropertyChanged(nameof(RedoLabel));
+
+        // The selection holds a view model over a block, and a rebuild replaces every one of them. A
+        // selection that pointed at the old object would keep the inspector showing a block that is no
+        // longer the selected one, with no visible way for it to be wrong.
+        Reselect();
+    }
+
+    /// <summary>Says why an edit was refused.</summary>
+    public void Report(string problem) => Message = problem;
+
+    /// <summary>Undoes one gesture.</summary>
+    [RelayCommand]
+    private void Undo()
+    {
+        if (Editor.Undo())
+        {
+            Message = string.Empty;
+        }
+    }
+
+    /// <summary>Redoes one gesture.</summary>
+    [RelayCommand]
+    private void Redo()
+    {
+        if (Editor.Redo())
+        {
+            Message = string.Empty;
+        }
     }
 
     /// <summary>Selects a block for the inspector.</summary>
     /// <remarks>
     /// Wiring only. Selection is what the diagnostics pane's "click to select and centre the block"
-    /// needs (Part 9.7) and what Phase 5's inspector and Phase 8's breakpoints both hang off, so the
-    /// page owns it rather than each of them.
+    /// needs (Part 9.7), what Phase 5's inspector hangs off, and what Phase 4's keyboard traversal
+    /// moves, so the page owns it rather than each of them.
     /// </remarks>
     public void Select(BlockNodeViewModel? block)
     {
@@ -121,6 +214,75 @@ public sealed partial class VisualEditorViewModel : ObservableObject
             current.IsSelected = true;
         }
 
+        OnPropertyChanged(nameof(Selected));
+        OnPropertyChanged(nameof(HasSelection));
+    }
+
+    /// <summary>Selects by block id, for a keyboard move or a diagnostic click.</summary>
+    public void SelectById(string blockId) => Select(AllNodes().FirstOrDefault(node => node.Id == blockId));
+
+    /// <summary>Every block view model on the canvas, in visual order.</summary>
+    /// <remarks>
+    /// Walked rather than kept in a list, because the canvas is the authority on what is on it and a
+    /// second list would go stale on the first rebuild.
+    /// </remarks>
+    public IReadOnlyList<BlockNodeViewModel> AllNodes()
+    {
+        var nodes = new List<BlockNodeViewModel>();
+
+        foreach (var script in Scripts)
+        {
+            nodes.Add(script.Hat);
+            Walk(script.Body, nodes);
+        }
+
+        return nodes;
+    }
+
+    private static void Walk(IEnumerable<BlockNodeViewModel> blocks, List<BlockNodeViewModel> into)
+    {
+        foreach (var block in blocks)
+        {
+            into.Add(block);
+
+            foreach (var body in block.Bodies)
+            {
+                Walk(body.Statements, into);
+            }
+
+            foreach (var slot in block.Slots)
+            {
+                if (slot.Child is { } child)
+                {
+                    Walk([child], into);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Keeps the selection pointed at the same block after a rebuild.
+    /// </summary>
+    private void Reselect()
+    {
+        if (Selected is not { } previous)
+        {
+            return;
+        }
+
+        var replacement = AllNodes().FirstOrDefault(node => node.Id == previous.Id);
+        if (replacement is null)
+        {
+            // Undoing the delete of the selected block, or of something containing it, leaves nothing to
+            // point at. Dropping the selection is the honest answer; keeping the old object would show an
+            // inspector for a block that is no longer in the document.
+            Select(null);
+            return;
+        }
+
+        Selected.IsSelected = false;
+        Selected = replacement;
+        Selected.IsSelected = true;
         OnPropertyChanged(nameof(Selected));
         OnPropertyChanged(nameof(HasSelection));
     }

@@ -186,8 +186,12 @@ public static class DropResolver
     /// every laid-out statement including the ones nested inside containers.
     /// </summary>
     /// <param name="script">The script.</param>
-    /// <param name="rects">The layout from <see cref="StackLayout.Layout"/>.</param>
-    /// <param name="zoom">Canvas zoom.</param>
+    /// <param name="rects">
+    /// Where every block of the script is. Measured off the live tiles rather than computed, because the
+    /// candidates' only job is to be compared with a pointer position and the pointer is looking at the
+    /// tiles WPF actually laid out. A block whose label holds a long value is wider than any estimate, and
+    /// a gap computed from the estimate is then not over the block the user is aiming at.
+    /// </param>
     /// <remarks>
     /// <para>
     /// Every candidate carries the body it belongs to and the index it would insert at, which is what
@@ -217,11 +221,12 @@ public static class DropResolver
             DropTargetKind.HatSlot, script.Hat.Id, X: hatRect.X, Y: hatRect.Y));
 
         var body = BodyRef.ScriptBody(script.Hat.Id);
-        var y = hatRect.Height;
 
+        // The index is the block's own position in the body, because that is what the candidate has to
+        // carry: an index of zero for every statement makes every gap in the script mean the same place.
         for (var index = 0; index < script.Body.Count; index++)
         {
-            Collect(script.Body[index], body, index, 0, ref y, rects, candidates, zoom);
+            Collect(script.Body[index], body, index, rects, candidates);
         }
 
         return candidates;
@@ -253,15 +258,38 @@ public static class DropResolver
             X: slot.X,
             Y: slot.Y))];
 
+    /// <summary>
+    /// Adds the gaps around one statement and, if it wraps anything, inside it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every coordinate comes from the block's own rectangle: the gap above at <see cref="BlockRect.Y"/>,
+    /// the gap below at <see cref="BlockRect.NotchY"/>, and the x from <see cref="BlockRect.X"/>. Nothing
+    /// here adds a height to a running total.
+    /// </para>
+    /// <para>
+    /// That is a correction rather than a simplification, and it is worth being explicit about why the
+    /// arithmetic was wrong in two different ways. It walked y down from the hat, which meant a statement's
+    /// top was whatever the previous one ended up being — so a container's inner gaps were reported at the
+    /// container's <em>bottom</em>, because that is where the walk started, and an indicator for the top of
+    /// a loop's mouth appeared at the foot of it. And it reported x as an indent from the script's origin,
+    /// which is zero, so every script's gaps claimed the same x and the scorer — which weighs x at half a
+    /// point per pixel — had no way to prefer the script under the pointer over its neighbour. Both were
+    /// invisible to a test and obvious in a screenshot: a drop put a block in the wrong script, and a
+    /// second attempt at the right place was refused because the nearest candidate was a hundred pixels
+    /// away vertically.
+    /// </para>
+    /// <para>
+    /// The rectangles are measured from the live canvas, so they already know where WPF put everything. A
+    /// second arithmetic pass over the same geometry can only ever disagree with it, and does.
+    /// </para>
+    /// </remarks>
     private static void Collect(
         Block block,
         BodyRef where,
         int index,
-        double x,
-        ref double y,
         IReadOnlyDictionary<string, BlockRect> rects,
-        List<DropCandidate> candidates,
-        double zoom)
+        List<DropCandidate> candidates)
     {
         var descriptor = BlockCatalog.Find(block.Kind);
         if (descriptor is null || !rects.TryGetValue(block.Id, out var rect))
@@ -277,39 +305,44 @@ public static class DropResolver
             where.OwnerId,
             BodyName: where.BodyName,
             Index: index,
-            X: x,
-            Y: y));
+            X: rect.X,
+            Y: rect.Y));
 
         if (descriptor.IsContainer)
         {
-            var innerY = rect.NotchY;
-            var indent = x + BlockOutline.ArmWidth * zoom;
-
             foreach (var (name, children) in block.Bodies)
             {
                 var childWhere = new BodyRef(block.Id, name);
 
                 for (var childIndex = 0; childIndex < children.Count; childIndex++)
                 {
-                    Collect(children[childIndex], childWhere, childIndex, indent, ref innerY, rects, candidates, zoom);
+                    Collect(children[childIndex], childWhere, childIndex, rects, candidates);
                 }
 
                 // The gap below the last statement of a body, which is the mouth's own bottom edge. Without
                 // it a C-block's mouth can only ever be filled from the top, which is not how Scratch
                 // behaves: a run dropped at the foot of a loop's body belongs inside the loop.
-                if (children.Count > 0)
+                //
+                // Its y is the last statement's notch, which is where the footer bar begins - the same
+                // place the block below it wants to sit. Using the container's own bottom instead put this
+                // gap 44px lower than the one above it and made the top and the foot of every mouth
+                // disagree by the height of the footer.
+                if (children.Count > 0
+                    && rects.TryGetValue(children[^1].Id, out var lastChild))
                 {
                     candidates.Add(new DropCandidate(
-                        DropTargetKind.Mouth, childWhere.OwnerId, BodyName: name, Index: children.Count, X: indent, Y: innerY));
+                        DropTargetKind.Mouth,
+                        childWhere.OwnerId,
+                        BodyName: name,
+                        Index: children.Count,
+                        X: lastChild.X,
+                        Y: lastChild.NotchY));
                 }
-
-                innerY += (BlockOutline.FooterHeight + BlockOutline.NotchDepth) * zoom;
             }
         }
 
         // The gap below this statement: landing here inserts after it.
-        y = rect.NotchY;
         candidates.Add(new DropCandidate(
-            DropTargetKind.StackGap, where.OwnerId, BodyName: where.BodyName, Index: index + 1, X: x, Y: y));
+            DropTargetKind.StackGap, where.OwnerId, BodyName: where.BodyName, Index: index + 1, X: rect.X, Y: rect.NotchY));
     }
 }

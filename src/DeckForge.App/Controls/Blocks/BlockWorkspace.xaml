@@ -8,19 +8,22 @@
     <!--
         The canvas.
 
-        One Canvas per script, positioned at the script's own X and Y from the document, because Part 6.1
-        makes the position part of the document rather than something the canvas invents: a user who has
-        arranged their scripts expects that arrangement to still be there tomorrow.
+        One column per script, laid out left to right with a column per script, each in its own scrollable
+        area. Part 9.4 describes a ScrollViewer around a zoom ScaleTransform around a Canvas holding one
+        view per script; the transform and absolute positions are Phase 10, and building them now means a
+        second layout that Phase 10 has to throw away.
 
-        Scripts are laid out left to right in one row with a column per script, each in its own scrollable
-        Canvas. A single shared canvas with pan and zoom is Phase 10's job, and adding it now would mean
-        building a second layout that Phase 10 then has to throw away.
+        The drag surface is named, and everything about the pointer is expressed in its coordinates: the
+        ghost, the indicator, the hit test and the resolver's candidates. One coordinate system for all of
+        them is not tidiness - it is the only way the indicator can be guaranteed to point at the block
+        the ghost will join.
     -->
     <UserControl.Resources>
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
     </UserControl.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+    <ScrollViewer x:Name="Scroller"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                   Background="{DynamicResource Liquid.BlockCanvasBrush}">
         <Grid Background="{DynamicResource Liquid.BlockGridBrush}">
 
@@ -34,7 +37,12 @@
                     <blocks:ScriptStrip />
                 </Border>
 
-                <Canvas Margin="16">
+                <!--
+                    The drag surface. Named because every pointer position in the drag code is translated
+                    into this element's coordinates, and an element with no name has no stable way to be
+                    referred to from code at all.
+                -->
+                <Canvas x:Name="Surface" Width="1600" Margin="16" Background="Transparent">
                     <ItemsControl ItemsSource="{Binding Scripts}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
