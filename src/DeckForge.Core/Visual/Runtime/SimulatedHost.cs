@@ -109,6 +109,57 @@ public sealed class SimulatedHost : IVisualHost
 
         public DeckItem? Find(string id) =>
             _items.FirstOrDefault(item => string.Equals(item.Id, id, StringComparison.Ordinal));
+
+        /// <summary>Where each client is, so a back button has something to go back to.</summary>
+        private readonly Dictionary<string, List<string>> _history = new(StringComparer.Ordinal);
+
+        /// <summary>Where each client is now.</summary>
+        private readonly Dictionary<string, string> _current = new(StringComparer.Ordinal);
+
+        public void OpenFolder(string folderId, string? clientId = null)
+        {
+            var client = clientId ?? PressingClientId ?? SimulatedClientId;
+
+            // An unknown folder is not an error: a deck graph a simulator did not set up is exactly the
+            // case where a dry run should carry on and show the call, rather than stop and say nothing.
+            _history.TryAdd(client, []);
+            _history[client].Add(_current.GetValueOrDefault(client, string.Empty));
+            _current[client] = folderId;
+
+            SetPressing(client);
+        }
+
+        public void GoToParent()
+        {
+            var client = PressingClientId ?? SimulatedClientId;
+
+            if (!_history.TryGetValue(client, out var path) || path.Count == 0)
+            {
+                return;
+            }
+
+            _current[client] = path[^1];
+            path.RemoveAt(path.Count - 1);
+        }
+
+        public void GoBack() => GoToParent();
+
+        public void SetButtonState(string widgetId, string state)
+        {
+            // The state name is stored on the title's own line, because the simulator has no widget to
+            // re-render: a stage showing "Game: on" is a stage that answered.
+            var at = _items.FindIndex(item => string.Equals(item.Id, widgetId, StringComparison.Ordinal));
+            if (at < 0)
+            {
+                _items.Add(new DeckItem(widgetId, state));
+                return;
+            }
+
+            _items[at] = _items[at] with { Title = state };
+        }
+
+        /// <summary>The client the simulator pretends is pressing things.</summary>
+        public const string SimulatedClientId = "client-1";
     }
 
     /// <summary>The notification area, with replace-by-key.</summary>

@@ -41,8 +41,9 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         Document = saved ?? VisualSampleProject.Build();
         Validation = VisualSampleProject.ValidationContext;
         Palette = new PaletteViewModel();
-        Editor = new DocumentEditor(Document);
+Editor = new DocumentEditor(Document);
         Inspector = new InspectorViewModel(this);
+        Stage = new StageViewModel(this);
         Editor.Changed += () => Build();
 
         Build();
@@ -73,8 +74,69 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     /// </remarks>
     public InspectorViewModel Inspector { get; }
 
-    /// <summary>The target whose scripts are on the canvas.</summary>
+/// <summary>The target whose scripts are on the canvas.</summary>
     public VisualTarget Target => Document.Targets[0];
+
+    /// <summary>
+    /// The stage: the simulated host, the interpreter and everything they show.
+    /// </summary>
+    /// <remarks>
+    /// Owned here rather than by the page, for the same reason the inspector is: the stage has to be told
+    /// when the document changed, and the page does not know the document changed except by watching this
+    /// view model.
+    /// </remarks>
+    public StageViewModel Stage { get; }
+
+    /// <summary>
+    /// The block ids the interpreter stops on.
+    /// </summary>
+    /// <remarks>
+    /// Owned here and handed to the interpreter by reference, so the tile the user clicked and the run that
+    /// pauses are reading the same set. A copy on each side is a breakpoint that shows as set on a tile and
+    /// does nothing when the script reaches it.
+    /// </remarks>
+    public HashSet<string> Breakpoints { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The variable names the watch table shows.
+    /// </summary>
+    /// <remarks>
+    /// Held by the editor rather than the stage so a run does not lose it: the stage is rebuilt whenever
+    /// the document changes, and "I watched that variable and then edited a block" losing the watch is not
+    /// a thing anyone would design on purpose.
+    /// </remarks>
+    public HashSet<string> Watched { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Puts the breakpoint state onto every tile the canvas is showing.</summary>
+    /// <remarks>
+    /// Called after a rebuild as well as after a click. Tiles are new objects on every edit, so a
+    /// breakpoint that was only stamped where it was set would quietly disappear the next time the user
+    /// typed a character.
+    /// </remarks>
+    public void StampBreakpoints()
+    {
+        foreach (var node in AllNodes())
+        {
+            node.IsBreakpoint = Breakpoints.Contains(node.Id);
+        }
+    }
+
+    /// <summary>
+    /// Moves the "the stage is here" mark to one block, or clears it.
+    /// </summary>
+    /// <remarks>
+    /// Called from the page whenever the stage publishes a new current block. It is on the editor rather
+    /// than on the stage because the tiles are the editor's to project.
+    /// </remarks>
+    /// <param name="blockId">The block, or null or empty for none.</param>
+    public void StampCurrent(string? blockId)
+    {
+        foreach (var node in AllNodes())
+        {
+            node.IsCurrent = !string.IsNullOrEmpty(blockId)
+                && string.Equals(node.Id, blockId, StringComparison.Ordinal);
+        }
+    }
 
     /// <summary>The scripts, in document order.</summary>
     public ObservableCollection<ScriptViewModel> Scripts { get; private set; } = [];
@@ -386,7 +448,10 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         Procedures = new ObservableCollection<ProcedureViewModel>(
             Document.Procedures.Select(procedure => new ProcedureViewModel(procedure)));
 
-        Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
+Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
+
+        StampBreakpoints();
+        Stage.Rebind();
 
         OnPropertyChanged(nameof(Scripts));
         OnPropertyChanged(nameof(Procedures));

@@ -105,6 +105,42 @@
         -->
         <Border Background="Transparent" Grid.RowSpan="2" />
 
+        <!--
+            The breakpoint dot, in the header's own left padding rather than on top of the block.
+
+            Part 10.3 asks for a clickable gutter. It is exactly BlockMetrics.TilePaddingX wide because
+            that is the strip beside the words which is the same on every shape, so the dot never lands on
+            text and never changes the tile's measured width - a gutter drawn beside the block instead
+            would have to be given space, and giving it space changes the geometry every pinned test
+            depends on. The dot is drawn empty rather than hidden, because a dot that appears only once a
+            breakpoint exists is a dot nobody finds.
+
+            The click is routed rather than handled here, because the tile cannot reach the editor from its
+            own data context: the tile holds a block, and the breakpoints live on the page's view model.
+        -->
+        <Button Grid.RowSpan="2" Width="10" HorizontalAlignment="Left" VerticalAlignment="Top"
+                Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
+                Focusable="False" Click="Breakpoint_Click"
+                ToolTip="Set or clear a breakpoint here">
+            <Ellipse Width="8" Height="8" VerticalAlignment="Top" Margin="1,6,0,0">
+                <Ellipse.Style>
+                    <Style TargetType="Ellipse">
+                        <Setter Property="Fill" Value="Transparent" />
+                        <Setter Property="Stroke" Value="{DynamicResource Liquid.TextTertiaryBrush}" />
+                        <Setter Property="StrokeThickness" Value="1" />
+                        <Setter Property="Opacity" Value="0.45" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBreakpoint}" Value="True">
+                                <Setter Property="Fill" Value="{DynamicResource Liquid.DangerBrush}" />
+                                <Setter Property="Opacity" Value="1" />
+                                <Setter Property="Stroke" Value="{DynamicResource Liquid.DangerBrush}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Ellipse.Style>
+            </Ellipse>
+        </Button>
+
         <ItemsControl Grid.Row="0"
                       ItemsSource="{Binding LabelParts}"
                       ItemTemplateSelector="{StaticResource LabelPartSelector}"

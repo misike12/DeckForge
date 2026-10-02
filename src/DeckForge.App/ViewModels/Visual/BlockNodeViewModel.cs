@@ -106,6 +106,29 @@ public sealed partial class BlockNodeViewModel : ObservableObject
     /// <summary>Whether the block is switched off, which the emitter and the interpreter both honour.</summary>
     public bool IsDisabled => Block.Disabled;
 
+    /// <summary>
+    /// Whether this block stops the interpreter.
+    /// </summary>
+    /// <remarks>
+    /// Written by the editor rather than read from the interpreter, so the tile is a plain projection and
+    /// the stage owns the set. A tile that queried the interpreter itself would need a reference to it, and
+    /// the canvas would stop being a view of the document.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isBreakpoint;
+
+    /// <summary>
+    /// Whether the stage is standing on this block right now.
+    /// </summary>
+    /// <remarks>
+    /// Part 10.3's pulsing tile, as state rather than as an animation. A WPF pulse needs a
+    /// <c>Storyboard</c> per tile and a timer to drive it; a flag the tile already watches costs one
+    /// comparison in <c>OnRender</c> and cannot get out of step with the interpreter, which is the only
+    /// thing a pulse has to be in step with.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isCurrent;
+
     /// <summary>Whether the block carries a comment.</summary>
     public bool HasComment => !string.IsNullOrWhiteSpace(Block.Comment);
 

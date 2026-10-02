@@ -43,13 +43,18 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
             Controls.Blocks.BlockTile.SelectionRequestedEvent,
             new RoutedEventHandler(Tile_SelectionRequested));
 
-        AddHandler(
+AddHandler(
             Controls.Blocks.InputSlotView.SlotClickedEvent,
             new RoutedEventHandler(Slot_Clicked));
 
-Palette.RowPressed += Palette_RowPressed;
+        AddHandler(
+            Controls.Blocks.BlockTile.BreakpointRequestedEvent,
+            new RoutedEventHandler(Tile_BreakpointRequested));
+
+        Palette.RowPressed += Palette_RowPressed;
         PreviewKeyDown += OnPreviewKeyDown;
         _vm.PropertyChanged += OnEditorPropertyChanged;
+        _vm.Stage.PropertyChanged += OnStagePropertyChanged;
         SizeChanged += (_, args) => ApplyLayout(args.NewSize.Width);
         ApplyLayout(ActualWidth);
     }
@@ -76,6 +81,22 @@ Palette.RowPressed += Palette_RowPressed;
     }
 
     /// <summary>
+    /// Moves the stage's "here" mark onto the matching tile.
+    /// </summary>
+    /// <remarks>
+    /// One subscription, on the stage rather than on the editor, and only for the one property that
+    /// changes per block. The stage runs on a timer, so a page that also refreshed the whole workspace on
+    /// every tick would re-measure every tile sixty times a second to move one ring.
+    /// </remarks>
+    private void OnStagePropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(ViewModels.Visual.StageViewModel.CurrentBlockId))
+        {
+            _vm.StampCurrent(_vm.Stage.CurrentBlockId);
+        }
+    }
+
+/// <summary>
     /// The page width at which the canvas gets a column of its own beside the other three panels.
     /// </summary>
     /// <remarks>
@@ -89,17 +110,33 @@ Palette.RowPressed += Palette_RowPressed;
     /// the rest. Below it the canvas drops to a row under the other three, where the same three panels
     /// still fit inside the application's minimum window of 960 less the rail and the page margin.
     /// </para>
+    /// <para>
+    /// Phase 8 added a third row rather than a fifth column. The stage needs width for its trace and the
+    /// canvas needs what little height it can get, so the stage took the one thing nothing else wanted:
+    /// the bottom of the page.
+    /// </para>
     /// </remarks>
     private const double WideLayoutWidth = 1080;
 
     private bool? _wide;
 
     /// <summary>
-    /// Places the four panels, one way for a wide page and another for a narrow one.
+    /// How tall the stage is, as a share of what is left.
+    /// </summary>
+    /// <remarks>
+    /// A third of the page rather than half, and not fixed. A stage tall enough for a hundred trace lines
+    /// leaves the canvas with a hundred pixels of canvas, which is the panel a user spends the most time
+    /// looking at; and a stage at a fixed height would take a third of a small window and all of a large
+    /// one.
+    /// </remarks>
+    private const double StageRowWeight = 0.34;
+
+    /// <summary>
+    /// Places the five regions, one way for a wide page and another for a narrow one.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A breakpoint rather than four collapse buttons, because a button that hides a panel has to be
+    /// A breakpoint rather than five collapse buttons, because a button that hides a panel has to be
     /// found again to bring the panel back, and at the size this layout exists for there is no room to
     /// put one per panel. Below the breakpoint the canvas drops to a row of its own under the rail, the
     /// palette and the diagnostics pane — which is the arrangement Part 9.2's drawing describes once the
@@ -133,12 +170,13 @@ Palette.RowPressed += Palette_RowPressed;
         Layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Layout.RowDefinitions.Add(new RowDefinition
         {
-            Height = new GridLength(wide ? 1 : 0.58, GridUnitType.Star),
+            Height = new GridLength(wide ? 1 : 0.5, GridUnitType.Star),
         });
+        Layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         if (!wide)
         {
-            Layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            Layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(StageRowWeight, GridUnitType.Star) });
         }
 
         // The title and its Docs button share one row of their own, so the title wraps to whatever is
@@ -178,6 +216,7 @@ Palette.RowPressed += Palette_RowPressed;
             Place(PalettePanel, 1, 1);
             Place(CanvasPanel, 1, 2);
             Place(InspectorPanel, 1, 3);
+            Place(StagePanel, 2, 0, Layout.ColumnDefinitions.Count);
         }
         else
         {
@@ -185,6 +224,7 @@ Palette.RowPressed += Palette_RowPressed;
             Place(PalettePanel, 1, 1);
             Place(InspectorPanel, 1, 2);
             Place(CanvasPanel, 2, 0, Layout.ColumnDefinitions.Count);
+            Place(StagePanel, 3, 0, Layout.ColumnDefinitions.Count);
         }
     }
 
@@ -233,11 +273,29 @@ Palette.RowPressed += Palette_RowPressed;
     /// carries the slot, because the bubbling event's <c>Source</c> is the hole's inner border and knows
     /// nothing about which slot it is standing in for.
     /// </remarks>
-    private void Slot_Clicked(object sender, RoutedEventArgs args)
+private void Slot_Clicked(object sender, RoutedEventArgs args)
     {
         if (args is Controls.Blocks.SlotClickedEventArgs clicked)
         {
             _vm.SelectSlot(clicked.Block.Id, clicked.Slot.Name);
+        }
+    }
+
+    /// <summary>
+    /// Sets or clears a breakpoint from a tile's gutter.
+    /// </summary>
+    /// <remarks>
+    /// Part 10.3's marquee feature, and it is the one thing on the canvas that is not an edit: a
+    /// breakpoint is a fact about running the script rather than about what the script says, so it never
+    /// goes near the <see cref="DocumentEditor"/> and never appears on the undo stack. Putting it there
+    /// would also be wrong in a way a user would notice immediately — Ctrl+Z after setting a breakpoint
+    /// would undo the block they had just written.
+    /// </remarks>
+    private void Tile_BreakpointRequested(object sender, RoutedEventArgs args)
+    {
+        if (args is Controls.Blocks.BlockSelectedEventArgs selected)
+        {
+            _vm.Stage.ToggleBreakpoint(selected.Block.Id);
         }
     }
 

@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P7 complete (P7a a procedure is an addressable, editable body, with the call and return rules that make the C# compile; P7b the script strip, the My Blocks panel, and procedure bodies as canvas columns — 665 green). Next: P8 — the simulator, the tracer and the debugger.**
+**Current position: P8 code complete (P8a IVisualHost, SimulatedHost, ScriptInterpreter and the BlockSemantics table; P8b StageSession, the stage panel, the watch table, breakpoints and the tracer — 725 green). Outstanding: driving the stage panel in the real window, because the synthetic input harness stopped reaching the window. Next: P9 — multi-target codegen.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -86,7 +86,7 @@ inspected.
 | P5b — Save, load, dirty state | ✅ complete | **milestone 11** |
 | P6 — Shell integration, retire the old Blocks page | ✅ complete | **milestone 12** |
 | P7 — Procedures and multi-script | ✅ complete | **milestones 13–14** |
-| P8 — Simulator, tracer, debugger | ⬜ not started | |
+| P8 — Simulator, tracer, debugger | 🟡 code complete, window check outstanding | **P8a** Core/Visual/Runtime/{IVisualHost,SimulatedHost,Values,BlockSemantics,ExecutionStep,ScriptInterpreter}.cs: a simulated host with no window and no network, a block-semantics table both engines are asserted against, and an interpreter that steps one block, steps into a container, honours breakpoints, seeds its RNG and ends what does not end at a budget that says so. **P8b** Core/Visual/Runtime/StageSession.cs plus App/Controls/Blocks/StagePanel.xaml and App/ViewModels/Visual/StageViewModel.cs: the transport, the speed, the watch table, the parameter form, the trace timeline, the mocked deck, the notifications and the honesty statement, with a breakpoint dot in every tile's gutter. 18 new tests, full suite **725 green**. The stage's logic is in Core so the whole of Part 8 is testable without a window; **not yet driven in the real window** — see the work log |
 | P9 — Multi-target codegen | ⬜ not started | |
 | P10 — Polish and hardening | ⬜ not started | |
 

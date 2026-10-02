@@ -66,6 +66,24 @@ public interface IDeckSurface
 
     /// <summary>The item with that id, or null.</summary>
     DeckItem? Find(string id);
+
+    /// <summary>Moves the pressing client into a folder, or a named one.</summary>
+    /// <param name="folderId">The folder's id.</param>
+    /// <param name="clientId">The client, or null for the pressing one.</param>
+    void OpenFolder(string folderId, string? clientId = null);
+
+    /// <summary>Moves the pressing client up a level.</summary>
+    void GoToParent();
+
+    /// <summary>Returns the pressing client to the folder it was in before this one.</summary>
+    void GoBack();
+
+    /// <summary>
+    /// Changes a button's state, which is how a button shows on, off or muted.
+    /// </summary>
+    /// <param name="widgetId">The button's id.</param>
+    /// <param name="state">The state name, which the widget's menu supplies.</param>
+    void SetButtonState(string widgetId, string state);
 }
 
 /// <summary>How loudly something wants the user's attention.</summary>

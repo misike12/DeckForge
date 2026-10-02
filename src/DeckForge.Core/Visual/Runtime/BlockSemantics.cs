@@ -87,6 +87,46 @@ public static class BlockSemantics
         ["ui.log"] = Semantics("ui.log", "stack", "log", "write",
             notes: "the template's {holes} come from the action's parameters, and a hole with no value behind it is left written"),
 
+        // Lists, events and messages: what the stage's watch table and log exist to show.
+        ["list.define"] = Semantics("list.define", "stack", "lists", "set", nameSlot: "name",
+            notes: "declaring a list the run has already written to must not empty it"),
+        ["list.add"] = Semantics("list.add", "stack", "lists", "add", nameSlot: "list",
+            notes: "appending to a list nothing has declared is how a script's first write happens"),
+        ["list.clear"] = Semantics("list.clear", "stack", "lists", "set", nameSlot: "list",
+            notes: "empties the list it names, and the index a `delete` would have used no longer exists"),
+
+        ["events.publish"] = Semantics("events.publish", "stack", "events", "publish",
+            notes: "publishing to nobody is not an error; a simulator has no subscribers to complain about"),
+        ["events.publish-with-payload"] = Semantics("events.publish-with-payload", "stack", "events", "publish",
+            notes: "the payload is one value's text, not a second event"),
+        ["events.send-message"] = Semantics("events.send-message", "stack", "messages", "show",
+            notes: "the topic is the title, and the body is empty rather than null when the slot is"),
+
+        // Notifications, and the replace-by-key that makes a progress toast sit still.
+        ["ui.notify"] = Semantics("ui.notify", "stack", "notifications", "show",
+            notes: "an absent message is null, not an empty string, because the host shows the two differently"),
+        ["ui.notify-level"] = Semantics("ui.notify-level", "stack", "notifications", "show",
+            notes: "the level comes from a menu key, not from a slot, so a malformed menu reads as "
+                + "information rather than throwing"),
+        ["ui.notify-key"] = Semantics("ui.notify-key", "stack", "notifications", "show",
+            notes: "the key replaces the previous notification carrying it, in place"),
+        ["ui.clear-notification"] = Semantics("ui.clear-notification", "stack", "notifications", "clear",
+            notes: "clearing removes the card carrying the key rather than blanking it, because a blank "
+                + "card still occupies the notification area"),
+
+        // The deck, as a folder graph rather than a device.
+        ["deck.open-folder"] = Semantics("deck.open-folder", "stack", "deck", "openFolder",
+            notes: "a folder the simulator has never heard of is still shown as the call that happened, "
+                + "because a dry run that stops there teaches nothing about the rest of the script"),
+        ["deck.open-folder-on-client"] = Semantics("deck.open-folder-on-client", "stack", "deck", "openFolder",
+            notes: "a named client rather than the pressing one"),
+        ["deck.go-to-parent"] = Semantics("deck.go-to-parent", "stack", "deck", "goToParent",
+            notes: "at the root there is nowhere to go, and the run carries on rather than ending"),
+        ["deck.go-back"] = Semantics("deck.go-back", "stack", "deck", "goBack",
+            notes: "back at the root is not an error; there is simply nowhere further to go"),
+        ["deck.set-button-state"] = Semantics("deck.set-button-state", "stack", "deck", "setButtonState",
+            notes: "the state name is written onto the tile, so a stage shows which widget the run turned on"),
+
         // Operators: the two the preview needs for its own examples, chosen because both are
         // nondeterministic in a way a dry run has to be able to reproduce.
         ["ops.random"] = Semantics("ops.random", "reporter",

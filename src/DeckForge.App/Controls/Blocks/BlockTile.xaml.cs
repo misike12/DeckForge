@@ -95,6 +95,33 @@ public partial class BlockTile : UserControl
         typeof(RoutedEventHandler),
         typeof(BlockTile));
 
+    /// <summary>
+    /// Raised when the breakpoint dot in the gutter is clicked, bubbling to the page.
+    /// </summary>
+    /// <remarks>
+    /// A separate event from <see cref="SelectionRequestedEvent"/> rather than a flag on the selection
+    /// event, because clicking the dot is not clicking the block: it must not move the selection, or the
+    /// inspector would jump to a block the user did not choose while they were aiming at the gutter.
+    /// </remarks>
+    public static readonly RoutedEvent BreakpointRequestedEvent = EventManager.RegisterRoutedEvent(
+        "BreakpointRequested",
+        RoutingStrategy.Bubble,
+        typeof(RoutedEventHandler),
+        typeof(BlockTile));
+
+    /// <summary>Raises <see cref="BreakpointRequestedEvent"/> for this block.</summary>
+    private void Breakpoint_Click(object sender, RoutedEventArgs args)
+    {
+        if (Node is { } node)
+        {
+            // Handled, so the page does not also read the press as a click on the block itself: the press
+            // lands on the gutter, and treating that as a selection is how a breakpoint dot becomes a
+            // mysterious selection change.
+            args.Handled = true;
+            RaiseEvent(new BlockSelectedEventArgs(BreakpointRequestedEvent, this, node));
+        }
+    }
+
     private void OnMouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs args)
     {
         // Focus, then raise. Both are here and neither is enough alone: the click that selects a block has
@@ -151,6 +178,27 @@ public partial class BlockTile : UserControl
     public static readonly DependencyProperty IsSelectedProperty =
         DependencyProperty.Register(
             nameof(IsSelected),
+            typeof(bool),
+            typeof(BlockTile),
+            new PropertyMetadata(false, OnLookChanged));
+
+    /// <summary>
+    /// Whether the stage is standing on this block, which draws the pulse ring.
+    /// </summary>
+    /// <remarks>
+    /// A ring rather than an opacity change: the stage has to be findable on a canvas where a hundred
+    /// blocks are the same colour, and an accent ring around the one that is running is findable in a way
+    /// a slightly paler block is not.
+    /// </remarks>
+    public bool IsCurrent
+    {
+        get => (bool)GetValue(IsCurrentProperty);
+        set => SetValue(IsCurrentProperty, value);
+    }
+
+    public static readonly DependencyProperty IsCurrentProperty =
+        DependencyProperty.Register(
+            nameof(IsCurrent),
             typeof(bool),
             typeof(BlockTile),
             new PropertyMetadata(false, OnLookChanged));
@@ -247,6 +295,17 @@ public partial class BlockTile : UserControl
             var ring = new Pen(accent, 2) { LineJoin = PenLineJoin.Round };
             context.DrawGeometry(null, ring, _outline!);
         }
+
+        if (IsCurrent && Resolve("Liquid.DangerBrush") is { } current)
+        {
+            // Drawn outside the silhouette as well as on it, so it reads on a block at the far left of the
+            // canvas with nothing around it to contrast with.
+            var outer = new Pen(current, 4) { LineJoin = PenLineJoin.Round };
+            context.DrawGeometry(null, outer, _outline!);
+
+            var inner = new Pen(Brushes.White, 1.5) { LineJoin = PenLineJoin.Round };
+            context.DrawGeometry(null, inner, _outline!);
+        }
     }
 
     /// <summary>Re-reads everything that comes from the theme after it changes underneath the page.</summary>
@@ -259,6 +318,7 @@ public partial class BlockTile : UserControl
             Ink = Resolve(node.InkKey) ?? Brushes.White;
             IsMuted = node.IsDisabled;
             IsSelected = node.IsSelected;
+            IsCurrent = node.IsCurrent;
             ToolTip = $"{node.Title}\n{node.Summary}";
         }
 
@@ -299,6 +359,7 @@ public partial class BlockTile : UserControl
         if (args.PropertyName == nameof(BlockNodeViewModel.IsSelected) && sender is BlockNodeViewModel node)
         {
             IsSelected = node.IsSelected;
+            IsCurrent = node.IsCurrent;
             InvalidateVisual();
         }
     }
