@@ -79,7 +79,13 @@ public static class VisualValidator
         var diagnostics = new List<VisualDiagnostic>();
         var variableNames = project.Variables.Select(v => v.Name).ToHashSet(StringComparer.Ordinal);
         var listNames = project.Lists.Select(l => l.Name).ToHashSet(StringComparer.Ordinal);
-        var procedureNames = project.Procedures.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        // Name -> declaration, not a set of names. Part 7.14's call rules need more than "does this name
+        // exist": they need how many parameters it takes and whether it returns a value, and a set cannot
+        // answer either. Duplicate names collapse here, which is correct - the duplicate check reports
+        // them and there is nothing sensible to say about the arity of two procedures with one name.
+        var procedures = project.Procedures
+            .GroupBy(p => p.Name, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var declarations = new HashSet<string>(variableNames, StringComparer.Ordinal);
         declarations.UnionWith(listNames);
 
@@ -127,7 +133,7 @@ public static class VisualValidator
                     // whole script first was the alternative, and it would call a genuinely-forward
                     // reference clean — the one mistake this check exists for.
                     var readable = new HashSet<string>(declarations, StringComparer.Ordinal);
-                    diagnostics.AddRange(ValidateScript(script, context, readable, procedureNames));
+                    diagnostics.AddRange(ValidateScript(script, context, readable, procedures));
                     CheckTrailingCap(script.Hat, script.Body, script.Name, diagnostics);
                 }
             }
@@ -136,10 +142,105 @@ public static class VisualValidator
         foreach (var procedure in project.Procedures)
         {
             var readable = new HashSet<string>(declarations, StringComparer.Ordinal);
-            diagnostics.AddRange(ValidateProcedureBody(procedure, context, readable, procedureNames));
+            diagnostics.AddRange(ValidateProcedureBody(procedure, context, readable, procedures));
         }
 
+        diagnostics.AddRange(CheckRecursion(project));
+
         return diagnostics;
+    }
+
+    /// <summary>
+    /// A procedure that can reach itself, directly or through others.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A warning, never an error. The design says so explicitly — recursion is bounded by the action's
+    /// timeout and not by us — and refusing it would be a claim the editor cannot keep: a mutually
+    /// recursive pair with no base case is legal C# and a legitimate thing to write.
+    /// </para>
+    /// <para>
+    /// Transitive, because the interesting case is not `A` calling `A`. Two procedures calling each other
+    /// produce no diagnostic from a direct check and hang exactly the same way, so the walk follows the
+    /// call graph until it revisits the procedure it started from, with a visited set so a wide graph
+    /// costs each edge once.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<VisualDiagnostic> CheckRecursion(VisualProject project)
+    {
+        var byName = project.Procedures
+            .GroupBy(procedure => procedure.Name, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        foreach (var procedure in project.Procedures)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal) { procedure.Name };
+            var path = new List<string>();
+            var reached = false;
+
+            if (Reaches(procedure, procedure.Name, byName, seen, path, depth: 0))
+            {
+                reached = true;
+            }
+
+            if (reached)
+            {
+                yield return new VisualDiagnostic(
+                    "vis-procedure-recursion", VisualSeverity.Warning, procedure.Body.FirstOrDefault()?.Id,
+                    $"\"{procedure.Name}\" can call itself"
+                    + (path.Count > 0 ? $" through {string.Join(" → ", path)}" : string.Empty)
+                    + ".",
+                    "That is allowed, but it needs a way out — a condition, or a maximum count — or the "
+                    + "action will run until it times out.");
+            }
+        }
+    }
+
+    private static bool Reaches(
+        ProcedureDeclaration from,
+        string target,
+        IReadOnlyDictionary<string, ProcedureDeclaration> byName,
+        ISet<string> seen,
+        List<string> path,
+        int depth)
+    {
+        // Depth-capped rather than cycle-checked to infinity: a call graph this document can produce is
+        // shallow, and a bound keeps a pathological document from turning validation into the hang it is
+        // supposed to report.
+        if (depth > 16)
+        {
+            return false;
+        }
+
+        foreach (var call in from.Body.SelectMany(statement => statement.Walk())
+            .Where(block => block.Kind.StartsWith("proc.call", StringComparison.Ordinal)))
+        {
+            if (call.InputText("name") is not { Length: > 0 } called)
+            {
+                continue;
+            }
+
+            if (string.Equals(called, target, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!byName.TryGetValue(called, out var next) || !seen.Add(called))
+            {
+                continue;
+            }
+
+            path.Add(called);
+
+            if (Reaches(next, target, byName, seen, path, depth + 1))
+            {
+                return true;
+            }
+
+            path.RemoveAt(path.Count - 1);
+        }
+
+        return false;
     }
 
     /// <summary>Validates one script: its hat, its stack, and everything nested inside both.</summary>
@@ -147,7 +248,7 @@ public static class VisualValidator
         VisualScript script,
         VisualValidationContext context,
         ISet<string> declarations,
-        IReadOnlySet<string> procedureNames)
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         if (BlockCatalog.Find(script.Hat.Kind) is not { IsHat: true })
         {
@@ -163,7 +264,7 @@ public static class VisualValidator
         foreach (var statement in script.Body)
         {
             walk.Push(statement, loopDepth: 0, inProcedure: false);
-            foreach (var diagnostic in ValidateStatement(statement, walk, context, declarations, procedureNames))
+            foreach (var diagnostic in ValidateStatement(statement, walk, context, declarations, procedures))
             {
                 yield return diagnostic;
             }
@@ -175,16 +276,17 @@ public static class VisualValidator
         ProcedureDeclaration procedure,
         VisualValidationContext context,
         ISet<string> declarations,
-        IReadOnlySet<string> procedureNames)
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         var walk = new StackWalk();
         foreach (var statement in procedure.Body)
         {
-            walk.Push(statement, loopDepth: 0, inProcedure: true);
-            foreach (var diagnostic in ValidateStatement(statement, walk, context, declarations, procedureNames))
+            walk.Push(statement, loopDepth: 0, inProcedure: true, procedure);
+            foreach (var diagnostic in ValidateStatement(statement, walk, context, declarations, procedures))
             {
                 yield return diagnostic;
             }
+
             walk.Pop();
         }
 
@@ -206,7 +308,7 @@ public static class VisualValidator
         StackWalk walk,
         VisualValidationContext context,
         ISet<string> declarations,
-        IReadOnlySet<string> procedureNames)
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         var descriptor = BlockCatalog.Find(block.Kind);
         if (descriptor is null)
@@ -252,7 +354,7 @@ public static class VisualValidator
                 yield break;
             }
 
-            foreach (var diagnostic in ValidateSlots(block, descriptor, walk, context, declarations, procedureNames))
+            foreach (var diagnostic in ValidateSlots(block, descriptor, walk, context, declarations, procedures))
             {
                 yield return diagnostic;
             }
@@ -262,7 +364,12 @@ public static class VisualValidator
                 yield return diagnostic;
             }
 
-            foreach (var diagnostic in ValidateControlFlow(block, descriptor, walk))
+            foreach (var diagnostic in ValidateControlFlow(block, descriptor, walk, procedures))
+            {
+                yield return diagnostic;
+            }
+
+            foreach (var diagnostic in ValidateCall(block, procedures))
             {
                 yield return diagnostic;
             }
@@ -277,7 +384,7 @@ public static class VisualValidator
             // A disabled block still has to name things that exist, because the user will re-enable
             // it and expect it to have kept working. Only the name references are checked; an empty
             // slot on a disabled block is not worth a red dot.
-            foreach (var diagnostic in ValidateNameReferences(block, descriptor, context, declarations, procedureNames))
+            foreach (var diagnostic in ValidateNameReferences(block, descriptor, context, declarations, procedures))
             {
                 yield return diagnostic;
             }
@@ -290,7 +397,7 @@ public static class VisualValidator
             foreach (var child in body)
             {
                 walk.Push(child, insideLoop ? walk.LoopDepth + 1 : walk.LoopDepth, walk.InProcedure);
-                foreach (var diagnostic in ValidateStatement(child, walk, context, declarations, procedureNames))
+                foreach (var diagnostic in ValidateStatement(child, walk, context, declarations, procedures))
                 {
                     yield return diagnostic;
                 }
@@ -306,7 +413,7 @@ public static class VisualValidator
         StackWalk walk,
         VisualValidationContext context,
         ISet<string> declarations,
-        IReadOnlySet<string> procedureNames)
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         foreach (var slot in descriptor.Slots ?? [])
         {
@@ -368,7 +475,7 @@ public static class VisualValidator
             }
 
             foreach (var diagnostic in ValidateNameReference(
-                block.Id, slot.Name, slot.Type, input, context, declarations, procedureNames))
+                block.Id, slot.Name, slot.Type, input, context, declarations, procedures))
             {
                 yield return diagnostic;
             }
@@ -379,7 +486,7 @@ public static class VisualValidator
             // A reporter in a slot is validated as a small tree of its own.
             if (BlockCatalog.Find(nested!.Kind)?.IsReporter == true)
             {
-                foreach (var diagnostic in ValidateNestedReporter(nested, context, declarations, procedureNames))
+                foreach (var diagnostic in ValidateNestedReporter(nested, context, declarations, procedures))
                 {
                     yield return diagnostic;
                 }
@@ -391,7 +498,7 @@ public static class VisualValidator
                 // is missing a value. Anything nested in its bodies is out of the control flow here,
                 // so it is walked at zero loop depth.
                 var misplaced = BlockCatalog.Find(nested.Kind)!;
-                foreach (var diagnostic in ValidateSlots(nested, misplaced, new StackWalk(), context, declarations, procedureNames))
+                foreach (var diagnostic in ValidateSlots(nested, misplaced, new StackWalk(), context, declarations, procedures))
                 {
                     yield return diagnostic;
                 }
@@ -406,7 +513,7 @@ public static class VisualValidator
                     foreach (var child in body)
                     {
                         walk.Push(child, 0, walk.InProcedure);
-                        foreach (var childDiagnostic in ValidateStatement(child, walk, context, declarations, procedureNames))
+                        foreach (var childDiagnostic in ValidateStatement(child, walk, context, declarations, procedures))
                         {
                             yield return childDiagnostic;
                         }
@@ -422,7 +529,7 @@ public static class VisualValidator
         Block reporter,
         VisualValidationContext context,
         ISet<string> declarations,
-        IReadOnlySet<string> procedureNames)
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         var descriptor = BlockCatalog.Find(reporter.Kind);
         if (descriptor is null)
@@ -442,7 +549,7 @@ public static class VisualValidator
             yield break;
         }
 
-        foreach (var diagnostic in ValidateSlots(reporter, descriptor, new StackWalk(), context, declarations, procedureNames))
+        foreach (var diagnostic in ValidateSlots(reporter, descriptor, new StackWalk(), context, declarations, procedures))
         {
             yield return diagnostic;
         }
@@ -479,7 +586,8 @@ public static class VisualValidator
     private static IEnumerable<VisualDiagnostic> ValidateControlFlow(
         Block block,
         BlockDescriptor descriptor,
-        StackWalk walk)
+        StackWalk walk,
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         if (block.Kind is "control.break" or "control.continue" && walk.LoopDepth == 0)
         {
@@ -498,7 +606,128 @@ public static class VisualValidator
                 "\"return\" only means something inside a procedure.",
                 "Use a finish block instead.");
         }
+        else if (block.Kind == "control.return" && walk.Procedure is { Returns: false } voidProcedure
+            && block.InputText("value") is { Length: > 0 } value)
+        {
+            yield return new VisualDiagnostic(
+                "vis-return-value-void", VisualSeverity.Error, block.Id,
+                $"\"{voidProcedure.Name}\" does not return a value, but this \"return\" hands back \"{value}\".",
+                "Tick \"returns a value\" on the procedure, or return nothing.");
+        }
+        else if (block.Kind == "control.return" && walk.Procedure is { Returns: true } procedure
+            && block.InputText("value") is not { Length: > 0 })
+        {
+            yield return new VisualDiagnostic(
+                "vis-return-no-value", VisualSeverity.Error, block.Id,
+                $"\"{procedure.Name}\" returns a value, so every \"return\" needs one.",
+                "Hand back a value, or untick \"returns a value\" on the procedure.");
+        }
     }
+
+    /// <summary>
+    /// Calls: the argument count has to match, and only a procedure that returns can be used as a value.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two checks that exist because the alternative is a C# compile error on the user's file rather than
+    /// a sentence on the canvas. A call with the wrong number of arguments emits
+    /// <c>NameAsync(a, b)</c> against a function taking one parameter, and the reporter form against a
+    /// void one emits <c>var _r0 = await NameAsync();</c> where <c>NameAsync</c> returns <c>Task</c> —
+    /// neither is catchable from the editor.
+    /// </para>
+    /// <para>
+    /// Only the reported count matters, not the values: a call's arguments are one <c>name=value</c>
+    /// text slot, and checking them means parsing that text three more times per call. A wrong count is the
+    /// mistake worth naming; a wrong value already surfaces as the diagnostic the argument's own value
+    /// produces.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<VisualDiagnostic> ValidateCall(
+        Block block,
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
+    {
+        if (!block.Kind.StartsWith("proc.call", StringComparison.Ordinal)
+            || block.InputText("name") is not { Length: > 0 } name)
+        {
+            yield break;
+        }
+
+        if (!procedures.TryGetValue(name, out var procedure))
+        {
+            // Already reported as vis-procedure-missing by the name check; saying it twice with a
+            // different code would leave one fix producing two remaining errors.
+            yield break;
+        }
+
+        var given = CallArgumentCount(block.InputText("args"));
+        var wanted = procedure.Parameters.Count;
+
+        if (given != wanted)
+        {
+            yield return new VisualDiagnostic(
+                "vis-call-arity", VisualSeverity.Error, block.Id,
+                $"\"{name}\" takes {CountOf(wanted, "argument")}, and this call passes {CountOf(given, "argument")}.",
+                wanted == 0
+                    ? "Drop the argument, or give the procedure a parameter."
+                    : "Match the call to the procedure's parameters.");
+        }
+
+        if (block.Kind == "proc.call-value" && !procedure.Returns)
+        {
+            yield return new VisualDiagnostic(
+                "vis-call-value-void", VisualSeverity.Error, block.Id,
+                $"\"{name}\" does not return a value, so it cannot be used as one.",
+                "Use the plain call block, or tick \"returns a value\" on the procedure.");
+        }
+
+        if (block.Kind is "proc.call" or "proc.call-with" && procedure.Returns)
+        {
+            yield return new VisualDiagnostic(
+                "vis-call-value-unused", VisualSeverity.Warning, block.Id,
+                $"\"{name}\" returns a value, and this call throws it away.",
+                "Use the reporter form in a slot if you meant to use it.");
+        }
+    }
+
+    /// <summary>
+    /// How many arguments a call's text carries.
+    /// </summary>
+    /// <remarks>
+    /// Split on commas rather than lines, because the emitter binds <c>name=value</c> pairs in
+    /// declaration order and accepts either separator — so a count that only understood one of them would
+    /// call a correct program wrong.
+    /// </remarks>
+    private static int CallArgumentCount(string? args)
+    {
+        if (string.IsNullOrWhiteSpace(args))
+        {
+            return 0;
+        }
+
+        var count = 0;
+        var seen = false;
+
+        foreach (var character in args)
+        {
+            if (character is ',' or '\n' or '\r' or ';')
+            {
+                if (seen)
+                {
+                    count++;
+                    seen = false;
+                }
+
+                continue;
+            }
+
+            seen = true;
+        }
+
+        return seen ? count + 1 : count;
+    }
+
+    private static string CountOf(int count, string noun) =>
+        count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 
     /// <summary>What follows a cap, and a forever with nothing that yields inside it.</summary>
     private static IEnumerable<VisualDiagnostic> ValidateReachability(
@@ -571,7 +800,7 @@ public static class VisualValidator
         BlockInput input,
         VisualValidationContext context,
         ISet<string> declarations,
-        IReadOnlySet<string> procedureNames)
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         // A reporter in the slot produces the name at runtime; the validator checks the literal and
         // the variable reference, which are what the user typed.
@@ -627,7 +856,7 @@ public static class VisualValidator
                 break;
 
             case SlotType.Procedure:
-                if (!procedureNames.Contains(text, StringComparer.Ordinal))
+                if (!procedures.ContainsKey(text))
                 {
                     yield return Unknown(
                         "vis-procedure-missing", blockId, slotName, text,
@@ -643,14 +872,14 @@ public static class VisualValidator
         BlockDescriptor descriptor,
         VisualValidationContext context,
         ISet<string> declarations,
-        IReadOnlySet<string> procedureNames)
+        IReadOnlyDictionary<string, ProcedureDeclaration> procedures)
     {
         foreach (var slot in descriptor.Slots ?? [])
         {
             if (block.Inputs.TryGetValue(slot.Name, out var input) && input is not null)
             {
                 foreach (var diagnostic in ValidateNameReference(
-                    block.Id, slot.Name, slot.Type, input, context, declarations, procedureNames))
+                    block.Id, slot.Name, slot.Type, input, context, declarations, procedures))
                 {
                     yield return diagnostic;
                 }
@@ -717,17 +946,23 @@ public static class VisualValidator
     /// One instance per script rather than one per statement: the walk is the recursion state, and
     /// allocating a list per block was the only thing the first version of this file did that showed
     /// up in the stopwatch at all.
+    ///
+    /// <c>Procedure</c> carries the declaration being walked rather than a flag, because the return rules
+    /// need to know whether *that* procedure returns a value — and a flag cannot answer it.
     /// </remarks>
     private sealed class StackWalk
     {
-        private readonly Stack<(int LoopDepth, bool InProcedure)> _frames = new();
+        private readonly Stack<(int LoopDepth, ProcedureDeclaration? Procedure)> _frames = new();
 
         public int LoopDepth => _frames.Count > 0 ? _frames.Peek().LoopDepth : 0;
 
-        public bool InProcedure => _frames.Count > 0 && _frames.Peek().InProcedure;
+        public bool InProcedure => Procedure is not null;
 
-        public void Push(Block block, int loopDepth, bool inProcedure) =>
-            _frames.Push((loopDepth, inProcedure));
+        /// <summary>The procedure whose body this statement is in, or null for a script.</summary>
+        public ProcedureDeclaration? Procedure => _frames.Count > 0 ? _frames.Peek().Procedure : null;
+
+        public void Push(Block block, int loopDepth, bool inProcedure, ProcedureDeclaration? procedure = null) =>
+            _frames.Push((loopDepth, inProcedure ? procedure : null));
 
         public void Pop() => _frames.Pop();
     }

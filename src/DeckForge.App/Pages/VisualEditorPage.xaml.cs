@@ -1,7 +1,10 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using DeckForge.App.Services;
+using DeckForge.App.ViewModels.Visual;
+using DeckForge.Core.Visual;
 
 namespace DeckForge.App.Pages;
 
@@ -44,11 +47,32 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
             Controls.Blocks.InputSlotView.SlotClickedEvent,
             new RoutedEventHandler(Slot_Clicked));
 
-        Palette.RowPressed += Palette_RowPressed;
+Palette.RowPressed += Palette_RowPressed;
         PreviewKeyDown += OnPreviewKeyDown;
-        _vm.PropertyChanged += (_, args) => Workspace.Refresh();
+        _vm.PropertyChanged += OnEditorPropertyChanged;
         SizeChanged += (_, args) => ApplyLayout(args.NewSize.Width);
         ApplyLayout(ActualWidth);
+    }
+
+    /// <summary>
+    /// Keeps the canvas in step with the editor's state.
+    /// </summary>
+    /// <remarks>
+    /// Refreshing on every property change is what makes an edit reach the canvas at all: the editor
+    /// raises <c>Changed</c>, the view model rebuilds, and the workspace has to be told to re-measure
+    /// because the tiles are new objects at new sizes. The procedure case is folded in here rather than
+    /// given its own subscription, because it is the same "something on screen is now different" event —
+    /// and two subscriptions to one view model is how a page ends up refreshing twice per edit.
+    /// </remarks>
+    private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        Workspace.Refresh();
+
+        if (args.PropertyName == nameof(ViewModels.Visual.VisualEditorViewModel.SelectedProcedure)
+            && _vm.SelectedProcedure is { } procedure)
+        {
+            Workspace.ScrollToColumn(procedure);
+        }
     }
 
     /// <summary>
@@ -285,6 +309,106 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
     /// of the three to press by accident.
     /// </remarks>
     private void Revert_Click(object sender, RoutedEventArgs e) => _vm.RevertCommand.Execute(null);
+
+    /// <summary>Commits a procedure's new name when the box loses focus.</summary>
+    /// <remarks>
+    /// Handlers rather than bindings, because the box lives inside an <c>Expander</c> whose
+    /// <c>DataContext</c> is the procedure column and which therefore cannot reach the page's view model
+    /// through a binding path. The row is named by <c>Tag</c> for the same reason the inspector's steppers
+    /// are.
+    /// </remarks>
+    private void ProcedureName_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ProcedureViewModel procedure } element
+            && element is TextBox box)
+        {
+            _vm.RenameProcedure(procedure, box.Text);
+        }
+    }
+
+    /// <summary>Commits a procedure's name on Enter.</summary>
+    private void ProcedureName_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && sender is FrameworkElement { Tag: ProcedureViewModel procedure } element
+            && element is TextBox box)
+        {
+            _vm.RenameProcedure(procedure, box.Text);
+            e.Handled = true;
+            Keyboard.Focus(box);
+        }
+    }
+
+    /// <summary>
+    /// Says whether the procedure returns a value.
+    /// </summary>
+    /// <remarks>
+    /// The checkbox is put back the way the document is after the click, because the editor can refuse the
+    /// change — a call already using this procedure as a value, or as a statement — and a checkbox that
+    /// stays ticked after being refused is a control lying about the document. Guarded so that a click
+    /// that agrees with the document does not write anything: a write here is an edit, and the panel must
+    /// not put one on the undo stack for a control the user set back where it was.
+    /// </remarks>
+    private void Returns_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ProcedureViewModel procedure } element
+            && element is CheckBox box
+            && box.IsChecked is { } wanted
+            && wanted != procedure.Procedure.Returns)
+        {
+            _vm.SetProcedureReturns(procedure, wanted);
+
+            if (ReferenceEquals(box, ReturnsBox))
+            {
+                ReturnsBox.IsChecked = procedure.Procedure.Returns;
+            }
+        }
+    }
+
+    /// <summary>Adds a parameter.</summary>
+    private void ParameterAdd_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ProcedureViewModel procedure })
+        {
+            _vm.AddParameter(procedure);
+        }
+    }
+
+    /// <summary>
+    /// Removes a parameter.
+    /// </summary>
+    /// <remarks>
+    /// The parameter is the button's own data context — the row template puts it there — and the procedure
+    /// is whichever one the panel is showing. Nothing is remembered between events, so a rebuilt row cannot
+    /// leave a handler holding a parameter that is no longer there.
+    ///
+    /// The procedure is read from the editor rather than from a <c>Tag</c> on the control because a row
+    /// inside a DataTemplate cannot reach one: the panel's DataContext is outside the template's name
+    /// scope, so <c>ElementName</c> finds nothing and an ancestor search finds the page instead. Both were
+    /// tried, and both produced a button that looked wired and did nothing.
+    /// </remarks>
+    private void ParameterRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ProcedureParameter parameter }
+            && _vm.SelectedProcedure is { } procedure)
+        {
+            _vm.RemoveParameter(procedure, parameter);
+        }
+    }
+
+    /// <summary>Commits a parameter's new name when its box loses focus.</summary>
+    private void Parameter_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ProcedureParameter parameter } element
+            && element is TextBox box
+            && _vm.SelectedProcedure is { } procedure)
+        {
+            _vm.RenameParameter(procedure, parameter, box.Text);
+        }
+    }
+
+    /// <summary>Removes the selected procedure.</summary>
+    private void ProcedureDelete_Click(object sender, RoutedEventArgs e) =>
+        _vm.DeleteProcedure(_vm.SelectedProcedure);
 
     /// <summary>
     /// Starts a drag from a palette row.

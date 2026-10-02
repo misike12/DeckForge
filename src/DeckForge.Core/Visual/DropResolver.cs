@@ -46,6 +46,16 @@ public enum DropTargetKind
 /// </param>
 /// <param name="X">The notch's x, in canvas coordinates.</param>
 /// <param name="Y">The notch's y, in canvas coordinates.</param>
+/// <param name="ProcedureBody">
+/// Whether <paramref name="ParentId"/> is a procedure's id rather than a hat's.
+/// </param>
+/// <remarks>
+/// The flag exists because <see cref="BodyRef"/> has one and this record does not: a gap in a procedure
+/// body and a gap in a script body look identical until you try to write into them, and
+/// <see cref="BodyRef"/> addresses the two by different rules. Rebuilding the reference from the id alone
+/// produces a script reference to a hat that does not exist, which the editor refuses with a message about
+/// a body that is not there - so a drop that was perfectly legal was reported as impossible.
+/// </remarks>
 public sealed record DropCandidate(
     DropTargetKind Kind,
     string ParentId,
@@ -53,7 +63,12 @@ public sealed record DropCandidate(
     string? SlotName = null,
     int Index = 0,
     double X = 0,
-    double Y = 0);
+    double Y = 0,
+    bool ProcedureBody = false)
+{
+    /// <summary>The body reference this candidate opens.</summary>
+    public BodyRef Where => new(ParentId, BodyName ?? string.Empty, ProcedureBody);
+}
 
 /// <summary>The best place to land, and where the ghost should sit while approaching it.</summary>
 /// <param name="Candidate">The winning candidate.</param>
@@ -207,26 +222,58 @@ public static class DropResolver
     public static IReadOnlyList<DropCandidate> CandidatesFor(
         VisualScript script,
         IReadOnlyDictionary<string, BlockRect> rects,
+        double zoom = 1) =>
+        CandidatesFor(
+            BodyRef.ScriptBody(script.Hat.Id),
+            script.Body,
+            script.Hat,
+            rects,
+            zoom);
+
+    /// <summary>
+    /// Every gap, mouth and hat slot in one addressable body.
+    /// </summary>
+    /// <param name="where">How the body is addressed, which is what each candidate carries.</param>
+    /// <param name="body">The statements in it.</param>
+    /// <param name="hat">
+    /// The hat it hangs from, or null for a procedure — which is the whole difference between the two, and
+    /// why this takes a body rather than a script.
+    /// </param>
+    /// <param name="rects">Where every block is, measured on screen.</param>
+    /// <param name="zoom">The canvas scale.</param>
+    /// <remarks>
+    /// <para>
+    /// Taken as a body and an address rather than as a script because a procedure body is a drop target in
+    /// exactly the same sense and Phase 7 made it one. Passing a <see cref="VisualScript"/> would have
+    /// meant the resolver could only ever enumerate scripts, and a block dragged over a procedure column
+    /// would have found no gap there at all — no indicator, and a silent refusal.
+    /// </para>
+    /// <para>
+    /// The hat slot is only offered when there is a hat: a procedure's body has nothing above it to attach
+    /// to, and offering an empty hat slot would show an indicator that leads nowhere.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<DropCandidate> CandidatesFor(
+        BodyRef where,
+        IReadOnlyList<Block> body,
+        Block? hat,
+        IReadOnlyDictionary<string, BlockRect> rects,
         double zoom = 1)
     {
         var candidates = new List<DropCandidate>();
 
         // The hat slot: only hats, always at the top.
-        if (!rects.TryGetValue(script.Hat.Id, out var hatRect))
+        if (hat is not null && rects.TryGetValue(hat.Id, out var hatRect))
         {
-            return candidates;
+            candidates.Add(new DropCandidate(
+                DropTargetKind.HatSlot, hat.Id, X: hatRect.X, Y: hatRect.Y));
         }
-
-        candidates.Add(new DropCandidate(
-            DropTargetKind.HatSlot, script.Hat.Id, X: hatRect.X, Y: hatRect.Y));
-
-        var body = BodyRef.ScriptBody(script.Hat.Id);
 
         // The index is the block's own position in the body, because that is what the candidate has to
         // carry: an index of zero for every statement makes every gap in the script mean the same place.
-        for (var index = 0; index < script.Body.Count; index++)
+        for (var index = 0; index < body.Count; index++)
         {
-            Collect(script.Body[index], body, index, rects, candidates);
+            Collect(body[index], where, index, rects, candidates);
         }
 
         return candidates;
@@ -306,7 +353,8 @@ public static class DropResolver
             BodyName: where.BodyName,
             Index: index,
             X: rect.X,
-            Y: rect.Y));
+            Y: rect.Y,
+            ProcedureBody: where.IsProcedureBody));
 
         if (descriptor.IsContainer)
         {
@@ -343,6 +391,12 @@ public static class DropResolver
 
         // The gap below this statement: landing here inserts after it.
         candidates.Add(new DropCandidate(
-            DropTargetKind.StackGap, where.OwnerId, BodyName: where.BodyName, Index: index + 1, X: rect.X, Y: rect.NotchY));
+            DropTargetKind.StackGap,
+            where.OwnerId,
+            BodyName: where.BodyName,
+            Index: index + 1,
+            X: rect.X,
+            Y: rect.NotchY,
+            ProcedureBody: where.IsProcedureBody));
     }
 }

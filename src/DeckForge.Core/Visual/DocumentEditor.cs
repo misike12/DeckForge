@@ -329,6 +329,81 @@ public sealed class DocumentEditor
     public DocumentEditResult MoveScript(VisualScript script, double x, double y) =>
         Execute(new MoveScript(script, x, y));
 
+    /// <summary>
+    /// Renames a script, or gives it a different hat.
+    /// </summary>
+    /// <remarks>
+    /// One call because the strip's row edits both, and because the hat cannot be changed by mutating the
+    /// existing one — see <see cref="EditScript"/>. A rename is coalesced per script for the same 800ms
+    /// field-typing window as any other field, so typing a new name is one Ctrl+Z rather than one per
+    /// keystroke.
+    /// </remarks>
+    public DocumentEditResult EditScript(VisualScript script, string? name = null, Block? hat = null)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+
+        var sameName = name is null || string.Equals(script.Name, name, StringComparison.Ordinal);
+        var sameHat = hat is null || string.Equals(script.Hat.Kind, hat.Kind, StringComparison.Ordinal);
+
+        if (sameName && sameHat)
+        {
+            // Declined rather than recorded: a text field that fires on every keystroke would otherwise
+            // put an entry on the undo stack for characters the user typed and then deleted themselves,
+            // and a dropdown that re-fires its selection would put one there for opening a menu.
+            return Declined();
+        }
+
+        return Execute(new EditScript(script, name, hat)
+        {
+            MergeKey = sameName ? null : script.Id,
+        });
+    }
+
+    /// <summary>Adds a procedure to the document.</summary>
+    public DocumentEditResult AddProcedure(ProcedureDeclaration procedure) =>
+        Execute(ProcedureEdits.Add(procedure));
+
+    /// <summary>Removes a procedure, remembering where it was.</summary>
+    public DocumentEditResult DeleteProcedure(ProcedureDeclaration procedure)
+    {
+        ArgumentNullException.ThrowIfNull(procedure);
+
+        var at = _project.Procedures.IndexOf(procedure);
+        return Execute(ProcedureEdits.Delete(procedure, at));
+    }
+
+    /// <summary>
+    /// Renames a procedure, changes its parameters, or says whether it returns a value.
+    /// </summary>
+    /// <remarks>
+    /// The name is coalesced per procedure so typing a new name is one undo entry. The parameters and the
+    /// returning flag are not coalesced: each is a deliberate click on a row or a checkbox, and folding two
+    /// of those into one would make the second one unrecoverable.
+    /// </remarks>
+    public DocumentEditResult EditProcedure(
+        ProcedureDeclaration procedure,
+        string name,
+        IReadOnlyList<ProcedureParameter>? parameters = null,
+        bool? returning = null)
+    {
+        ArgumentNullException.ThrowIfNull(procedure);
+
+        var same = string.Equals(procedure.Name, name, StringComparison.Ordinal)
+            && (returning is null || procedure.Returns == returning)
+            && parameters is null;
+
+        if (same)
+        {
+            return Declined();
+        }
+
+        // Only a rename coalesces. Changing a parameter list or the returning flag is a deliberate click
+        // on a row or a checkbox, and folding two of those into one would make the second unrecoverable.
+        var merges = parameters is null && returning is null;
+
+        return Execute(ProcedureEdits.Edit(procedure, name, parameters, returning, merges ? procedure.Id : null));
+    }
+
     // ---- looking things up -------------------------------------------------------------------------
 
     /// <summary>
@@ -394,6 +469,17 @@ public sealed class DocumentEditor
     /// reference to a block or body that does not exist. Both would otherwise fail deep inside a command
     /// with an exception the user cannot act on, or — worse — succeed against the wrong list.
     /// </remarks>
+    /// <summary>
+    /// An edit that was asked for and would change nothing, and is therefore not a refusal either.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="Refuse"/> because a refusal carries a problem string, and the UI shows that
+    /// string to the user. "You typed the name it already had" is not a problem and must not be announced
+    /// as one; it also must not reach the undo stack, or a rename that ended where it started would leave
+    /// an entry that does nothing when pressed.
+    /// </remarks>
+    private static DocumentEditResult Declined() => new(false);
+
     private DocumentEditResult? Refuse(DocumentCommand command)
     {
         switch (command)
@@ -489,6 +575,11 @@ public sealed class DocumentEditor
     /// </remarks>
     private bool Resolves(BodyRef where)
     {
+        if (where.IsProcedureBody)
+        {
+            return _project.FindProcedureById(where.OwnerId) is not null;
+        }
+
         if (_project.Targets
             .SelectMany(target => target.Scripts)
             .Any(candidate => candidate.Hat.Id == where.OwnerId))

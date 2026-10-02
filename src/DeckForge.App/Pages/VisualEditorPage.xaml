@@ -283,6 +283,100 @@
                             </Border>
                         </Expander>
 
+                        <!--
+                            My Blocks: the definition of the procedure selected in the strip.
+
+                            Above the slot editors and collapsed, because Part 7.14's `define {name}` carries
+                            its parameters as slots and a block's slot count is fixed when the block is made.
+                            The declaration's parameter list can change while a user is still deciding what
+                            the procedure is for, so the parameters live here and the call blocks take their
+                            arity from the declaration. The body is a column on the canvas, not a field here:
+                            it is a stack of blocks, and it is edited with the same gestures as any other.
+
+                            Its own row rather than the first thing in the scrolling region, so that opening
+                            it does not push the block editors - what somebody clicks a block for - down the
+                            panel.
+                        -->
+                        <Expander Grid.Row="0" Margin="8,0,8,0" Header="My Blocks"
+                                  Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                  HorizontalAlignment="Stretch"
+                                  Visibility="{Binding HasSelectedProcedure, Converter={StaticResource TrueVisible}}"
+                                  IsExpanded="True">
+                            <!--
+                                Open rather than collapsed, and statically: an Expander binds IsExpanded
+                                two-way by default, and pointing it at a read-only property throws an
+                                InvalidOperationException the moment the panel is built - which the crash
+                                handler swallows, so the page comes up looking almost right with an empty
+                                canvas. OneTime would also silence it, but the honest reading of "open when
+                                a procedure is selected" is one line of markup rather than a settable
+                                property nobody sets.
+                            -->
+                            <StackPanel x:Name="ProcedurePanel" Margin="0,6,0,0"
+                                        DataContext="{Binding SelectedProcedure}">
+
+                                <TextBlock Text="Name" FontSize="10.5"
+                                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                <TextBox x:Name="ProcedureNameBox" Tag="{Binding}" FontSize="12"
+                                         Text="{Binding Header, Mode=OneWay}"
+                                         LostFocus="ProcedureName_LostFocus" KeyDown="ProcedureName_KeyDown" />
+
+                                <CheckBox x:Name="ReturnsBox" Tag="{Binding}" Margin="0,6,0,0"
+                                          Content="Returns a value"
+                                          Checked="Returns_Changed" Unchecked="Returns_Changed"
+                                          IsChecked="{Binding Procedure.Returns, Mode=OneWay}" />
+
+                                <TextBlock Text="Parameters" FontSize="10.5" Margin="0,8,0,2"
+                                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+
+                                <ItemsControl ItemsSource="{Binding Parameters}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <!--
+                                                No Tag on these two controls, and that is the point. The
+                                                panel only ever shows the selected procedure, so the
+                                                handler reads it from the editor rather than being told
+                                                it twice - and being told it twice was what broke: the row
+                                                lives in a DataTemplate, where neither ElementName nor an
+                                                ancestor search can see the panel's DataContext, so the
+                                                button looked wired and did nothing.
+                                            -->
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Text="{Binding Name, Mode=OneWay}"
+                                                         FontSize="11.5"
+                                                         LostFocus="Parameter_LostFocus" />
+                                                <ui:Button Grid.Column="1" Content="×" MinWidth="26" MinHeight="24" Margin="4,0,0,0"
+                                                           FontSize="13" Click="ParameterRemove_Click"
+                                                           ToolTip="Remove this parameter" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Text="Takes no parameters — call it with the plain call block."
+                                           FontSize="10.5" TextWrapping="Wrap" Margin="0,2,0,0"
+                                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                           Visibility="{Binding IsCallableAsBareCall, Converter={StaticResource TrueVisible}}" />
+
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <ui:Button Content="+ Parameter" Padding="8,2" FontSize="11"
+                                               Tag="{Binding}"
+                                               Click="ParameterAdd_Click" />
+                                    <ui:Button Content="Delete procedure" Padding="8,2" Margin="8,0,0,0"
+                                               FontSize="11" Tag="{Binding}"
+                                               Click="ProcedureDelete_Click"
+                                               ToolTip="Remove the procedure. Calls to it will be reported as missing." />
+                                </StackPanel>
+
+                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" FontSize="10.5"
+                                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                           Text="Its body is the column on the canvas. Drag blocks into it the same way you would into a script." />
+                            </StackPanel>
+                        </Expander>
+
                         <Grid Grid.Row="1" Margin="12,0,12,8"
                               Visibility="{Binding HasSelection, Converter={StaticResource TrueVisible}}">
                             <Grid.RowDefinitions>

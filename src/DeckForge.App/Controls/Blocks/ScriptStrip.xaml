@@ -2,52 +2,129 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:conv="clr-namespace:DeckForge.App.Converters"
-             xmlns:blocks="clr-namespace:DeckForge.App.Controls.Blocks"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              Background="Transparent">
 
     <!--
-        The list of scripts, read-only for now.
+        The script strip, and the procedure list under it.
 
-        Part 9.2 puts the strip beside the canvas rather than above it, so the canvas keeps the window's
-        height. Each row names its script and says how many blocks it holds, because a canvas with eleven
-        tall scripts on it is otherwise a wall with no signposts.
+        Part 9.2 puts this beside the canvas rather than above it, so the canvas keeps the window's height,
+        and lists procedures alongside the scripts — a procedure is a named body of blocks, and Part 9.2
+        draws it as a peer of the scripts rather than as a separate feature.
+
+        A script's name is edited in place, because Part 9.6's rule that a field is edited where it is shown
+        applies to a script's name as much as to a block's. The hat and the delete live behind the row's
+        context menu: both are rare, both change the shape of the script rather than its label, and putting
+        a dropdown on every one of eleven rows turns a list into a wall of controls.
     -->
     <UserControl.Resources>
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+        <conv:BoolToVisibilityConverter x:Key="TrueVisible" />
     </UserControl.Resources>
 
-    <ListBox ItemsSource="{Binding Scripts}"
-             Background="Transparent"
-             BorderThickness="0"
-             Padding="0"
-             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-             HorizontalContentAlignment="Stretch">
-        <ListBox.ItemTemplate>
-            <DataTemplate>
-                <Grid Margin="4,3">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-                    <Border Width="3" Height="20" CornerRadius="2" VerticalAlignment="Center"
-                            Background="{Binding Hat.FillKey, Converter={StaticResource KeyToBrush}}" />
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
 
-                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" />
-                        <TextBlock FontSize="10.5" Foreground="{DynamicResource Liquid.TextTertiaryBrush}">
-                            <Run Text="{Binding BlockCount, Mode=OneWay}" />
-                            <Run Text=" blocks" />
-                        </TextBlock>
-                    </StackPanel>
+                <!--
+                    My Blocks first, above the scripts.
+
+                    Part 9.2 sketches the strip as script, script, procedure — and with a document of one
+                    or two scripts that is the better order, because the scripts are what you work on. The
+                    sample has eleven, and the result was a procedure list below eleven entries in a
+                    scrollable column, which put the user's own procedures and the only button that creates
+                    them below the fold of every window: the strip listed a document's procedures nowhere
+                    until it was scrolled to, and the sample's eleven scripts were the reason.
+
+                    So the rarer thing goes first, and the order is a decision rather than a transcription
+                    of the sketch.
+                -->
+                <Grid Margin="10,4,10,4">
+                    <TextBlock Text="MY BLOCKS" FontSize="10.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                    <ui:Button Content="+ Add" Padding="8,1" HorizontalAlignment="Right" FontSize="10.5"
+                               Click="AddProcedure_Click"
+                               ToolTip="Define a procedure. Its body becomes a column on the canvas." />
                 </Grid>
-            </DataTemplate>
-        </ListBox.ItemTemplate>
-        <ListBox.ItemContainerStyle>
-            <Style TargetType="ListBoxItem">
-                <Setter Property="Padding" Value="0" />
-                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-            </Style>
-        </ListBox.ItemContainerStyle>
-    </ListBox>
+
+                <ItemsControl ItemsSource="{Binding Procedures}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="Transparent" Padding="8,3"
+                                    MouseLeftButtonUp="Procedure_Click">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Width="3" Height="16" CornerRadius="2" VerticalAlignment="Center"
+                                                Background="{Binding AccentKey, Converter={StaticResource KeyToBrush}}" />
+                                        <TextBlock Text="{Binding Header}" FontSize="12" FontWeight="SemiBold"
+                                                   Margin="6,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Signature}" FontSize="10.5" Margin="9,2,0,0"
+                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                    <TextBlock Text="{Binding Summary}" FontSize="10.5" Margin="9,0,0,0"
+                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="No procedures yet. Add one to write blocks that other blocks can call."
+                           FontSize="10.5" Margin="9,2,9,6" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                           Visibility="{Binding HasNoProcedures, Converter={StaticResource TrueVisible}}" />
+
+                <TextBlock Text="SCRIPTS" FontSize="10.5" FontWeight="SemiBold" Margin="10,8,0,4"
+                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+
+                <ItemsControl ItemsSource="{Binding Scripts}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="Transparent" Padding="8,3">
+                                <StackPanel>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border Width="3" Height="16" CornerRadius="2" VerticalAlignment="Center"
+                                                Background="{Binding AccentKey, Converter={StaticResource KeyToBrush}}" />
+
+                                        <TextBox x:Name="NameBox" Grid.Column="1" Margin="6,0,0,0"
+                                                 Tag="{Binding}"
+                                                 Text="{Binding Name, Mode=OneWay}"
+                                                 FontSize="12" FontWeight="SemiBold"
+                                                 BorderThickness="0" Background="Transparent"
+                                                 LostFocus="Name_LostFocus"
+                                                 KeyDown="Name_KeyDown"
+                                                 ToolTip="Rename this script" />
+                                    </Grid>
+
+                                    <TextBlock FontSize="10.5" Margin="9,0,0,0"
+                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                               Text="{Binding HatLabel}"
+                                               Tag="{Binding}"
+                                               MouseLeftButtonUp="Hat_Click"
+                                               ToolTip="Right-click to change what starts this script" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <ui:Button Grid.Row="1" Content="+ Add script" Margin="10,6,10,10" Click="AddScript_Click"
+                   HorizontalAlignment="Stretch"
+                   ToolTip="A new script. Right-click it to choose what starts it." />
+    </Grid>
 </UserControl>

@@ -63,7 +63,7 @@ internal static class CanvasHitTest
     /// </remarks>
     public static (BlockNodeViewModel Owner, SlotViewModel Slot)? SlotAt(FrameworkElement root, Point point)
     {
-        foreach (var view in Descendants<InputSlotView>(root))
+        foreach (var view in DescendantsOf<InputSlotView>(root))
         {
             if (view.Data is { } slot && Within(view, root, point))
             {
@@ -75,7 +75,7 @@ internal static class CanvasHitTest
     }
 
     /// <summary>Every tile under <paramref name="root"/>, outermost first.</summary>
-    public static IReadOnlyList<BlockTile> Tiles(DependencyObject root) => [.. Descendants<BlockTile>(root)];
+    public static IReadOnlyList<BlockTile> Tiles(DependencyObject root) => [.. DescendantsOf<BlockTile>(root)];
     /// <summary>
     /// Where every block under <paramref name="root"/> sits, in <paramref name="root"/>'s coordinates.
     /// </summary>
@@ -121,7 +121,7 @@ internal static class CanvasHitTest
     {
         var slots = new List<(string BlockId, string SlotName, double X, double Y)>();
 
-        foreach (var view in Descendants<InputSlotView>(root))
+        foreach (var view in DescendantsOf<InputSlotView>(root))
         {
             if (view.Data is not { } slot || !Visible(view, root))
             {
@@ -147,14 +147,40 @@ internal static class CanvasHitTest
     /// </remarks>
     public static IReadOnlyList<DropCandidate> Candidates(
         FrameworkElement root,
-        IEnumerable<VisualScript> scripts)
+        IEnumerable<VisualScript> scripts) =>
+        Candidates(root, scripts.Select(script => (
+            BodyRef.ScriptBody(script.Hat.Id),
+            (IReadOnlyList<Block>)script.Body,
+            (Block?)script.Hat)));
+
+    /// <summary>
+    /// Every gap, mouth and hat slot across every column on the canvas.
+    /// </summary>
+    /// <param name="root">The drag surface.</param>
+    /// <param name="columns">The columns on it, scripts and procedures alike.</param>
+    /// <remarks>
+    /// One column at a time, because <see cref="DropResolver.CandidatesFor"/> walks a body and everything
+    /// nested inside it and needs to know which body it is walking. Flattening the results is the only
+    /// canvas-side bookkeeping, and it is a list concatenation.
+    /// </remarks>
+    public static IReadOnlyList<DropCandidate> Candidates(
+        FrameworkElement root,
+        IEnumerable<ColumnViewModel> columns) =>
+        Candidates(root, columns.Select(column => (
+            column.Address,
+            column.StatementBlocks,
+            (column as ScriptViewModel)?.Hat.Block)));
+
+    private static IReadOnlyList<DropCandidate> Candidates(
+        FrameworkElement root,
+        IEnumerable<(BodyRef Address, IReadOnlyList<Block> Body, Block? Hat)> columns)
     {
         var rects = Rects(root);
         var candidates = new List<DropCandidate>();
 
-        foreach (var script in scripts)
+        foreach (var column in columns)
         {
-            candidates.AddRange(DropResolver.CandidatesFor(script, rects));
+            candidates.AddRange(DropResolver.CandidatesFor(column.Address, column.Body, column.Hat, rects));
         }
 
         return candidates;
@@ -184,7 +210,7 @@ internal static class CanvasHitTest
         element.ActualWidth > 0 && element.ActualHeight > 0 && element.IsVisible && root.IsAncestorOf(element);
 
     /// <summary>Every element of a type below the root, in visual order.</summary>
-    private static IEnumerable<T> Descendants<T>(DependencyObject root)
+    public static IEnumerable<T> DescendantsOf<T>(DependencyObject root)
         where T : DependencyObject
     {
         var count = VisualTreeHelper.GetChildrenCount(root);
@@ -198,7 +224,7 @@ internal static class CanvasHitTest
                 yield return match;
             }
 
-            foreach (var nested in Descendants<T>(child))
+            foreach (var nested in DescendantsOf<T>(child))
             {
                 yield return nested;
             }

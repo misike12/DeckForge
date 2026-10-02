@@ -138,7 +138,11 @@ public static class DropPlan
     /// </remarks>
     private static DocumentEditResult IntoBody(DocumentEditor editor, DragPayload payload, DropCandidate landing)
     {
-        var where = new BodyRef(landing.ParentId, landing.BodyName ?? string.Empty);
+        // From the candidate rather than rebuilt from its two names: a procedure body and a script body are
+        // addressed differently, and rebuilding the reference from the id alone produces a script
+        // reference to a hat that does not exist - so a legal drop into a procedure was reported as a
+        // refusal about a missing body.
+        var where = landing.Where;
 
         if (!payload.IsMove)
         {
@@ -182,7 +186,7 @@ public static class DropPlan
     /// </remarks>
     private static DocumentEditResult OntoStatement(DocumentEditor editor, DragPayload payload, DropCandidate landing)
     {
-        var where = new BodyRef(landing.ParentId, landing.BodyName ?? string.Empty);
+        var where = landing.Where;
         var body = DocumentLists.ListFor(editor.Project, where);
 
         if (landing.Index < 0 || landing.Index >= body.Count)

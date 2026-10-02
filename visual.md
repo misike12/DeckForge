@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P6 complete (Visual in the sidebar's Blocks slot, `BlockActionPage` and `BlockActionViewModel` deleted, the Ctrl+digit order pinned by a test — 643 green). Next: P7 — procedures and multi-script UX.**
+**Current position: P7 complete (P7a a procedure is an addressable, editable body, with the call and return rules that make the C# compile; P7b the script strip, the My Blocks panel, and procedure bodies as canvas columns — 665 green). Next: P8 — the simulator, the tracer and the debugger.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -85,7 +85,7 @@ inspected.
 | P5a — Editing and the inspector's editors | ✅ **complete** | `Core/Visual/SlotValue.cs`: reading a slot's value and turning a typed one into an input, so which member of a `BlockInput` carries the value is decided in Core rather than in ten editors. `App/ViewModels/Visual/InspectorViewModel.cs`: the panel's rows, the spinners, the toggle, the dropdowns, the row-expression preview and the generated-C# pane, all writing through `DocumentEditor`. Clicking a hole on the canvas selects the block *and* the slot. Diagnostics are clickable and select the offending block. 10 new tests (`SlotValueTests`, incl. an exhaustiveness check over every `SlotType`), full suite **628 green**. Driven in the real window: typing into a count, the spinner, the toggle, clear, a diagnostic click, and the generated pane |
 | P5b — Save, load, dirty state | ✅ complete | **milestone 11** |
 | P6 — Shell integration, retire the old Blocks page | ✅ complete | **milestone 12** |
-| P7 — Procedures and multi-script | ⬜ not started | |
+| P7 — Procedures and multi-script | ✅ complete | **milestones 13–14** |
 | P8 — Simulator, tracer, debugger | ⬜ not started | |
 | P9 — Multi-target codegen | ⬜ not started | |
 | P10 — Polish and hardening | ⬜ not started | |
@@ -103,6 +103,9 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
+| Date | Completed | Commit |
+|---|---|---|
+| 2026-10-01 | **P7b**: the strip, the panel, and the column. A procedure is a **column**, not a form — `ColumnViewModel` gives scripts and procedures one template, one items source and one hit test, with `HasHat` as the whole difference, and because procedures sit in `Columns` the arrow keys reach their bodies. My Blocks goes **above** the scripts, inverting §9.2's sketch on purpose: with eleven scripts the sketched order put a document's own procedures and the only button that creates one below the fold of every window. **Three defects the window found, none a test could have.** An `Expander` bound `IsExpanded` to a read-only property, which throws on every load and is swallowed by the crash handler — the page came up looking almost right with an empty canvas. The parameter list never updated, because the document holds plain `List<T>` which raises no notification: the editor changed the document and the panel showed what it had been built with. And the delete button named its procedure through a `DataContext` that a `DataTemplate` cannot reach by `ElementName` or by ancestor search — both were tried, and both produced a button that looked wired and did nothing; it now reads the selected procedure from the editor, the only one the panel can be showing. One refusal was simply backwards: un-ticking "returns a value" was allowed while a call was *waiting* for a result, so the checkbox produced two red diagnostics instead of an explanation. The drop path needed `DropCandidate.ProcedureBody`: a procedure gap is identical to a script gap until you write into it, and the rebuilt reference was a script reference to a hat that does not exist — so a legal drop was refused as a missing body. The canvas is no longer capped at 1600px, which had made the far end of the document unreachable. Verified in the window against a saved workspace: select and scroll to a procedure, rename, add and remove parameters, the refusal, a palette block dropped into a procedure body, an added procedure named `myProcedure2` rather than colliding, Save, restart restoring all four exactly. Also **P7a**, committed separately: `ProcedureDeclaration.Id`, `BodyRef.ProcedureBody`, and the call and return rules. 22 new tests, full suite **665 green** | **milestones 13–14 — see commit** |
 | 2026-10-01 | **P6**: shell integration, and the old Blocks page retired. `BlockActionPage.xaml`, its code-behind and `BlockActionViewModel.cs` are deleted along with the `"blocks"` registry entry and the two DI registrations; `BlockCompiler` and `BlockProgramWriter` stay, because the compiler's public surface is the engine the new emitters sit behind and `BlockProgramWriterTests` still exercises the marker round-trip — `BlockProgramWriter` now has no production caller, which is a decision rather than an oversight. The risky part was positional: `MainWindow` reads the sidebar in order, so Ctrl+9 is simply the ninth item, and leaving Visual where it was would have handed Widget Designer the number Blocks had. Visual went into Blocks' exact slot. `NavigationShortcutTests` asserted only that every item has a tag and no tag repeats — both true through *any* reorder, so nothing recorded which digit meant which page and a renumbering would have passed the suite. The order is now pinned as a list, plus an assertion that at least ten items exist, because ten digits is a requirement the markup never states. Precisely: Ctrl+1–8 unchanged, Ctrl+9 now opens Visual, and Ctrl+0 now opens Widget Designer, which had no shortcut at all as the eleventh item — nothing lost a number. Verified in the window after a wait long enough to matter. 2 new tests, full suite **643 green** | **milestone 12 — see commit** |
 | 2026-10-01 | **P5b**: save, load, dirty state. `VisualStore` in Core owns the file: the document is a sidecar at `<workspace>/.deckforge/canvas.json` and the C# is a projection of it, never the other way round, because the action source is generated and anything hand-edited inside it is lost on the next write. Three decisions that are refusals in disguise: writes go beside the file and then replace it, so a crash cannot leave a canvas that cannot be parsed; every save keeps the previous file as `canvas.previous.json`; and an unreadable canvas falls back to that backup, says so, and leaves the unreadable file alone — it is the only copy of whatever happened, and the warning names the consequence, because "saving will replace it" is actionable and "something went wrong" is not. Dirty state is *computed*, not remembered: the document is serialised and compared with the disk, so an undo back to the saved state stops claiming unsaved work — an indicator that is always on is indistinguishable from one that is never on. `DocumentEditor.ReplaceDocument` drops the history, because every command on the stack carries objects from the old document and replaying one would edit a document nobody can see and report success. **One defect the window found, which no test could**: with a corrupt canvas and a good backup the page drew the previous save *silently*, and the header read "Unsaved changes" — true, and silent about the fact that what is on screen is not what is on disk, so the recovery looked like the app losing work. `VisualStoreResult` now carries `Recovered`. 11 new tests; full suite **641 green** | **milestone 11 — see commit** |
 | 2026-10-01 | **P5a**: the inspector's editors, the generated C# pane, and diagnostics that select. `SlotValue` in Core reads a slot and turns a typed one back into an input, which puts the one decision that matters here — *which member of the `BlockInput` carries the value* — in a tested place instead of in ten editors. A number in `Text` is a document that validates, emits, and produces something other than what the user typed, and that failure is completely silent. The rows read through to the block and write only through the editor, so the panel cannot disagree with the canvas. Two refusals: a number slot rejects a word and a boolean rejects anything but true/false, before the keystroke reaches the document; and Clear is hidden for booleans, because emptying a required one produces a document nothing can compile. The row-expression preview is labelled "Row expression" and not "Generated", since emitting one block needs a whole action around it — the pane at the bottom of the panel goes through `VisualEmitter.CompileTarget` and is the one that may claim to be what Save writes. Clicking a hole on the canvas selects the block *and* the slot. **One defect no test could find**: typing `7` into a count of `10` produced `710`, because the row committed the keystroke, the canvas rebuilt, and the rebuild handed the binding its own freshly-read value back, so the next character appended. The row now reads through to the block whenever its draft matches it. 10 new tests, including one that walks every `SlotType` in the catalogue; full suite **628 green** | **milestone 10 — see commit** |
@@ -1815,6 +1818,89 @@ validation feedback for calls and returns.
 
 **Exit criteria.** A program with two scripts and a shared procedure compiles into a plugin that
 builds and passes conformance.
+
+### 9.6.4 As built (P7a) — a procedure is a body, not a declaration
+
+Before this phase a procedure was something the emitter read and nothing could edit. Three pieces made
+it a thing a user owns, and the order matters: the model first, then the rules that describe what a call
+to it may look like, and only then the panel.
+
+**A procedure needs an id, and it is an id rather than its name.** `BodyRef` addresses bodies by id
+because a path of indices goes stale the moment anything above it moves — and undo replays those moves in
+reverse. A procedure's body had no address at all, so a block inside one was *findable* and uneditable:
+selectable, and then refused by every command, with a message about a body that did not exist.
+`BodyRef.ProcedureBody(id)` is the fix, and the id belongs to the declaration, so **renaming a procedure
+does not move its body** — a name-derived address would leave every undo entry holding a reference that
+resolves to nothing the moment the name changed.
+
+Documents written before ids existed deserialise with an empty string and are given one on load, rather
+than refused: a canvas that saved perfectly well should not stop opening because a field was added.
+
+**The call rules exist because the alternative is a compile error in the user's own file.** `vis-call-arity`
+for a wrong argument count, `vis-call-value-void` for using a procedure that returns nothing as a value,
+`vis-call-value-unused` (a warning) for throwing away a value, and the two return rules —
+`vis-return-value-void` and `vis-return-no-value` — because `return value;` from a `Task` and `return;`
+from a `Task<object?>` are both illegal and neither is catchable from the editor. Recursion is a **warning**,
+transitively: §7.14 says so, and refusing it would be a claim the editor cannot keep, since mutually
+recursive procedures with no base case are legal C#. The interesting case is not A calling A — two
+procedures calling each other produce nothing from a direct check and hang exactly the same way.
+
+**Two bugs the tests found, both from capturing "before" state at the wrong moment.** Both commands edit
+the very document they snapshot, so reading the current value *when about to apply* records the value from
+the previous keystroke. A merged rename therefore restored the middle of the word rather than what came
+before it, and a delete-then-undo restored the name from before the last keystroke. Both now snapshot in
+the constructor, and `Merge` carries the oldest name forward explicitly.
+
+**The sample had to become legal.** One declaration cannot serve all three call shapes: a bare `call`
+passes nothing, so its procedure takes nothing, and the reporter form needs one that returns a value. The
+sample now declares three procedures, one per call shape, and points each call block at the right one —
+the same move Phase 3 made for `break` and `continue` inside loops. The alternative, loosening the rules
+until the sample passed, would have left every real document with the compile error they exist to name.
+
+### 9.6.5 As built (P7b) — the strip, the panel, and the column
+
+**A procedure is a column, not a form.** `ColumnViewModel` gives scripts and procedures one template, one
+items source and one hit test; `HasHat` is the entire difference. The alternative — a procedure edited in
+a panel — is a stack of blocks edited through a form, which is a worse editor than the one beside it. And
+because procedures are in `Columns`, the arrow keys reach their bodies: `AllNodes()` walks columns, so a
+procedure that were not in it would be a place on the canvas the keyboard cannot get to.
+
+**My Blocks goes above the scripts, which inverts §9.2's sketch, on purpose.** With one or two scripts the
+sketched order is right. The sample has eleven, and the result was that a document's own procedures — and
+the only button that creates one — sat below the fold of every window. The rarer thing goes first.
+
+**Three defects the window found, none of which a test could have.**
+
+- *`IsExpanded="{Binding HasSelectedProcedure}"` threw on every load.* An `Expander` binds `IsExpanded`
+  two-way by default, and pointing it at a read-only property is an `InvalidOperationException` — which
+  the crash handler swallows, so the page came up looking almost right with an empty canvas and a banner
+  nobody reads.
+- *The parameter list did not update.* The document holds plain `List<T>`, which raises no notification,
+  so the panel showed the parameters a procedure had when the panel was built and a row added by the
+  editor existed in the document and nowhere on screen. Projected over `ObservableCollection` now, holding
+  the declaration's own instances so rows can be matched back by reference.
+- *The parameter delete button did nothing, and said nothing.* It named the procedure by `Tag`, resolved
+  through the panel's `DataContext` — from inside a `DataTemplate`, which cannot reach it by `ElementName`
+  or by an ancestor search. Both were tried; both produced a button that looked wired. It now reads the
+  selected procedure from the editor, which is the only procedure the panel can be showing anyway.
+
+**One refusal the window showed was simply wrong.** Un-ticking "returns a value" was refused only when a
+call *discarded* a result, and allowed while a call was *waiting* for one — so the checkbox produced two
+red diagnostics instead of an explanation. Both directions are now refused with a sentence naming the calls
+that have to change first.
+
+**The drop path needed one more thing, and finding it was the useful part.** `DropCandidate` carried a
+parent id and a body name, and `DropPlan` rebuilt a `BodyRef` from them. A procedure gap looks identical to
+a script gap until you try to write into it: the rebuilt reference was a *script* reference to a hat that
+does not exist, so a legal drop was reported as a refusal about a missing body. `DropCandidate` now carries
+`ProcedureBody` and exposes `Where`, and the flag is set from the reference the candidate was collected
+from.
+
+**Verified in the window, against a saved workspace:** procedures listed and selectable in the strip,
+selecting one scrolling its column into view (the canvas is no longer capped at 1600px, which made the far
+end of the document unreachable), the panel renaming and adding and removing parameters, the returns
+refusal, a palette block dropped into a procedure body and landing under its `return`, an added procedure
+named `myProcedure2` rather than colliding, Save, and a restart restoring all four procedures exactly.
 
 ### P8 — Simulator, tracer, debugger
 

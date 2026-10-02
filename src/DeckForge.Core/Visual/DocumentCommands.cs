@@ -19,16 +19,31 @@ namespace DeckForge.Core.Visual;
 /// A hat's id addresses its script body, rather than the script's own id, so one rule resolves both cases
 /// and there is no second thing to keep in step.
 /// </para>
+/// <para>
+/// A procedure body is addressed the same way, by the declaration's id, and needs the extra flag because
+/// "the owner with this id" is otherwise ambiguous: a hat id and a procedure id come from different
+/// sequences and can collide. The flag is part of the reference rather than a convention, so a stale
+/// reference fails loudly in <see cref="DocumentLists.ListFor"/> instead of quietly editing the wrong
+/// body.
+/// </para>
 /// </remarks>
-public readonly record struct BodyRef(string OwnerId, string BodyName = "")
+public readonly record struct BodyRef(string OwnerId, string BodyName = "", bool IsProcedure = false)
 {
     /// <summary>The body a script's statements live in.</summary>
     public static BodyRef ScriptBody(string hatId) => new(hatId);
 
+    /// <summary>The body a procedure's statements live in.</summary>
+    public static BodyRef ProcedureBody(string procedureId) => new(procedureId, "", IsProcedure: true);
+
     /// <summary>Whether this addresses a script rather than a wrapped body.</summary>
     public bool IsScriptBody => string.IsNullOrEmpty(BodyName);
 
-    public override string ToString() => IsScriptBody ? $"script {OwnerId}" : $"{OwnerId}.{BodyName}";
+    /// <summary>Whether this addresses a procedure body rather than a script's.</summary>
+    public bool IsProcedureBody => IsProcedure && string.IsNullOrEmpty(BodyName);
+
+    public override string ToString() => IsProcedureBody
+        ? $"procedure {OwnerId}"
+        : IsScriptBody ? $"script {OwnerId}" : $"{OwnerId}.{BodyName}";
 }
 
 /// <summary>
@@ -615,6 +630,363 @@ public sealed class MoveScript : DocumentCommand
     }
 }
 
+/// <summary>
+/// Renames a script, or swaps the hat it starts with.
+/// </summary>
+/// <remarks>
+/// One command for both because they are the same gesture as far as undo is concerned — the strip's rename
+/// field and hat dropdown belong to one row, and a user who changes a hat and then presses Ctrl+Z expects
+/// to be back where they were, not to have to remember which of the two they did last.
+///
+/// The hat is swapped by <em>moving the body onto a new hat</em> rather than by mutating the old hat's
+/// kind, because a hat's id addresses its script body: changing the kind in place would leave a
+/// "when event received" script carrying the id of a "when action runs" hat, and the id is what
+/// <see cref="BodyRef"/> and every undo entry still hold.
+/// </remarks>
+public sealed class EditScript : DocumentCommand
+{
+    public EditScript(VisualScript script, string? name = null, Block? hat = null, string? beforeName = null)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+
+        Script = script;
+        Name = name;
+        Hat = hat;
+        _beforeName = beforeName ?? script.Name;
+        _replacedHat = hat is null ? null : script.Hat;
+    }
+
+    public VisualScript Script { get; }
+
+    /// <summary>The new name, or null to leave it alone.</summary>
+    public string? Name { get; }
+
+    /// <summary>The new hat, or null to leave the existing one alone.</summary>
+    public Block? Hat { get; }
+
+    /// <summary>Set by the editor for a rename, so typing a new name is one undo entry.</summary>
+    public string? MergeKey
+    {
+        init => _mergeKey = value;
+    }
+
+    private string? _mergeKey;
+
+    public override string? CoalesceKey => _mergeKey;
+
+    /// <summary>
+    /// The same 800ms per-field window <see cref="EditField"/> uses.
+    /// </summary>
+    /// <remarks>
+    /// A key with a window of zero never merges, which is the default for everything that is not typing —
+    /// and it is why the window is written out here rather than left to the base class. A rename arriving
+    /// from a text field is typing, and typing has to be one <c>Ctrl+Z</c>.
+    /// </remarks>
+    public override int CoalesceWindowMs => 800;
+
+    /// <summary>
+    /// Folds a second rename of the same script into this one.
+    /// </summary>
+    /// <remarks>
+    /// The merged command keeps <em>this</em> command's remembered name and the newer command's name, which
+    /// is the only combination that makes one Ctrl+Z after four keystrokes restore the original name: a
+    /// merged command that captured the current name would restore the third character.
+    /// </remarks>
+    public override DocumentCommand? Merge(DocumentCommand newer) =>
+        newer is EditScript { Name: { } newerName, Hat: null }
+            ? new EditScript(Script, newerName, beforeName: _beforeName) { MergeKey = _mergeKey }
+            : null;
+
+    public override string Label => Hat is null ? "Rename script" : "Change script hat";
+
+    /// <summary>
+    /// The name the script had when this command was built.
+    /// </summary>
+    /// <remarks>
+    /// Captured in the constructor rather than on the first <see cref="Apply"/>. The document is the same
+    /// object the command mutates, so "read the current value when I am about to apply" records the value
+    /// from the previous keystroke — which is why an undo of a merged rename used to land on the middle of
+    /// the word rather than before it.
+    /// </remarks>
+    private readonly string _beforeName;
+
+    /// <summary>The hat this command replaced, kept so the inverse can put that exact block back.</summary>
+    private readonly Block? _replacedHat;
+
+    public override void Apply(VisualProject project)
+    {
+        if (Name is not null)
+        {
+            Script.Name = Name;
+        }
+
+        if (Hat is not null)
+        {
+            Script.Hat = Hat;
+        }
+    }
+
+    public override void Revert(VisualProject project)
+    {
+        if (Name is not null)
+        {
+            Script.Name = _beforeName;
+        }
+
+        if (Hat is not null)
+        {
+            Script.Hat = _replacedHat ?? Script.Hat;
+        }
+    }
+}
+
+/// <summary>
+/// Adds, deletes or edits a procedure declaration.
+/// </summary>
+/// <remarks>
+/// One command with three shapes rather than three commands, because the panel's three gestures share the
+/// property that matters: a procedure's body is addressed by its declaration's id, so an edit that changed
+/// that id would strand every reference to the body. This command never touches <see cref="ProcedureDeclaration.Id"/>.
+/// </remarks>
+public sealed class EditProcedure : DocumentCommand
+{
+internal EditProcedure(
+        ProcedureDeclaration? before,
+        ProcedureDeclaration? after,
+        string label,
+        string? beforeName = null)
+    {
+        Before = before;
+        After = after;
+        LabelText = label;
+
+        // Snapshotted here for the same reason <see cref="EditScript"/> does it in its constructor: the
+        // declaration in the document is the same object this command edits, so reading its name when
+        // about to apply records the value from the previous keystroke. It also has to be a snapshot
+        // rather than the object, because the apply step copies the new name *into* that object.
+        //
+        // `beforeName` is only ever passed by Merge, and it is what makes a merged rename restore the
+        // name from before the first keystroke rather than from before the last one.
+        _beforeName = beforeName ?? before?.Name ?? string.Empty;
+        _beforeParameters = [.. before?.Parameters.Select(parameter => new ProcedureParameter
+        {
+            Name = parameter.Name,
+            Type = parameter.Type,
+        }) ?? []];
+        _beforeReturns = before?.Returns ?? false;
+    }
+
+    /// <summary>The declaration looked like before, or null for an add.</summary>
+    private ProcedureDeclaration? Before { get; }
+
+    /// <summary>What it looks like, or null for a delete.</summary>
+    private ProcedureDeclaration? After { get; }
+
+    /// <summary>Where it was, so a delete's inverse puts it back in the same slot.</summary>
+    public int Index { get; init; } = -1;
+
+    /// <summary>
+    /// Whether this edit changed the parameter list, which decides if a later rename can merge into it.
+    /// </summary>
+    /// <remarks>
+    /// Merging two edits is only safe when they are the same edit. A rename folded into a parameter change
+    /// would restore the name but lose the parameters, so the two are told apart rather than assumed equal.
+    /// </remarks>
+    public bool ParametersChanged { get; init; }
+
+    /// <summary>Set by the editor for a rename, so typing a new name is one undo entry.</summary>
+    public string? MergeKey
+    {
+        init => _mergeKey = value;
+    }
+
+    private string? _mergeKey;
+
+    public override string? CoalesceKey => _mergeKey;
+
+    /// <summary>The same 800ms per-field window <see cref="EditField"/> uses; see <see cref="EditScript"/>.</summary>
+    public override int CoalesceWindowMs => 800;
+
+    /// <summary>Folds a second rename of the same procedure into this one, oldest name first.</summary>
+    public override DocumentCommand? Merge(DocumentCommand newer) =>
+        newer is EditProcedure { After: { } renamed, Before: not null } edit && !edit.ParametersChanged
+            ? new EditProcedure(Before, renamed, LabelText, _beforeName) { MergeKey = _mergeKey }
+            : null;
+
+    public override string Label => LabelText;
+
+    private string LabelText { get; }
+
+    private readonly string _beforeName;
+
+    private readonly List<ProcedureParameter> _beforeParameters;
+
+    private readonly bool _beforeReturns;
+
+    public override void Apply(VisualProject project)
+    {
+        if (After is null)
+        {
+            var removed = Math.Clamp(Index, 0, project.Procedures.Count);
+            project.Procedures.RemoveAt(removed);
+            return;
+        }
+
+        var existing = Before is null
+            ? -1
+            : project.Procedures.FindIndex(candidate => candidate.Id == Before.Id);
+
+        if (existing >= 0)
+        {
+            // In place rather than remove-and-insert: replacing the list slot keeps every reference to
+            // this declaration — including the Body property the canvas is projecting — pointing at the
+            // same object, and a remove-and-insert would leave the canvas editing a detached copy.
+            Copy(After, project.Procedures[existing]);
+            return;
+        }
+
+        // -1 means the end. Clamping it to zero would put every new procedure at the top of the list,
+        // which is why an add and a delete have to be read as different intents despite sharing a command.
+        var insertion = Index < 0 ? project.Procedures.Count : Math.Clamp(Index, 0, project.Procedures.Count);
+        project.Procedures.Insert(insertion, After);
+    }
+
+    public override void Revert(VisualProject project)
+    {
+        if (Before is null)
+        {
+            var at = project.Procedures.FindIndex(candidate => candidate.Id == After?.Id);
+            if (at >= 0)
+            {
+                project.Procedures.RemoveAt(at);
+            }
+
+            return;
+        }
+
+        var existing = project.Procedures.FindIndex(candidate => candidate.Id == Before.Id);
+
+        if (existing >= 0)
+        {
+            // The remembered state wins over <see cref="Before"/>, because Before is the live object this
+            // command has been writing into: on a redo-then-undo it already holds the intermediate name.
+            // The user's "before" is the snapshot taken when the command was built.
+            Restore(project.Procedures[existing]);
+            return;
+        }
+
+        // Deleted and then undone: put the declaration back with the state it had, in the slot it was in.
+        Before.Name = _beforeName;
+        Before.Returns = _beforeReturns;
+        Before.Parameters.Clear();
+        Before.Parameters.AddRange(_beforeParameters.Select(parameter => new ProcedureParameter
+        {
+            Name = parameter.Name,
+            Type = parameter.Type,
+        }));
+
+        var insertion = Index < 0 ? project.Procedures.Count : Math.Clamp(Index, 0, project.Procedures.Count);
+        project.Procedures.Insert(insertion, Before);
+    }
+
+    /// <summary>Puts the remembered name, parameters and returning flag back onto a declaration.</summary>
+    private void Restore(ProcedureDeclaration declaration)
+    {
+        declaration.Name = _beforeName;
+        declaration.Returns = _beforeReturns;
+
+        declaration.Parameters.Clear();
+        declaration.Parameters.AddRange(_beforeParameters.Select(parameter => new ProcedureParameter
+        {
+            Name = parameter.Name,
+            Type = parameter.Type,
+        }));
+    }
+
+    /// <summary>Copies a declaration's editable members onto the object already in the document.</summary>
+    private static void Copy(ProcedureDeclaration from, ProcedureDeclaration to)
+    {
+        to.Name = from.Name;
+        to.Returns = from.Returns;
+
+        to.Parameters.Clear();
+        to.Parameters.AddRange(from.Parameters.Select(parameter => new ProcedureParameter
+        {
+            Name = parameter.Name,
+            Type = parameter.Type,
+        }));
+    }
+}
+
+/// <summary>
+/// The three procedure commands, as the editor's callers build them.
+/// </summary>
+/// <remarks>
+/// Factories rather than static methods on <see cref="EditProcedure"/> itself, for a reason worth writing
+/// down: <c>DocumentEditor</c> has three methods called <c>AddProcedure</c>, <c>DeleteProcedure</c> and
+/// <c>EditProcedure</c>, and a method group shadows a type name inside the class that declares it — so
+/// <c>EditProcedure.Edit(…)</c> inside the editor resolves against the method, not the type, and fails
+/// with a parse error about a brace that is perfectly fine. Naming the factory separately keeps both.
+/// </remarks>
+public static class ProcedureEdits
+{
+    /// <summary>Adds a procedure.</summary>
+    public static EditProcedure Add(ProcedureDeclaration procedure) =>
+        new(null, procedure, "Add procedure");
+
+    /// <summary>Removes a procedure, keeping it so the inverse can put it back where it was.</summary>
+    public static EditProcedure Delete(ProcedureDeclaration procedure, int index) =>
+        new(procedure, null, "Delete procedure") { Index = index };
+
+    /// <summary>
+    /// Replaces a procedure's name, parameters or returning flag, leaving its id and body alone.
+    /// </summary>
+    /// <param name="procedure">The declaration to change.</param>
+    /// <param name="name">The new name.</param>
+    /// <param name="parameters">The new parameter list, or null to keep the existing one.</param>
+    /// <param name="returning">Whether it returns a value, or null to keep the existing flag.</param>
+    /// <param name="mergeKey">
+    /// The coalescing key, or null. A parameter rather than an object initializer on the call: the editor
+    /// calls this from inside a class that has its own <c>EditProcedure</c> method, and building the command
+    /// with an initializer there is a shape that does not survive the parser.
+    /// </param>
+    /// <remarks>
+    /// The copy shares the original's <see cref="Block"/> list rather than cloning it. A parameter edit
+    /// that deep-copied the body would quietly detach the procedure from every block the canvas is
+    /// projecting, and the body would appear to lose everything the moment a name was typed.
+    /// </remarks>
+    public static EditProcedure Edit(
+        ProcedureDeclaration procedure,
+        string name,
+        IReadOnlyList<ProcedureParameter>? parameters = null,
+        bool? returning = null,
+        string? mergeKey = null)
+    {
+        ArgumentNullException.ThrowIfNull(procedure);
+
+        var copy = new ProcedureDeclaration
+        {
+            Id = procedure.Id,
+            Name = name,
+            Parameters = parameters is null
+                ? [.. procedure.Parameters]
+                : [.. parameters.Select(parameter => new ProcedureParameter
+                {
+                    Name = parameter.Name,
+                    Type = parameter.Type,
+                })],
+            Returns = returning ?? procedure.Returns,
+            Body = procedure.Body,
+        };
+
+        return new EditProcedure(procedure, copy, "Edit procedure")
+        {
+            MergeKey = mergeKey,
+            ParametersChanged = parameters is not null,
+        };
+    }
+}
+
 /// <summary>Several commands applied and undone as one history entry.</summary>
 /// <remarks>
 /// One gesture is one transaction (Part 9.5). A drag that moves three blocks and rewrites one field is
@@ -671,6 +1043,15 @@ public static class DocumentLists
     public static List<Block> ListFor(VisualProject project, BodyRef where)
     {
         ArgumentNullException.ThrowIfNull(project);
+
+        if (where.IsProcedureBody)
+        {
+            // A procedure body is found by id rather than by hat, and the id belongs to the declaration —
+            // which is why a rename does not move the body. Nothing is thrown for a missing one here: the
+            // editor calls this while checking whether a command's reference still resolves, and an
+            // exception there would turn "the document moved on" into an unhandled error.
+            return project.FindProcedureById(where.OwnerId)?.Body ?? [];
+        }
 
         var script = project.Targets
             .SelectMany(target => target.Scripts)
@@ -749,6 +1130,22 @@ public static class DocumentLists
                 {
                     return nested;
                 }
+            }
+        }
+
+        // Procedure bodies last, and they are reachable at all only since Phase 7 made a procedure
+        // editable. Before this, a block inside one was found by `Find` — so it was selectable, and then
+        // nothing could say which body it was in, and every edit aimed at it was refused.
+        foreach (var procedure in project.Procedures)
+        {
+            if (procedure.Body.Contains(block))
+            {
+                return BodyRef.ProcedureBody(procedure.Id);
+            }
+
+            if (LocatedIn(procedure.Body, block) is { } nested)
+            {
+                return nested;
             }
         }
 

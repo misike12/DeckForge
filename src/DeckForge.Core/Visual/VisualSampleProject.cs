@@ -190,7 +190,29 @@ public static class VisualSampleProject
             }
         }
 
-        var procedure = document.Procedures.FirstOrDefault();
+        // The three call blocks are born pointing at `myProcedure` with default arguments, which is right
+        // for none of them now that the call rules exist: the bare `call` passes nothing and
+        // `myProcedure` takes nothing, but `call with` and the reporter form each pass one argument and
+        // need a one-parameter procedure — and the reporter form needs one that returns a value.
+        //
+        // The alternative, loosening the call rules until the sample passes, would leave every real
+        // document with the same C# compile error the rules exist to name. So the sample is corrected
+        // here, the same way break and continue are moved into a loop above.
+        foreach (var block in document.Blocks().Where(block => block.Kind.StartsWith("proc.call", StringComparison.Ordinal)))
+        {
+            var wanted = block.Kind switch
+            {
+                "proc.call" => VoidNoParameters,
+                "proc.call-with" => VoidWithParameter,
+                _ => ReturningWithParameter,
+            };
+
+            block.Inputs["name"] = BlockInput.OfVariable(wanted);
+        }
+
+        // `return {value}` goes in the procedure that returns a value, and nowhere else: handing a value
+        // back from a void procedure is one of the two rules above.
+        var procedure = document.FindProcedure(ReturningWithParameter);
         if (procedure is null)
         {
             return;
@@ -205,6 +227,12 @@ public static class VisualSampleProject
             }
         }
     }
+
+    private const string VoidNoParameters = "myProcedure";
+
+    private const string VoidWithParameter = "say";
+
+    private const string ReturningWithParameter = "announce";
 
     /// <summary>
     /// Declares every variable, list and procedure the sample refers to.
@@ -252,8 +280,25 @@ public static class VisualSampleProject
             document.Lists.Add(new ListDeclaration { Name = name, ItemType = "Text" });
         }
 
-        var procedure = new ProcedureDeclaration { Name = "myProcedure" };
-        procedure.Parameters.Add(new ProcedureParameter { Name = "text", Type = "Any" });
-        document.Procedures.Add(procedure);
+        // Three procedures, one per call shape the catalogue has, and each declared with the arity and
+        // return flag that shape requires. One declaration cannot serve all three: a bare `call` passes
+        // nothing, so its procedure takes nothing, and the reporter form needs one that returns a value —
+        // so a single declaration is either an arity error or a void-value error in the sample, and the
+        // sample is the first thing a user sees.
+        var plain = new ProcedureDeclaration { Id = "proc1", Name = VoidNoParameters };
+        var withParameter = new ProcedureDeclaration { Id = "proc2", Name = VoidWithParameter };
+        withParameter.Parameters.Add(new ProcedureParameter { Name = "text", Type = "Any" });
+
+        var returning = new ProcedureDeclaration
+        {
+            Id = "proc3",
+            Name = ReturningWithParameter,
+            Returns = true,
+        };
+        returning.Parameters.Add(new ProcedureParameter { Name = "text", Type = "Any" });
+
+        document.Procedures.Add(plain);
+        document.Procedures.Add(withParameter);
+        document.Procedures.Add(returning);
     }
 }

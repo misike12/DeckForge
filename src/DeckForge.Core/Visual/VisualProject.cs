@@ -146,6 +146,29 @@ public sealed class ProcedureParameter
 /// </remarks>
 public sealed class ProcedureDeclaration
 {
+    /// <summary>
+    /// This procedure's stable id, which is how its body is addressed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added in Phase 7, when a procedure became something a user can edit rather than something the
+    /// emitter reads. The body has to be addressable the same way a script's body is — by id, because
+    /// <see cref="BodyRef"/> is ids all the way down and a path of indices goes stale the moment anything
+    /// above it moves.
+    /// </para>
+    /// <para>
+    /// It is an id and not the name, and the reason is undo: renaming a procedure must not invalidate the
+    /// body reference an undo entry is holding. With the name as the address, renaming and then undoing
+    /// an edit made inside the body would resolve the reference to nothing.
+    /// </para>
+    /// <para>
+    /// Documents written before this existed deserialise with an empty string, and
+    /// <see cref="VisualProjectJson.TryLoad"/> fills one in rather than refusing the file — a canvas that
+    /// saved perfectly well should not stop opening because a field was added.
+    /// </para>
+    /// </remarks>
+    public string Id { get; set; } = string.Empty;
+
     public string Name { get; set; } = string.Empty;
 
     public List<ProcedureParameter> Parameters { get; set; } = [];
@@ -226,6 +249,39 @@ public sealed class VisualProject
     /// <summary>The procedure with the given name, or null.</summary>
     public ProcedureDeclaration? FindProcedure(string name) =>
         Procedures.FirstOrDefault(procedure => string.Equals(procedure.Name, name, StringComparison.Ordinal));
+
+    /// <summary>The procedure with the given id, or null.</summary>
+    public ProcedureDeclaration? FindProcedureById(string id) =>
+        Procedures.FirstOrDefault(procedure => string.Equals(procedure.Id, id, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Gives every procedure an id, and returns how many needed one.
+    /// </summary>
+    /// <remarks>
+    /// Called after a document is read and before one is written, so a canvas saved before Phase 7 gains
+    /// ids on first load rather than being refused — and so two saves of the same document produce the
+    /// same text, which <see cref="VisualStore.IsDirty"/> depends on. Ids are derived from the index, not
+    /// randomly, so opening and saving a document twice does not churn the file.
+    /// </remarks>
+    public int EnsureProcedureIds()
+    {
+        var filled = 0;
+
+        for (var index = 0; index < Procedures.Count; index++)
+        {
+            var procedure = Procedures[index];
+
+            if (procedure.Id.Length > 0)
+            {
+                continue;
+            }
+
+            procedure.Id = "proc" + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            filled++;
+        }
+
+        return filled;
+    }
 
     /// <summary>
     /// The next free block id in the form the design uses, <c>b1</c>, <c>b2</c>, …

@@ -232,7 +232,7 @@ public partial class BlockWorkspace : UserControl
         // the magnet. The scorer cannot see the mistake: it is handed every gap in the document and asked
         // for the closest, and half of that distance is not a thing it can weigh differently.
         var pointerX = _drag?.Pointer.X ?? 0;
-        var gaps = CanvasHitTest.Candidates(Surface, _vm.Target.Scripts)
+        var gaps = CanvasHitTest.Candidates(Surface, _vm.Columns)
             .Where(candidate => Math.Abs(candidate.X - pointerX) <= HorizontalReach);
 
         var slots = CanvasHitTest.SlotCandidates(Surface);
@@ -276,6 +276,30 @@ public partial class BlockWorkspace : UserControl
     }
 
     /// <summary>
+    /// Brings a column into view, without selecting anything in it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Needed because procedures are columns after the scripts, and the sample has eleven scripts before
+    /// the first procedure — so choosing a procedure from the strip would otherwise select something the
+    /// user cannot see, in a column past the right-hand edge of a window that does not scroll with the
+    /// keyboard. The strip's whole job is to be an index into the canvas, and an index into something
+    /// off-screen is not one.
+    /// </para>
+    /// <para>
+    /// The element with the column as its data context is its own panel rather than its first tile,
+    /// because a procedure with an empty body has no tile to find.
+    /// </para>
+    /// </remarks>
+    public void ScrollToColumn(ColumnViewModel column)
+    {
+        var found = CanvasHitTest.DescendantsOf<FrameworkElement>(Surface)
+            .FirstOrDefault(element => ReferenceEquals(element.DataContext, column));
+
+        (found ?? (FrameworkElement?)Surface).BringIntoView();
+    }
+
+    /// <summary>
     /// Shows or hides the drag adornments for whatever the editor says is in progress.
     /// </summary>
     /// <remarks>
@@ -316,6 +340,48 @@ public partial class BlockWorkspace : UserControl
         {
             layer.Remove(_adorner);
             _adorner = null;
+        }
+
+        FitSurfaceToColumns();
+    }
+
+    /// <summary>
+    /// Makes the drag surface as wide as its columns, so every one of them can be scrolled to.
+    /// </summary>
+    /// <remarks>
+    /// A <c>Canvas</c> does not grow to its children the way a panel does, and the surface's fixed 1600
+    /// pixels was therefore the hard limit on how far the scroll viewer could scroll — which is why
+    /// choosing a procedure from the strip scrolled part of the way and stopped. Measured rather than
+    /// computed, because the columns are 400 pixels wide plus a margin by layout and a block label that
+    /// wraps would make one of them wider; guessing from the column count is the same estimate that was
+    /// wrong to begin with.
+    ///
+    /// Skipped when nothing has been measured yet, because a rebuild lands here before the first layout
+    /// pass and a width of zero would collapse the canvas for a frame.
+    /// </remarks>
+    private void FitSurfaceToColumns()
+    {
+        if (Surface.ActualWidth <= 0 || Surface.DesiredSize.Width <= 0)
+        {
+            return;
+        }
+
+        var widest = 0.0;
+
+        foreach (var column in CanvasHitTest.DescendantsOf<FrameworkElement>(Surface))
+        {
+            if (column.DataContext is not ColumnViewModel || column.ActualWidth <= 0)
+            {
+                continue;
+            }
+
+            var right = column.TranslatePoint(new Point(column.ActualWidth, 0), Surface).X + 24;
+            widest = Math.Max(widest, right);
+        }
+
+        if (widest > 0)
+        {
+            Surface.Width = widest;
         }
     }
 

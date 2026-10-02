@@ -60,8 +60,21 @@ public static class VisualProjectJson
         },
     };
 
-    public static string Serialize(VisualProject project) =>
-        JsonSerializer.Serialize(project, CreateOptions());
+    /// <summary>Writes a document as JSON, filling in anything the format requires but the object lacks.</summary>
+    /// <remarks>
+    /// Normalised on the way out as well as on the way in, because a document built in memory — a fresh
+    /// one, or one from the sample — has procedure ids the file format requires but nothing has assigned.
+    /// Writing without filling them would produce a file that reads back differently from what was
+    /// written, which is the exact failure <c>VisualStore.IsDirty</c> would then report on every check.
+    /// </remarks>
+    public static string Serialize(VisualProject project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+
+        project.EnsureProcedureIds();
+
+        return JsonSerializer.Serialize(project, CreateOptions());
+    }
 
     /// <summary>Reads a document, throwing when the text is not one.</summary>
     /// <exception cref="JsonException">The text is not a visual document.</exception>
@@ -164,6 +177,7 @@ public static class VisualProjectJson
             }
 
             project = loaded;
+            project.EnsureProcedureIds();
             message = string.Empty;
             return VisualLoadOutcome.Loaded;
         }

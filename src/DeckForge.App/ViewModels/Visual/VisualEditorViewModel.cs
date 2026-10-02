@@ -79,6 +79,43 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     /// <summary>The scripts, in document order.</summary>
     public ObservableCollection<ScriptViewModel> Scripts { get; private set; } = [];
 
+    /// <summary>
+    /// Every column the canvas draws: the scripts first, then the procedures.
+    /// </summary>
+    /// <remarks>
+    /// One list rather than two so the canvas has one items source and one template, and so the hit test,
+    /// the keyboard traversal and the drop resolver all enumerate the same thing in the same order. A
+    /// procedure is a body of blocks like any other, and the moment it needs its own list is the moment
+    /// every one of those has to learn about it too.
+    /// </remarks>
+    public ObservableCollection<ColumnViewModel> Columns { get; private set; } = [];
+
+    /// <summary>The procedures, for the strip and the My Blocks panel.</summary>
+    public ObservableCollection<ProcedureViewModel> Procedures { get; private set; } = [];
+
+
+    /// <summary>One entry in the hat picker.</summary>
+    /// <param name="Kind">The hat's catalogue kind.</param>
+    /// <param name="Label">What the picker says.</param>
+    /// <param name="Summary">What the row says underneath, for the user deciding between them.</param>
+    public sealed record HatChoice(string Kind, string Label, string Summary);
+
+    /// <summary>The procedure the My Blocks panel is showing, or null.</summary>
+    public ProcedureViewModel? SelectedProcedure { get; private set; }
+
+    /// <summary>Whether there is a procedure selected to edit.</summary>
+    public bool HasSelectedProcedure => SelectedProcedure is not null;
+
+    /// <summary>
+    /// Whether the strip should say there are no procedures yet.
+    /// </summary>
+    /// <remarks>
+    /// A real empty state rather than an empty list, for the reason Part 9.3 gives: a list with nothing in
+    /// it and no heading leaves the reader deciding whether "My Blocks" is empty, broken, or not a feature
+    /// this build has.
+    /// </remarks>
+    public bool HasNoProcedures => Procedures.Count == 0;
+
     /// <summary>Everything wrong with the document, sorted worst first.</summary>
     public ObservableCollection<VisualDiagnostic> Diagnostics { get; private set; } = [];
 
@@ -94,6 +131,17 @@ public sealed partial class VisualEditorViewModel : ObservableObject
 
     /// <summary>Whether there is a block selected for the inspector.</summary>
     public bool HasSelection => Selected is not null;
+
+    /// <summary>
+    /// The hats a script in this target may start with, read from the catalogue.
+    /// </summary>
+    /// <remarks>
+    /// Part 9.2's "hats per target": the picker offers what the catalogue actually has, so a hat row added
+    /// there appears here without anybody remembering this page. Filtering out the procedure definitions is
+    /// not cosmetic — one of them in this list produces a script that starts with a declaration and emits
+    /// nothing at all.
+    /// </remarks>
+    public IReadOnlyList<HatChoice> HatChoices => AvailableHats();
 
     /// <summary>Whether the document has nothing wrong with it.</summary>
     public bool IsClean => Diagnostics.All(diagnostic => diagnostic.Severity != VisualSeverity.Error);
@@ -335,7 +383,15 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     public void Build()
     {
         Scripts = new ObservableCollection<ScriptViewModel>(Target.Scripts.Select(script => new ScriptViewModel(script)));
+        Procedures = new ObservableCollection<ProcedureViewModel>(
+            Document.Procedures.Select(procedure => new ProcedureViewModel(procedure)));
+
+        Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
+
         OnPropertyChanged(nameof(Scripts));
+        OnPropertyChanged(nameof(Procedures));
+        OnPropertyChanged(nameof(Columns));
+        OnPropertyChanged(nameof(HasNoProcedures));
         OnPropertyChanged(nameof(TargetName));
         OnPropertyChanged(nameof(DocumentLine));
 
@@ -372,10 +428,384 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         // selection that pointed at the old object would keep the inspector showing a block that is no
         // longer the selected one, with no visible way for it to be wrong.
         Reselect();
+
+        // The My Blocks panel follows the selected procedure across a rebuild by id, for the same reason:
+        // a panel pointing at the old column would edit a declaration that is no longer the one on screen.
+        ReselectProcedure();
+    }
+
+    /// <summary>Keeps the selected procedure pointing at the same declaration after a rebuild.</summary>
+    private void ReselectProcedure()
+    {
+        if (SelectedProcedure is { } previous)
+        {
+            var replacement = Procedures.FirstOrDefault(candidate =>
+                string.Equals(candidate.Procedure.Id, previous.Procedure.Id, StringComparison.Ordinal));
+
+            if (replacement is null)
+            {
+                // Undoing the add of the selected procedure leaves nothing to point at.
+                SelectedProcedure = null;
+                OnPropertyChanged(nameof(SelectedProcedure));
+                OnPropertyChanged(nameof(HasSelectedProcedure));
+                return;
+            }
+
+            SelectedProcedure = replacement;
+            OnPropertyChanged(nameof(SelectedProcedure));
+        }
     }
 
     /// <summary>Says why an edit was refused.</summary>
     public void Report(string problem) => Message = problem;
+
+    // ---- scripts and procedures ----------------------------------------------------------------------
+
+    /// <summary>
+    /// The hats a script in this target may start with.
+    /// </summary>
+    /// <remarks>
+    /// Everything hat-shaped in the catalogue, minus the procedure definitions — a procedure's hat is not
+    /// a script's hat, and offering it here would produce a script that starts with a procedure body and
+    /// generates nothing. The picker's list is short enough that filtering beats a second list to keep in
+    /// step with the catalogue.
+    /// </remarks>
+    public IReadOnlyList<HatChoice> AvailableHats() =>
+    [
+        .. BlockCatalog.Categories
+            .SelectMany(category => BlockCatalog.InCategory(category.Category))
+            .Where(descriptor => descriptor.IsHat && !descriptor.Kind.StartsWith("proc.", StringComparison.Ordinal))
+            .Select(descriptor => new HatChoice(
+                descriptor.Kind,
+                BlockLabel.PreviewText(descriptor),
+                descriptor.Summary)),
+    ];
+
+    /// <summary>
+    /// Adds a script to the target, starting with the given hat.
+    /// </summary>
+    /// <remarks>
+    /// Positioned below the last script rather than at the origin, because a new script at 0,0 lands on top
+    /// of the one already there and the user sees nothing happen. The id is fresh from the document so it
+    /// cannot collide with a block that is already there.
+    /// </remarks>
+    [RelayCommand]
+    private void AddScript(string? hatKind = null)
+    {
+        var descriptor = BlockCatalog.Find(hatKind ?? AvailableHats()[0].Kind);
+        if (descriptor is null)
+        {
+            Report("There is no starting block to add a script with.");
+            return;
+        }
+
+        var script = new VisualScript
+        {
+            Id = "script-" + Guid.NewGuid().ToString("N")[..6],
+            Name = NextScriptName(),
+            Hat = BlockFactory.Create(descriptor, Document.NextBlockId),
+            X = 40,
+            Y = 24 + (Target.Scripts.Count * 460),
+        };
+
+        var result = Editor.AddScript(Target, script);
+        if (!result.Applied)
+        {
+            Report(result.Problem ?? "The script could not be added.");
+        }
+    }
+
+    /// <summary>
+    /// Removes a script.
+    /// </summary>
+    /// <remarks>
+    /// One refusal worth naming: the last script in a target cannot be deleted, because a target with no
+    /// scripts emits an empty region and the action stops doing anything at all — and it does so
+    /// silently, with no error anywhere. Saying so is better than producing a file that compiles and
+    /// does nothing.
+    /// </remarks>
+    [RelayCommand]
+    public void DeleteScript(ScriptViewModel? script)
+    {
+        if (script is null)
+        {
+            return;
+        }
+
+        if (Target.Scripts.Count <= 1)
+        {
+            Report("This is the target's only script. Add another one before deleting it — a target with no "
+                + "scripts compiles to an action that does nothing.");
+            return;
+        }
+
+        var result = Editor.DeleteScript(Target, script.Script);
+        if (!result.Applied)
+        {
+            Report(result.Problem ?? "The script could not be deleted.");
+        }
+    }
+
+    /// <summary>Renames a script, from the strip's name field.</summary>
+    public void RenameScript(ScriptViewModel? script, string? name)
+    {
+        if (script is null || string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        Apply(Editor.EditScript(script.Script, name.Trim()));
+    }
+
+    /// <summary>
+    /// Gives a script a different hat.
+    /// </summary>
+    /// <remarks>
+    /// The body moves onto a new hat block rather than the old one changing its kind, because a hat's id
+    /// is the address of its script body. See <see cref="EditScript"/> for why that is not a detail.
+    /// </remarks>
+    public void SetScriptHat(ScriptViewModel? script, string? hatKind)
+    {
+        if (script is null || BlockCatalog.Find(hatKind) is not { IsHat: true } descriptor)
+        {
+            return;
+        }
+
+        Apply(Editor.EditScript(script.Script, hat: BlockFactory.Create(descriptor, Document.NextBlockId)));
+    }
+
+    /// <summary>Adds a procedure, and shows it in the panel so it can be named.</summary>
+    /// <remarks>
+    /// Selected immediately rather than left for the user to find: a procedure with a body nobody has
+    /// opened is a procedure nobody will fill in, and the strip's list alone does not say which one is
+    /// new.
+    /// </remarks>
+    [RelayCommand]
+    private void AddProcedure()
+    {
+        var name = NextProcedureName();
+        var declaration = new ProcedureDeclaration
+        {
+            Id = "proc" + (Document.Procedures.Count + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Name = name,
+        };
+
+        var result = Editor.AddProcedure(declaration);
+        if (!result.Applied)
+        {
+            Report(result.Problem ?? "The procedure could not be added.");
+            return;
+        }
+
+        SelectedProcedure = Procedures.FirstOrDefault(candidate =>
+            string.Equals(candidate.Procedure.Id, declaration.Id, StringComparison.Ordinal));
+        OnPropertyChanged(nameof(SelectedProcedure));
+        OnPropertyChanged(nameof(HasSelectedProcedure));
+    }
+
+    /// <summary>Removes a procedure and everything that calls it goes with it.</summary>
+    /// <remarks>
+    /// The calls are left alone rather than removed with it. The validator then reports each one as
+    /// <c>vis-procedure-missing</c> with a sentence that says what to do, and a delete that also tidied
+    /// the callers would silently rewrite code the user may have wanted to keep for an undo later.
+    /// </remarks>
+    [RelayCommand]
+    public void DeleteProcedure(ProcedureViewModel? procedure)
+    {
+        if (procedure is null)
+        {
+            return;
+        }
+
+        var result = Editor.DeleteProcedure(procedure.Procedure);
+        if (!result.Applied)
+        {
+            Report(result.Problem ?? "The procedure could not be deleted.");
+        }
+    }
+
+    /// <summary>Renames the selected procedure.</summary>
+    public void RenameProcedure(ProcedureViewModel? procedure, string? name)
+    {
+        if (procedure is null || string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        Apply(Editor.EditProcedure(procedure.Procedure, name.Trim()));
+    }
+
+/// <summary>Says whether the selected procedure hands back a value.</summary>
+    /// <remarks>
+    /// <para>
+    /// Both directions are refused while a call would be left wrong, and the window is what showed why
+    /// they have to be: un-ticking the flag on a procedure one call uses as a value was allowed, and the
+    /// next thing the user saw was two red diagnostics they had just caused with a checkbox.
+    /// </para>
+    /// <para>
+    /// So ticking is refused while a call discards the result, and un-ticking while a call is waiting for
+    /// one. Either way the user is told which calls to change, because "the checkbox is off" is not an
+    /// answer to "why".
+    /// </para>
+    /// </remarks>
+    public void SetProcedureReturns(ProcedureViewModel? procedure, bool returns)
+    {
+        if (procedure is null)
+        {
+            return;
+        }
+
+        var name = procedure.Procedure.Name;
+        var asValue = Document.Blocks().Count(block =>
+            block.Kind == "proc.call-value" && block.InputText("name") == name);
+        var asStatement = Document.Blocks().Count(block =>
+            block.Kind is "proc.call" or "proc.call-with" && block.InputText("name") == name);
+
+        if (returns && asStatement > 0)
+        {
+            Report($"\"{name}\" is called as a statement by {asStatement} call(s), which throw a returned "
+                + "value away. Change those to a reporter call first.");
+            return;
+        }
+
+        if (!returns && asValue > 0)
+        {
+            Report($"\"{name}\" is already used as a value by {asValue} call(s). Make those plain calls "
+                + "before saying it returns nothing.");
+            return;
+        }
+
+        Apply(Editor.EditProcedure(procedure.Procedure, procedure.Procedure.Name, returning: returns));
+    }
+
+    /// <summary>Adds a parameter to the selected procedure.</summary>
+    [RelayCommand]
+    public void AddParameter(ProcedureViewModel? procedure)
+    {
+        if (procedure is null)
+        {
+            return;
+        }
+
+        // From the panel's projection rather than from the declaration: the panel's rows are these objects,
+        // and building the new list from the declaration would work by accident today and break the moment
+        // the projection stopped sharing instances.
+        var parameters = procedure.Parameters
+            .Select(parameter => new ProcedureParameter { Name = parameter.Name, Type = parameter.Type })
+            .ToList();
+
+        parameters.Add(new ProcedureParameter { Name = NextParameterName(procedure), Type = "Any" });
+
+        Apply(Editor.EditProcedure(procedure.Procedure, procedure.Procedure.Name, parameters));
+    }
+
+    /// <summary>Removes one parameter, and says so when a call still passes it.</summary>
+    public void RemoveParameter(ProcedureViewModel? procedure, ProcedureParameter? parameter)
+    {
+        if (procedure is null || parameter is null)
+        {
+            return;
+        }
+
+        var parameters = procedure.Parameters
+            .Where(candidate => !ReferenceEquals(candidate, parameter))
+            .Select(candidate => new ProcedureParameter { Name = candidate.Name, Type = candidate.Type })
+            .ToList();
+
+        Apply(Editor.EditProcedure(procedure.Procedure, procedure.Procedure.Name, parameters));
+    }
+
+    /// <summary>Renames a parameter.</summary>
+    public void RenameParameter(ProcedureViewModel? procedure, ProcedureParameter? parameter, string? name)
+    {
+        if (procedure is null || parameter is null || string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        var parameters = procedure.Parameters
+            .Select(candidate => new ProcedureParameter
+            {
+                Name = ReferenceEquals(candidate, parameter) ? name.Trim() : candidate.Name,
+                Type = candidate.Type,
+            })
+            .ToList();
+
+        Apply(Editor.EditProcedure(procedure.Procedure, procedure.Procedure.Name, parameters));
+    }
+
+    /// <summary>Shows a procedure in the My Blocks panel.</summary>
+    [RelayCommand]
+    public void SelectProcedure(ProcedureViewModel? procedure)
+    {
+        SelectedProcedure = procedure;
+        OnPropertyChanged(nameof(SelectedProcedure));
+        OnPropertyChanged(nameof(HasSelectedProcedure));
+
+        if (procedure is not null)
+        {
+            Message = string.Empty;
+        }
+    }
+
+    /// <summary>The first name no script has: "script", then "script 2", "script 3".</summary>
+    private string NextScriptName()
+    {
+        var taken = Target.Scripts.Select(script => script.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!taken.Contains("script"))
+        {
+            return "script";
+        }
+
+        for (var index = 2; ; index++)
+        {
+            var candidate = "script " + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (!taken.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    /// <summary>The first name no procedure has, counting up from the catalogue's own default.</summary>
+    private string NextProcedureName()
+    {
+        var taken = Document.Procedures.Select(procedure => procedure.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (!taken.Contains("myProcedure"))
+        {
+            return "myProcedure";
+        }
+
+        for (var index = 2; ; index++)
+        {
+            var candidate = "myProcedure" + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (!taken.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    /// <summary>The first parameter name this procedure is not already using.</summary>
+    private string NextParameterName(ProcedureViewModel procedure)
+    {
+        var taken = procedure.Parameters
+            .Select(parameter => parameter.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in new[] { "text", "count", "value", "name", "item" })
+        {
+            if (!taken.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return "arg" + (taken.Count + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     // ---- the keyboard --------------------------------------------------------------------------------
 
@@ -526,6 +956,28 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     private void SelectBlock(Block? block) =>
         Select(AllNodes().FirstOrDefault(node => node.Id == block?.Id));
 
+    /// <summary>
+    /// Reports the outcome of an editor call that returns a result rather than a command.
+    /// </summary>
+    /// <remarks>
+    /// The same treatment as the command overload: a refusal is information and the message line is where
+    /// information goes. An edit that changes nothing says nothing, because "you typed the name it already
+    /// had" is not a problem and announcing it teaches the user to ignore the line.
+    /// </remarks>
+    private void Apply(DocumentEditResult result)
+    {
+        if (result.Applied)
+        {
+            Message = string.Empty;
+            return;
+        }
+
+        if (result.Problem is { Length: > 0 } problem)
+        {
+            Report(problem);
+        }
+    }
+
     /// <summary>Applies a command from the keyboard, saying why if it was refused.</summary>
     private void Apply(DocumentCommand? command)
     {
@@ -649,15 +1101,24 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     /// <remarks>
     /// Walked rather than kept in a list, because the canvas is the authority on what is on it and a
     /// second list would go stale on the first rebuild.
+    ///
+    /// Procedures are walked here too, and that is the whole reason they are columns: the arrow keys walk
+    /// this list, so a procedure body that was not in it would be a place on the canvas the keyboard
+    /// cannot reach — which would make "nothing requires a mouse" false for exactly the blocks a user
+    /// writes most.
     /// </remarks>
     public IReadOnlyList<BlockNodeViewModel> AllNodes()
     {
         var nodes = new List<BlockNodeViewModel>();
 
-        foreach (var script in Scripts)
+        foreach (var column in Columns)
         {
-            nodes.Add(script.Hat);
-            Walk(script.Body, nodes);
+            if (column is ScriptViewModel script)
+            {
+                nodes.Add(script.Hat);
+            }
+
+            Walk(column.Body, nodes);
         }
 
         return nodes;

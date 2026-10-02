@@ -20,10 +20,18 @@
     -->
     <UserControl.Resources>
         <conv:ResourceKeyToBrushConverter x:Key="KeyToBrush" />
+
+        <!--
+            Declared here rather than in the application resources because it is this template's own
+            decision: a procedure column has no hat, and hiding it is part of what makes one template
+            serve both kinds of column.
+        -->
+        <conv:BoolToVisibilityConverter x:Key="TrueVisible" />
     </UserControl.Resources>
 
     <ScrollViewer x:Name="Scroller"
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                  CanContentScroll="False"
                   Background="{DynamicResource Liquid.BlockCanvasBrush}">
         <Grid Background="{DynamicResource Liquid.BlockGridBrush}">
 
@@ -41,9 +49,25 @@
                     The drag surface. Named because every pointer position in the drag code is translated
                     into this element's coordinates, and an element with no name has no stable way to be
                     referred to from code at all.
+
+                    One column per script and per procedure. A procedure is a column rather than
+                    something in a panel because its body is a stack of blocks, and a stack edited
+                    through a form is a worse editor than the one next to it.
+
+                    Width left unset rather than fixed at 1600, so the canvas measures to its columns and
+                    the scroll viewer's range covers every one of them. A fixed width capped how far it
+                    could scroll, and eleven scripts already needed more than that; adding procedure
+                    columns made the far end of the document genuinely unreachable rather than merely
+                    inconvenient. The minimum keeps a near-empty document from being a cramped strip.
+                    Every drag calculation uses coordinates relative to this element's origin, so growing it
+                    moves nothing that depends on them.
+
+                    The hat tile is bound through HasHat rather than omitted, because one template for
+                    both kinds of column is the reason the hit test, the traversal and the drop
+                    resolver each have one path instead of two.
                 -->
-                <Canvas x:Name="Surface" Width="1600" Margin="16" Background="Transparent">
-                    <ItemsControl ItemsSource="{Binding Scripts}">
+                <Canvas x:Name="Surface" MinWidth="1600" Margin="16" Background="Transparent">
+                    <ItemsControl ItemsSource="{Binding Columns}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" />
@@ -55,14 +79,15 @@
 
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                         <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
-                                                Background="{Binding Hat.FillKey, Converter={StaticResource KeyToBrush}}" />
-                                        <TextBlock Text="{Binding Name}" Margin="8,0,0,0"
+                                                Background="{Binding AccentKey, Converter={StaticResource KeyToBrush}}" />
+                                        <TextBlock Text="{Binding Header}" Margin="8,0,0,0"
                                                    FontSize="12" FontWeight="SemiBold"
                                                    Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                                     </StackPanel>
 
                                     <StackPanel>
-                                        <blocks:BlockTile DataContext="{Binding Hat}" />
+                                        <blocks:BlockTile DataContext="{Binding Hat}"
+                                                         Visibility="{Binding HasHat, Converter={StaticResource TrueVisible}}" />
                                         <ItemsControl ItemsSource="{Binding Body}" Margin="0,2,0,0">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
