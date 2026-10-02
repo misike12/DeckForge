@@ -279,9 +279,11 @@ public static class PageRegistry
         "terminal" => App.Services.GetService(typeof(TerminalPage)) as Page,
         "capabilities" => App.Services.GetService(typeof(CapabilitiesPage)) as Page,
         "explorer" => App.Services.GetService(typeof(ExplorerPage)) as Page,
-        "blocks" => App.Services.GetService(typeof(BlockActionPage)) as Page,
-        // Visual sits after Blocks for now. Phase 6 moves it into the slot Blocks occupied, so that
-        // every Ctrl+digit after it keeps the number it has today - see NavigationShortcutTests.
+
+        // Visual took over the position the retired "blocks" entry held, which is what keeps every
+        // Ctrl+digit below it unchanged. There is no "blocks" entry any more: the MVP Block Programmer
+        // page is superseded by this one, and BlockProgramWriter is now reached only through the visual
+        // page's own writer. NavigationShortcutTests pins the sidebar order that makes the claim true.
         "visual" => App.Services.GetService(typeof(VisualEditorPage)) as Page,
         "icons" => App.Services.GetService(typeof(IconStudioPage)) as Page,
         "ship" => App.Services.GetService(typeof(ShipPage)) as Page,

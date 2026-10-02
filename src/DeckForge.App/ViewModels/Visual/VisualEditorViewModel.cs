@@ -249,9 +249,9 @@ public sealed partial class VisualEditorViewModel : ObservableObject
     /// Shell hook: read the workspace's canvas when the workspace behind the canvas changes.
     /// </summary>
     /// <remarks>
-    /// The same rule <see cref="BlockActionViewModel"/> uses and for the same reason. A plain navigation
-    /// reloads nothing, because this page is a singleton and its document is the one on screen; a genuine
-    /// workspace switch does reload, because that is what raises <c>CurrentChanged</c>.
+    /// Part 9.1's rule: a plain navigation reloads nothing, because this view model is a singleton and its
+    /// document is the one on screen; a genuine workspace switch does reload, because that is what raises
+    /// <c>CurrentChanged</c>.
     /// </remarks>
     public void RefreshOnNavigate()
     {

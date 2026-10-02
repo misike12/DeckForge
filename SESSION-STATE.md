@@ -140,6 +140,14 @@ startup handler was hardened, a failure now also produces a message box and exit
 - The official template's `Directory.Packages.props` floats `3.0.0-*` and a fresh restore resolved
   to `preview.10` from the local cache, not `beta.14`. Pin it when comparing, or the comparison is
   against a different SDK than the one DeckForge targets.
+- **Ctrl+digit shortcuts are positional.** `MainWindow` reads the sidebar's tags in order, so adding or
+  removing a nav item renumbers every shortcut below it, and nothing else in the suite notices — the tag
+  stays unique and present throughout. `NavigationShortcutTests` now pins the whole order; update that
+  list in the same commit as any sidebar change.
+- **Driving the real window needs a real wait after launch.** A `hotkey` fired within a second or two of
+  the window appearing goes to whatever was in the foreground, or arrives before the shortcut table is
+  built in `OnLoaded`, and reads exactly like a dead handler. `wait 6000` first, and let the driver
+  attach its input queue to the foreground thread or `SetForegroundWindow` is refused outright.
 
 ## Where things live
 
@@ -156,7 +164,8 @@ startup handler was hardened, a failure now also produces a message box and exit
 | Extension loader and contracts | `src/DeckForge.Core/Extensions/` |
 | Validators | `src/DeckForge.Validators/` |
 | Real-CLI wrapper, process runner, doctor | `src/DeckForge.CliAdapter/` |
-| Block canvas view model and page | `src/DeckForge.App/ViewModels/BlockActionViewModel.cs`, `Pages/BlockActionPage.xaml` |
+| Block canvas view model and page | `src/DeckForge.Core/Visual/` + `src/DeckForge.App/ViewModels/Visual/`, `Pages/VisualEditorPage.xaml` |
+| Canvas save/load (the sidecar) | `src/DeckForge.Core/Visual/VisualStore.cs` — `.deckforge/canvas.json`, `canvas.previous.json` kept aside |
 | Extensions page | `src/DeckForge.App/Pages/ExtensionsPage.xaml` |
 | Parity harness | `tools/TemplateParity/` |
 | Compile tests that must write into the project | `tests/DeckForge.Tests/GeneratedCodeCompilesTests.cs` |

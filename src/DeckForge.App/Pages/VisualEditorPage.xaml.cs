@@ -177,9 +177,9 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
     /// Reloads the canvas only when the workspace behind it is not the one already on screen.
     /// </summary>
     /// <remarks>
-    /// Part 9.1's rule, and the same one <see cref="BlockActionViewModel"/> follows. The document on this
-    /// page is the user's unsaved work, so a plain navigation must not touch it; a genuine workspace switch
-    /// must, because the file behind it is now somebody else's.
+    /// Part 9.1's rule: reload only when the workspace behind the canvas is not the one already on screen.
+    /// The document on this page is the user's unsaved work, so a plain navigation must not touch it; a
+    /// genuine workspace switch must, because the file behind it is now somebody else's.
     /// </remarks>
     public void RefreshOnNavigate() => _vm.RefreshOnNavigate();
 

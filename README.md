@@ -15,8 +15,9 @@ A native Windows visual studio for building **[Macro Deck 3](https://macro-deck.
 - **Capability Gallery**: all 23 documented capabilities as cards with docs deep links, each with
   real SDK scaffolding behind its "Add to plugin" button.
 - **Explorer**: file tree of the open workspace (opens files with their default app).
-- **Block Programmer**: statement blocks (log, parameter read, delay, HTTP GET, results)
-  compiled to real C# inside `macrodeck-blocks` markers - hand-written code survives.
+- **Visual editor**: the block canvas — 156 blocks across 11 categories, drag or keyboard placement,
+  an inspector that edits every field type, click-through diagnostics, a live generated-C# pane, and
+  save/reload that restores a canvas exactly. It supersedes the earlier Block Programmer page.
 - **Visual editors**: Actions (29 editor types), Events (config + payload parameters)
   and Setup Flows (multi-step, OnlyWhen, OAuth secret) all generate real SDK classes with
   resx strings, permissions and PluginIntegration registration.
@@ -90,7 +91,7 @@ tool commands - the codebase is built for additive extension.
 | Milestone | Scope |
 |---|---|
 | M2 | Manifest Studio (live editing) + capability editors (Actions, Variables, Events, Config Flows, ...) |
-| M3 | Block programmer (Scratch-style canvas) with `<macrodeck-blocks>` marker round-trip |
+| M3 | ~~Block programmer (Scratch-style canvas)~~ — superseded by the Visual editor, which keeps the `<macrodeck-blocks>` marker round-trip |
 | M4 | Stub/real-host run UX, pairing checklist, conformance report viewer |
 | M5 | Package/Sign/Verify/Install UX, icon-pack bundling |
 | M6 | Widget & Macro Deck UI designer (24 node types, live tile preview) |

@@ -94,6 +94,76 @@ public sealed class NavigationShortcutTests
     }
 
     [Test]
+    public void The_shortcut_order_is_the_one_the_digits_mean()
+    {
+        // The Ctrl+digit mapping is positional: Ctrl+1 is the first sidebar item, Ctrl+2 the second, and
+        // Ctrl+0 the tenth. Nothing in the markup records which page a digit belongs to, so an item added,
+        // removed or moved silently renumbers every shortcut after it - and the two tests above cannot see
+        // it, because the tags stay unique and stay present throughout.
+        //
+        // Phase 6 is where that risk was taken on purpose: the "Blocks" item was deleted and "Visual" moved
+        // into its exact position, so that every page from Widget Designer onward keeps the digit it has
+        // today. This is the assertion that says so, written as the order rather than as a comment about
+        // the order.
+        Assert.That(
+            SidebarTags(),
+            Is.EqualTo(new[]
+            {
+                "home", "new-project", "capabilities", "explorer", "manifest",
+                "actions", "events", "configflow", "visual", "widget",
+                "icons", "iconpack", "localization", "buildrun", "ship",
+                "publish", "terminal",
+                // The footer follows, and it is part of the same sequence: Ctrl+8 below lands on Settings
+                // if the footer is left out, which is the same class of bug as the one this file already
+                // records in its own remarks.
+                "docs", "extensions", "settings",
+            }),
+            "The sidebar order has changed, so the Ctrl+digit shortcuts now open different pages. If that "
+            + "is intended, update this list deliberately rather than discovering it from a user's report.");
+    }
+
+    [Test]
+    public void Every_digit_navigates_somewhere()
+    {
+        // Ten digits, and the sequence has to be at least ten long or Ctrl+9 silently does nothing. A
+        // truncated sequence is not a build error and not a failing test anywhere else.
+        Assert.That(SidebarTags().Count, Is.GreaterThanOrEqualTo(10),
+            "Ctrl+1 through Ctrl+0 need at least ten navigable items in the sidebar order.");
+    }
+
+    /// <summary>
+    /// The tags in the order the digits read them: menu items first, then the footer.
+    /// </summary>
+    /// <remarks>
+    /// The same order <c>MainWindow</c> builds <c>_shortcutTags</c> in, read from the markup rather than
+    /// from the running window — the window needs the app up, and the order is the one thing the markup
+    /// already states.
+    /// </remarks>
+    private static List<string?> SidebarTags() =>
+    [
+        .. MenuItems().Select(e => (string?)e.Attribute("Tag")),
+        .. FooterItems().Select(e => (string?)e.Attribute("Tag")),
+    ];
+
+    private static List<XElement> MenuItems() => ItemsIn("MenuItems");
+
+    private static List<XElement> FooterItems() => ItemsIn("FooterMenuItems");
+
+    private static List<XElement> ItemsIn(string container)
+    {
+        var path = AppFile("MainWindow.xaml")
+            ?? throw new InvalidOperationException("MainWindow.xaml could not be located.");
+        var document = XDocument.Load(path);
+
+        return document.Descendants()
+            .Where(e => e.Name.LocalName.EndsWith($".{container}", StringComparison.Ordinal)
+                || e.Name.LocalName == container)
+            .SelectMany(e => e.Descendants())
+            .Where(e => e.Name.LocalName == "NavigationViewItem")
+            .ToList();
+    }
+
+    [Test]
     public void The_shortcut_list_is_not_built_by_casting_the_items_to_a_collection()
     {
         var path = AppFile("MainWindow.xaml.cs")

@@ -38,12 +38,16 @@
                     <ui:NavigationViewItem Content="Actions" Tag="actions" Icon="{ui:SymbolIcon PlayCircle24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Events" Tag="events" Icon="{ui:SymbolIcon Megaphone24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Setup Flow" Tag="configflow" Icon="{ui:SymbolIcon Flowchart24}" Click="Nav_Click" />
-                    <ui:NavigationViewItem Content="Blocks" Tag="blocks" Icon="{ui:SymbolIcon PuzzlePiece24}" Click="Nav_Click" />
                     <!--
-                        Phase 3's temporary slot. Phase 6 removes the Blocks item and moves Visual into
-                        the position it occupied, so every Ctrl+digit below this one keeps the number it
-                        has today; NavigationShortcutTests checks the tags are unique but cannot check
-                        the positions, so the move has to be deliberate.
+                        Visual took the position "Blocks" held, and that is the whole reason for putting
+                        it here rather than in a more logical place: the Ctrl+digit shortcuts are
+                        positional, so inserting anywhere else renumbers every page after it. Blocks was
+                        the ninth item, so Visual is the ninth item and Widget Designer onward keep the
+                        numbers they have today.
+
+                        NavigationShortcutTests pins the order as a list for the same reason. The existing
+                        assertions - tags present, tags unique - both pass on any order at all, which is
+                        why a renumbering would have been invisible until somebody pressed Ctrl+9.
                     -->
                     <ui:NavigationViewItem Content="Visual" Tag="visual" Icon="{ui:SymbolIcon PuzzleCube24}" Click="Nav_Click" />
                     <ui:NavigationViewItem Content="Widget Designer" Tag="widget" Icon="{ui:SymbolIcon Fingerprint24}" Click="Nav_Click" />

@@ -11,7 +11,8 @@ Status legend: ✅ shipped · 🚧 in progress · 📋 planned
   Variables and Events into the open plugin.
 - ✅ **Explorer** - workspace file tree.
 - ✅ **Block Programmer (MVP)** - statement blocks → C# executors inside
-  `macrodeck-blocks` markers with hand-code preservation.
+  `macrodeck-blocks` markers with hand-code preservation. Page retired; superseded by
+  the Visual editor, which keeps the same marker round-trip.
 - ✅ **Icon Studio (MVP)** - SVG templates, colors, WebView2 preview at 144/64 px.
 - ✅ **Build & Run / Ship / Publish** - full artifact pipeline, Store Gate, release.yml
   writer, `gh release create`.
@@ -42,6 +43,10 @@ Status legend: ✅ shipped · 🚧 in progress · 📋 planned
 
 ## Also shipped (third wave)
 
+- ✅ **Visual editor** - the block canvas: 156 blocks across 11 categories, drag or
+  keyboard placement with drop indicators, an inspector covering every field type,
+  click-through diagnostics, a live generated-C# pane, and `.deckforge/canvas.json`
+  save/reload that restores a document exactly. Replaces the Block Programmer page.
 - ✅ **Events editor** - configuration + payload parameter designers (same 29 editor
   types as Actions), category/optional fields, generating the IEventProvider definition
   into PluginIntegration.cs with resx keys and the events:publish permission.
@@ -66,7 +71,7 @@ Status legend: ✅ shipped · 🚧 in progress · 📋 planned
 - ✅ **Black text on accent buttons** - AccentButtonForeground*/TextOnAccent* brushes
   forced to near-black in LiquidTheme for contrast on every Primary button.
 - ✅ **Docs references everywhere** - Docs → buttons on Actions, Events, Setup Flow,
-  Blocks (×2), Widget, Icon Studio, Icon Packs (×2), Localization, Build & Run, Ship
+  Visual, Widget, Icon Studio, Icon Packs (×2), Localization, Build & Run, Ship
   (×2), Publish, Terminal, New Plugin and Manifest pages, all deep-linked into the
   embedded docs browser (and the offline snapshot).
 

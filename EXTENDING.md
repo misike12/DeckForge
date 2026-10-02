@@ -125,6 +125,11 @@ catalog entry you wrote in step 1.
    across navigation; `AddTransient` would discard it every time you navigate away.
 4. `PageRegistry.Create`: add the tag mapping.
 5. `MainWindow.xaml`: add `ui:NavigationViewItem` with `Tag` and `Click="Nav_Click"`.
+6. `NavigationShortcutTests`: add the tag to the expected sidebar order.
+
+That last one is not bookkeeping. Ctrl+1..Ctrl+0 read the tags out of the sidebar **in order**, so
+inserting an item renumbers every shortcut below it — and the existing assertions (every item has a tag,
+no tag is used twice) pass on any order at all. The pinned list is the only thing that notices.
 
 ## Adding a validator
 

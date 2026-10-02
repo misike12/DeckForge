@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P5 complete (P5a the editors and the generated C#, P5b save, load, dirty state — 641 green). Next: P6 — shell integration and retiring the old Blocks page.**
+**Current position: P6 complete (Visual in the sidebar's Blocks slot, `BlockActionPage` and `BlockActionViewModel` deleted, the Ctrl+digit order pinned by a test — 643 green). Next: P7 — procedures and multi-script UX.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -84,7 +84,7 @@ inspected.
 | P4c — Keyboard | ✅ **complete** | `Core/Visual/KeyboardMoves.cs`: traversal, moving, deleting, duplicating, cycling, and the drop-zone cursor — all pure and all tested without a window. `DocumentLists.Locate` moved from the editor to Core so a keyboard gesture can be aimed with a document rather than a constructed history. The page has one `PreviewKeyDown`; tiles take keyboard focus on click and the canvas re-focuses the selection after every rebuild; the view model owns the carry state and the header shows it. 17 new tests, full suite **618 green**. Driven in the real window: Down walks the stack, Ctrl+D duplicates, Ctrl+Z and Ctrl+Y undo and redo, Space picks up, arrows move the cursor, Enter drops — and four defects the window found that 601 passing tests did not |
 | P5a — Editing and the inspector's editors | ✅ **complete** | `Core/Visual/SlotValue.cs`: reading a slot's value and turning a typed one into an input, so which member of a `BlockInput` carries the value is decided in Core rather than in ten editors. `App/ViewModels/Visual/InspectorViewModel.cs`: the panel's rows, the spinners, the toggle, the dropdowns, the row-expression preview and the generated-C# pane, all writing through `DocumentEditor`. Clicking a hole on the canvas selects the block *and* the slot. Diagnostics are clickable and select the offending block. 10 new tests (`SlotValueTests`, incl. an exhaustiveness check over every `SlotType`), full suite **628 green**. Driven in the real window: typing into a count, the spinner, the toggle, clear, a diagnostic click, and the generated pane |
 | P5b — Save, load, dirty state | ✅ complete | **milestone 11** |
-| P6 — Shell integration, retire the old Blocks page | ⬜ not started | |
+| P6 — Shell integration, retire the old Blocks page | ✅ complete | **milestone 12** |
 | P7 — Procedures and multi-script | ⬜ not started | |
 | P8 — Simulator, tracer, debugger | ⬜ not started | |
 | P9 — Multi-target codegen | ⬜ not started | |
@@ -103,6 +103,7 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
+| 2026-10-01 | **P6**: shell integration, and the old Blocks page retired. `BlockActionPage.xaml`, its code-behind and `BlockActionViewModel.cs` are deleted along with the `"blocks"` registry entry and the two DI registrations; `BlockCompiler` and `BlockProgramWriter` stay, because the compiler's public surface is the engine the new emitters sit behind and `BlockProgramWriterTests` still exercises the marker round-trip — `BlockProgramWriter` now has no production caller, which is a decision rather than an oversight. The risky part was positional: `MainWindow` reads the sidebar in order, so Ctrl+9 is simply the ninth item, and leaving Visual where it was would have handed Widget Designer the number Blocks had. Visual went into Blocks' exact slot. `NavigationShortcutTests` asserted only that every item has a tag and no tag repeats — both true through *any* reorder, so nothing recorded which digit meant which page and a renumbering would have passed the suite. The order is now pinned as a list, plus an assertion that at least ten items exist, because ten digits is a requirement the markup never states. Precisely: Ctrl+1–8 unchanged, Ctrl+9 now opens Visual, and Ctrl+0 now opens Widget Designer, which had no shortcut at all as the eleventh item — nothing lost a number. Verified in the window after a wait long enough to matter. 2 new tests, full suite **643 green** | **milestone 12 — see commit** |
 | 2026-10-01 | **P5b**: save, load, dirty state. `VisualStore` in Core owns the file: the document is a sidecar at `<workspace>/.deckforge/canvas.json` and the C# is a projection of it, never the other way round, because the action source is generated and anything hand-edited inside it is lost on the next write. Three decisions that are refusals in disguise: writes go beside the file and then replace it, so a crash cannot leave a canvas that cannot be parsed; every save keeps the previous file as `canvas.previous.json`; and an unreadable canvas falls back to that backup, says so, and leaves the unreadable file alone — it is the only copy of whatever happened, and the warning names the consequence, because "saving will replace it" is actionable and "something went wrong" is not. Dirty state is *computed*, not remembered: the document is serialised and compared with the disk, so an undo back to the saved state stops claiming unsaved work — an indicator that is always on is indistinguishable from one that is never on. `DocumentEditor.ReplaceDocument` drops the history, because every command on the stack carries objects from the old document and replaying one would edit a document nobody can see and report success. **One defect the window found, which no test could**: with a corrupt canvas and a good backup the page drew the previous save *silently*, and the header read "Unsaved changes" — true, and silent about the fact that what is on screen is not what is on disk, so the recovery looked like the app losing work. `VisualStoreResult` now carries `Recovered`. 11 new tests; full suite **641 green** | **milestone 11 — see commit** |
 | 2026-10-01 | **P5a**: the inspector's editors, the generated C# pane, and diagnostics that select. `SlotValue` in Core reads a slot and turns a typed one back into an input, which puts the one decision that matters here — *which member of the `BlockInput` carries the value* — in a tested place instead of in ten editors. A number in `Text` is a document that validates, emits, and produces something other than what the user typed, and that failure is completely silent. The rows read through to the block and write only through the editor, so the panel cannot disagree with the canvas. Two refusals: a number slot rejects a word and a boolean rejects anything but true/false, before the keystroke reaches the document; and Clear is hidden for booleans, because emptying a required one produces a document nothing can compile. The row-expression preview is labelled "Row expression" and not "Generated", since emitting one block needs a whole action around it — the pane at the bottom of the panel goes through `VisualEmitter.CompileTarget` and is the one that may claim to be what Save writes. Clicking a hole on the canvas selects the block *and* the slot. **One defect no test could find**: typing `7` into a count of `10` produced `710`, because the row committed the keystroke, the canvas rebuilt, and the rebuild handed the binding its own freshly-read value back, so the next character appended. The row now reads through to the block whenever its draft matches it. 10 new tests, including one that walks every `SlotType` in the catalogue; full suite **628 green** | **milestone 10 — see commit** |
 | 2026-10-01 | **P4c**: the keyboard. Part 9.5's "nothing requires a mouse" — every decision about where the cursor is and what the gesture means lives in `KeyboardMoves` in Core, stateless, so the whole layer is a pure function of (document, selection, key) and 17 tests cover the ends of stacks, nested bodies, and the shapes that fit nothing. Two gestures deliberately disagree with the drag: Ctrl+↓ moves **one** block and swaps it, and Delete removes **one** block, because carrying the tail makes Ctrl+↓ a no-op for every block except the top and turns Delete into a data-loss trap. Both were written the drag's way first and the tests caught it. `DocumentLists.Locate` moved out of the editor so a gesture can be aimed with a document rather than a constructed history. The page has one `PreviewKeyDown`; the workspace re-focuses the selection after every rebuild. **Four defects the window found**: no tile could take focus at all, because the workspace's preview handler marks the event handled and so the tile's own bubbling handler never ran — selection worked and the keyboard addressed something else; the keyboard was lost after the first edit, because every rebuild replaces the focused tile, so "drag works, then Ctrl+Z does nothing"; Ctrl+Z did nothing while carrying, because the carry branch returned first; and the ghost's pitch for nested blocks. A fifth was in the *driver*: a swallowed key-up left Ctrl held for the rest of the session, so a shortcut worked once and then silently stopped — evidence that points squarely at the application. The driver now releases stale modifiers before each keystroke and accepts key *names*, since mapping "down" to the letter D sends Ctrl+D for every arrow key. 17 new tests; full suite **618 green** | **milestone 9 — see commit** |
@@ -1772,6 +1773,40 @@ documented behaviour rather than a missing edit.
 
 **Exit criteria.** Every other page's Ctrl+digit shortcut unchanged (checked by
 `NavigationShortcutTests`); suite green; no `blocks` tag remains; the sidebar reads correctly.
+
+### 9.6.3 As built (P6) — deleting a page, and the one thing that renumbers itself
+
+`BlockActionPage.xaml`, its code-behind and `BlockActionViewModel.cs` are deleted, along with the
+`"blocks"` entry in `PageRegistry.Create` and the two DI registrations. Nothing else referenced them;
+`BlockCompiler` and `BlockProgramWriter` stay, because §7.4 keeps the compiler's public surface as the
+engine the new emitters sit behind and `BlockProgramWriterTests` still exercises the writer's marker
+round-trip. `BlockProgramWriter` now has no production caller at all, which is worth saying out loud —
+it is kept deliberately, not overlooked, and the day the visual writer takes over that role is the day
+it goes.
+
+**The move was the risky part, and it was positional.** `MainWindow` builds `_shortcutTags` by reading
+the sidebar in order, so Ctrl+1 is the first item and Ctrl+9 the ninth. Visual was tenth, behind Blocks;
+deleting Blocks and leaving Visual where it was would have given Widget Designer the number Blocks used
+to have and taken one from everything below. So Visual went into Blocks' exact position, which the
+design calls for and which no test was checking.
+
+**Two tests that could not see it.** `NavigationShortcutTests` asserted that every item carries a tag and
+that no tag is used twice — both of which stay true through an arbitrary reordering. Nothing recorded
+which digit meant which page, so a renumbering would have passed the suite and surfaced as a user's
+"Ctrl+9 opens the wrong thing". The order is now pinned as an explicit list, and there is a second
+assertion that at least ten items exist, because ten digits is a requirement the markup never states.
+
+The result is worth stating precisely rather than as "nothing moved": Ctrl+1–8 are unchanged, Ctrl+9 now
+opens Visual (it opened Blocks), and Ctrl+0 now opens Widget Designer — which had **no shortcut at all**
+before, being the eleventh item. Nothing lost a number.
+
+**Checked in the window, after a wait long enough to matter.** Ctrl+9 opens the Visual page and
+highlights it in the ninth slot; Ctrl+8 still opens Setup Flow; the sidebar reads Home, New Plugin,
+Capabilities, Explorer, Manifest, Actions, Events, Setup Flow, **Visual**, Widget Designer, Icon Studio,
+Icon Packs, Localization, Build & Run, Ship, Publish, Terminal — no Blocks. Two harness lessons are now in
+`SESSION-STATE.md`: a keystroke fired seconds after launch goes nowhere and looks exactly like a dead
+handler, and `SetForegroundWindow` is refused outright for a tool launched from another window unless the
+input queues are attached first.
 
 ### P7 — Procedures and multi-script UX
 
