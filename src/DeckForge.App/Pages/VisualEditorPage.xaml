@@ -8,6 +8,64 @@
     <Page.Resources>
         <conv:BoolToVisibilityConverter x:Key="TrueVisible" />
         <conv:BoolToInverseVisibilityConverter x:Key="TrueHidden" />
+
+        <!--
+            Visible only when the bound string has something in it. Needed because the slot rows' Problem is
+            null most of the time, and a converter that cannot tell null from "" shows an empty gap under
+            every row.
+        -->
+        <conv:StringToVisibilityConverter x:Key="HasTextVisible" />
+
+        <!--
+            One diagnostic row, as a template rather than markup written out in both places it is needed.
+
+            It was written out twice - once for the no-selection pane and once inside the editors' scroll
+            region - and the two copies had already drifted: one had a severity dot and the other did not.
+            That is the whole argument for a resource, and the argument only works if the two uses really
+            do share it, which is why both are ItemsControls naming this rather than one being a template
+            of the other.
+
+            The row is a Button so Part 9.7's "click a diagnostic to select and centre the block" works,
+            and the command is resolved from the page so the row needs no reference to the view model.
+        -->
+        <DataTemplate x:Key="DiagnosticRow">
+            <Grid Margin="0,2" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="6" Height="6" CornerRadius="3"
+                        VerticalAlignment="Top" Margin="0,5,8,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Liquid.TextTertiaryBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Severity}" Value="Warning">
+                                    <Setter Property="Background" Value="{DynamicResource Liquid.WarningBrush}" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Severity}" Value="Error">
+                                    <Setter Property="Background" Value="{DynamicResource Liquid.DangerBrush}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+                <Button Grid.Column="1" HorizontalContentAlignment="Stretch"
+                        Background="Transparent" BorderThickness="0"
+                        Padding="4,4" Cursor="Hand"
+                        Command="{Binding DataContext.SelectDiagnosticCommand,
+                            RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
+                        CommandParameter="{Binding}">
+                    <StackPanel>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap"
+                                   FontSize="11.5" TextAlignment="Left" />
+                        <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" FontSize="11"
+                                   Margin="0,2,0,0" TextAlignment="Left"
+                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </DataTemplate>
     </Page.Resources>
 
         <Grid x:Name="Layout" Margin="20,16,20,16">
@@ -88,6 +146,12 @@
                     BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <!--
+                            Three rows, not two. The header and the block's own summary are a fixed height,
+                            and the editors and the diagnostics share what is left between them - one
+                            scrolling region, because two scroll viewers in a 300-pixel column means one of
+                            them is always a few pixels too tall to reach its own last row.
+                        -->
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
@@ -112,14 +176,33 @@
                                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
                             <TextBlock Text="{Binding Sdk}" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"
                                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+
+                        <!--
+                            The one-block preview, quoted from the catalogue row and labelled "Emits" rather
+                            than "Generated". Emitting a single block properly needs a whole action around
+                            it - a signature, a body, the host guard - so this shows the row's own
+                            expression. Calling it "generated" would promise it is what Save writes, and it is
+                            not; the pane at the bottom of this panel is the one that can make that claim.
+                        -->
+                            <Border Margin="0,8,0,0" Padding="8,6" CornerRadius="6"
+                                    Background="{DynamicResource Liquid.BlockRailBrush}">
+                                <StackPanel>
+                                    <TextBlock Text="Row expression" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                    <TextBlock Text="{Binding Inspector.SelectedPreview}" TextWrapping="Wrap" FontSize="10.5"
+                                               Margin="0,3,0,0"
+                                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </StackPanel>
 
-                    <Grid Grid.Row="2">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
+        <Grid Grid.Row="2">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
 
                         <!--
                             A grid rather than a horizontal StackPanel: a stacking panel measures its
@@ -131,48 +214,191 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="Diagnostics" FontSize="13" FontWeight="SemiBold" />
+                            <TextBlock Text="Block" FontSize="13" FontWeight="SemiBold" />
                             <TextBlock Grid.Column="1" Text="{Binding StatusText}" Margin="8,2,0,0" FontSize="11"
                                        TextWrapping="Wrap"
                                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
                         </Grid>
 
-                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding Diagnostics}" Margin="8,0,8,8">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0" Width="6" Height="6" CornerRadius="3"
-                                                    VerticalAlignment="Top" Margin="0,4,8,0">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="{DynamicResource Liquid.TextTertiaryBrush}" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Severity}" Value="Warning">
-                                                                <Setter Property="Background" Value="{DynamicResource Liquid.WarningBrush}" />
-                                                            </DataTrigger>
-                                                            <DataTrigger Binding="{Binding Severity}" Value="Error">
-                                                                <Setter Property="Background" Value="{DynamicResource Liquid.DangerBrush}" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                            </Border>
-                                            <StackPanel Grid.Column="1">
-                                                <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11.5" />
-                                                <TextBlock Text="{Binding Hint}" TextWrapping="Wrap" FontSize="11"
-                                                           Margin="0,2,0,0"
-                                                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
+                        <!--
+                            The editors, between the header and the diagnostics.
+
+                            A grid rather than a StackPanel because the rows are two columns and a label
+                            that is one word must not push the editor to a different width from the row
+                            below it - which is what happens the moment two labels differ in length and the
+                            label column is sized to content.
+                        -->
+                        <!--
+                            The generated C# pane, labelled as what Save writes and read-only.
+
+                            Collapsed rather than shown-empty when there is nothing: an empty pane labelled
+                            "this is what Save writes" reads as "Save writes nothing", which is a different
+                            and much worse thing to believe.
+                        -->
+                        <!--
+                            Below the editors, not above them. The editors are what a user came to the
+                            inspector for, and a collapsed expander sitting above them pushes the first row
+                            down by its own height for a pane almost nobody opens — which reads as the panel
+                            being mislaid.
+                        -->
+                        <Expander Grid.Row="2" Margin="8,10,8,0" Header="Generated C#"
+                                  Foreground="{DynamicResource Liquid.TextSecondaryBrush}"
+                                  IsExpanded="False"
+                                  Visibility="{Binding Inspector.HasGeneratedCode, Converter={StaticResource TrueVisible}}">
+                            <Border Margin="0,6,0,0" Padding="8,6" CornerRadius="6"
+                                    Background="{DynamicResource Liquid.BlockRailBrush}">
+                                <StackPanel>
+                                    <TextBlock Text="This is what Save writes. Anything outside the markers is yours."
+                                               TextWrapping="Wrap" FontSize="9.5" Margin="0,0,0,5"
+                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                    <TextBox Text="{Binding Inspector.GeneratedCode, Mode=OneWay}"
+                                             IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                                             FontFamily="Cascadia Mono, Consolas" FontSize="10.5"
+                                             VerticalScrollBarVisibility="Auto" MaxHeight="220" />
+                                </StackPanel>
+                            </Border>
+                        </Expander>
+
+                        <Grid Grid.Row="1" Margin="12,0,12,8"
+                              Visibility="{Binding HasSelection, Converter={StaticResource TrueVisible}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <!--
+                                The editors and the diagnostics in one scrolling region. They were separate
+                                scroll viewers until the generated-code pane arrived, which put three
+                                independently scrolling regions into a 300-pixel column; the middle one was
+                                unusable, and a panel whose own sections cannot both be reached is a panel
+                                nobody uses.
+                            -->
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="0">
+                                <StackPanel>
+                                    <ItemsControl ItemsSource="{Binding Inspector.Slots}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <!--
+                                                            Star, not Auto with a minimum. An Auto column
+                                                            sizes itself to the widest label in the stack
+                                                            above it too, so one long label reflows every
+                                                            editor in the panel and the fields stop lining up
+                                                            - which is the whole reason this is a grid rather
+                                                            than a StackPanel per row.
+                                                        -->
+                                                        <ColumnDefinition Width="*" MinWidth="80" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Margin="0,0,8,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Label}" FontSize="11.5"
+                                                                   TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding Help}" FontSize="9.5"
+                                                                   TextWrapping="Wrap" Margin="0,1,0,0"
+                                                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                                    </StackPanel>
+
+                                                    <StackPanel Grid.Column="1">
+                                                        <!--
+                                                            One text field for every type, with the
+                                                            affordances for that type beneath it. Part 9.6 asks
+                                                            for a spinner on numbers and a toggle on
+                                                            booleans, and both are a text field with a
+                                                            knob: the alternative is three controls per row
+                                                            in markup and three of them drawn on every row
+                                                            whether they apply or not. Binding the toggle's
+                                                            content to Text rather than to the block also
+                                                            keeps it truthful — a toggle that is not bound
+                                                            to the value shows whatever was last rendered,
+                                                            which after a rebuild is nothing.
+                                                        -->
+                                                        <TextBox Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}"
+                                                                 FontSize="11.5" Padding="6,3"
+                                                                 ToolTip="{Binding Name}" />
+                                                        <TextBlock Text="{Binding Problem}" TextWrapping="Wrap"
+                                                                   FontSize="10" Margin="2,2,0,0"
+                                                                   Foreground="{DynamicResource Liquid.WarningBrush}"
+                                                                   Visibility="{Binding Problem, Converter={StaticResource HasTextVisible}}" />
+                                                        <TextBlock Text="{Binding ChildLabel}" TextWrapping="Wrap"
+                                                                   FontSize="10" Margin="2,2,0,0"
+                                                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                                                   Visibility="{Binding HasChild, Converter={StaticResource TrueVisible}}" />
+
+                                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                                                    Visibility="{Binding IsNumber, Converter={StaticResource TrueVisible}}">
+                                                            <ui:Button Content="−" Padding="8,2" Click="Slot_Decrement"
+                                                                      Tag="{Binding}" />
+                                                            <TextBlock Text="{Binding Number}" Margin="10,0"
+                                                                       VerticalAlignment="Center" FontSize="11.5" />
+                                                            <ui:Button Content="+" Padding="8,2" Click="Slot_Increment"
+                                                                      Tag="{Binding}" />
+                                                        </StackPanel>
+
+                                                        <CheckBox Margin="0,4,0,0" Content="true"
+                                                                  IsChecked="{Binding Boolean, Mode=OneWay}"
+                                                                  Click="Slot_Toggle" Tag="{Binding}"
+                                                                  Visibility="{Binding IsBoolean, Converter={StaticResource TrueVisible}}" />
+
+                                                        <ui:Button Content="Clear" Padding="8,2" Margin="0,4,0,0"
+                                                                   HorizontalAlignment="Left" Click="Slot_Clear"
+                                                                   Tag="{Binding}"
+                                                                   Visibility="{Binding CanClear, Converter={StaticResource TrueVisible}}" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <ItemsControl ItemsSource="{Binding Inspector.Menus}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" MinWidth="92" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Label}" FontSize="11.5"
+                                                               VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                              SelectedItem="{Binding Selected}"
+                                                              FontSize="11.5" Padding="6,3" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <TextBlock Text="This block has nothing to fill in." TextWrapping="Wrap"
+                                               FontSize="11.5"
+                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                               Visibility="{Binding Inspector.IsPlain, Converter={StaticResource TrueVisible}}" />
+
+                                    <StackPanel Margin="0,6,0,0">
+                                        <TextBlock Text="Diagnostics" FontSize="13" FontWeight="SemiBold"
+                                                   Margin="0,10,0,0" />
+                                        <TextBlock Text="{Binding StatusText}" FontSize="11"
+                                                   Margin="0,2,0,0" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                        <ItemsControl ItemsSource="{Binding Diagnostics}" ItemTemplate="{StaticResource DiagnosticRow}" Margin="0,4,0,0" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+
+                        <!--
+                            Without a selection the diagnostics are the only thing the panel has to say, so
+                            they get the whole area and a heading of their own rather than a collapsed
+                            section under an empty editor.
+                        -->
+                        <StackPanel Grid.Row="1" Margin="12,0,12,8"
+                                    Visibility="{Binding HasSelection, Converter={StaticResource TrueHidden}}">
+                            <TextBlock Text="Diagnostics" FontSize="13" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding StatusText}" FontSize="11" Margin="0,2,0,0"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="520">
+                                <ItemsControl ItemsSource="{Binding Diagnostics}" ItemTemplate="{StaticResource DiagnosticRow}" Margin="0,4,0,0" />
+                            </ScrollViewer>
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </Border>

@@ -69,7 +69,7 @@ inspected.
 
 ## Progress tracker
 
-**Current position: P4 complete (drag and keyboard, 618 green). Next: P5 — editing, the inspector's editors, live C#, and save/load.**
+**Current position: P5a complete (the inspector edits, the generated-C# pane, diagnostics click through — 628 green). Next: P5b — save and load.**
 
 | Phase | Status | Evidence |
 |---|---|---|
@@ -82,8 +82,9 @@ inspected.
 | P4a — Document editing, undo/redo | ✅ **complete** | `Core/Visual/DocumentCommands.cs` (BodyRef + 11 reversible commands + DocumentTransaction) and `Core/Visual/DocumentEditor.cs` (Execute, Transaction with rollback, Undo, Redo, ClearHistory, the refusal rules). `DropResolver.cs` gained index-carrying gap candidates and `DropTargetKind.OntoStatement`. 26 new tests (`DocumentEditorTests`, incl. a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte), full suite **587 green**. Typed text coalesces into one undo; a refused or throwing transaction unwinds itself. The P4a as-built record lists the four things that were wrong first |
 | P4b — Drag service, ghost, indicator | ✅ **complete** | `Core/Visual/DropPlan.cs` (a landing zone and a payload become the commands that carry it out — pure, window-free) + `Core/Visual/StackLayout.LayoutRun` (a hatless run, for the ghost). `App/Controls/Blocks/CanvasHitTest.cs` measures the live tiles, `DragController.cs` owns the pointer state, `DragAdorner.cs` draws the ghost and the indicator, `AutoScroll.cs` scrolls at the edges, and `BlockWorkspace` is the host. The view model now owns the `DocumentEditor`, projects the document rather than the sample, and keeps the selection pointed at the same block across a rebuild. 14 new tests (13 `DropPlanTests` incl. a 1000-gesture random round trip, 1 geometry test pinning the corrections below), full suite **601 green**. Driven in the real window: palette → canvas into a loop's mouth, canvas → canvas moving a run, a drop released in empty space, and undo — all with a screenshot taken *mid-drag*, because the ghost and the indicator exist only between the press and the release |
 | P4c — Keyboard | ✅ **complete** | `Core/Visual/KeyboardMoves.cs`: traversal, moving, deleting, duplicating, cycling, and the drop-zone cursor — all pure and all tested without a window. `DocumentLists.Locate` moved from the editor to Core so a keyboard gesture can be aimed with a document rather than a constructed history. The page has one `PreviewKeyDown`; tiles take keyboard focus on click and the canvas re-focuses the selection after every rebuild; the view model owns the carry state and the header shows it. 17 new tests, full suite **618 green**. Driven in the real window: Down walks the stack, Ctrl+D duplicates, Ctrl+Z and Ctrl+Y undo and redo, Space picks up, arrows move the cursor, Enter drops — and four defects the window found that 601 passing tests did not |
-| P5 — Editing, code, save | ⬜ not started | |
-| P6 — Shell integration, retire Blocks | ⬜ not started | |
+| P5a — Editing and the inspector's editors | ✅ **complete** | `Core/Visual/SlotValue.cs`: reading a slot's value and turning a typed one into an input, so which member of a `BlockInput` carries the value is decided in Core rather than in ten editors. `App/ViewModels/Visual/InspectorViewModel.cs`: the panel's rows, the spinners, the toggle, the dropdowns, the row-expression preview and the generated-C# pane, all writing through `DocumentEditor`. Clicking a hole on the canvas selects the block *and* the slot. Diagnostics are clickable and select the offending block. 10 new tests (`SlotValueTests`, incl. an exhaustiveness check over every `SlotType`), full suite **628 green**. Driven in the real window: typing into a count, the spinner, the toggle, clear, a diagnostic click, and the generated pane |
+| P5b — Save, load, dirty state | ⬜ not started | |
+| P6 — Shell integration, retire the old Blocks page | ⬜ not started | |
 | P7 — Procedures and multi-script | ⬜ not started | |
 | P8 — Simulator, tracer, debugger | ⬜ not started | |
 | P9 — Multi-target codegen | ⬜ not started | |
@@ -102,6 +103,7 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
+| 2026-10-01 | **P5a**: the inspector's editors, the generated C# pane, and diagnostics that select. `SlotValue` in Core reads a slot and turns a typed one back into an input, which puts the one decision that matters here — *which member of the `BlockInput` carries the value* — in a tested place instead of in ten editors. A number in `Text` is a document that validates, emits, and produces something other than what the user typed, and that failure is completely silent. The rows read through to the block and write only through the editor, so the panel cannot disagree with the canvas. Two refusals: a number slot rejects a word and a boolean rejects anything but true/false, before the keystroke reaches the document; and Clear is hidden for booleans, because emptying a required one produces a document nothing can compile. The row-expression preview is labelled "Row expression" and not "Generated", since emitting one block needs a whole action around it — the pane at the bottom of the panel goes through `VisualEmitter.CompileTarget` and is the one that may claim to be what Save writes. Clicking a hole on the canvas selects the block *and* the slot. **One defect no test could find**: typing `7` into a count of `10` produced `710`, because the row committed the keystroke, the canvas rebuilt, and the rebuild handed the binding its own freshly-read value back, so the next character appended. The row now reads through to the block whenever its draft matches it. 10 new tests, including one that walks every `SlotType` in the catalogue; full suite **628 green** | **milestone 10 — see commit** |
 | 2026-10-01 | **P4c**: the keyboard. Part 9.5's "nothing requires a mouse" — every decision about where the cursor is and what the gesture means lives in `KeyboardMoves` in Core, stateless, so the whole layer is a pure function of (document, selection, key) and 17 tests cover the ends of stacks, nested bodies, and the shapes that fit nothing. Two gestures deliberately disagree with the drag: Ctrl+↓ moves **one** block and swaps it, and Delete removes **one** block, because carrying the tail makes Ctrl+↓ a no-op for every block except the top and turns Delete into a data-loss trap. Both were written the drag's way first and the tests caught it. `DocumentLists.Locate` moved out of the editor so a gesture can be aimed with a document rather than a constructed history. The page has one `PreviewKeyDown`; the workspace re-focuses the selection after every rebuild. **Four defects the window found**: no tile could take focus at all, because the workspace's preview handler marks the event handled and so the tile's own bubbling handler never ran — selection worked and the keyboard addressed something else; the keyboard was lost after the first edit, because every rebuild replaces the focused tile, so "drag works, then Ctrl+Z does nothing"; Ctrl+Z did nothing while carrying, because the carry branch returned first; and the ghost's pitch for nested blocks. A fifth was in the *driver*: a swallowed key-up left Ctrl held for the rest of the session, so a shortcut worked once and then silently stopped — evidence that points squarely at the application. The driver now releases stale modifiers before each keystroke and accepts key *names*, since mapping "down" to the letter D sends Ctrl+D for every arrow key. 17 new tests; full suite **618 green** | **milestone 9 — see commit** |
 | 2026-10-01 | **P4b**: the pointer. `DropPlan` in Core is the decision half of a drop — payload plus landing zone becomes the commands — and has no WPF in it, because what a zone *does* to the document is the half with the interesting failures and the half a window cannot test; the 1000-gesture round trip through it is the P4a property test with the drag's four command shapes in front of it. `CanvasHitTest` measures the live tiles rather than computing them, so a candidate is compared against where WPF actually put the block. The ghost is drawn from real `BlockOutline` silhouettes laid out by a new `StackLayout.LayoutRun` — a hatless run, which the Part 25 thumbnails want anyway — and the indicator is a bar rather than a real gap, because opening one would reflow the canvas on every pointer move. **Four defects the window found and 601 passing tests did not**: a drop put a block in the *wrong script*, because every candidate claimed `x = 0` and the scorer weighs x at half a point per pixel; a loop's mouth opened at its *foot*, because a y walk reported a container's inner gaps at the container's bottom; a drag released in empty space *teleported* the block, because the scorer always names a nearest candidate; and a drag out of the palette that never crossed the canvas *did nothing at all*, because the workspace only captured the pointer when the press started over it. The first two were one cause — candidates computed a geometry that could disagree with the canvas's — and are now read off the blocks' own rectangles instead. The harness gained `press`/`move`/`release` so a screenshot can be taken mid-drag; without that the ghost and the indicator are unobservable, and a canvas drawing nothing looks like a screenshot taken too late. 14 new tests; full suite **601 green** | **milestone 8 — see commit** |
 | 2026-10-01 | **P4a**: the editing engine — eleven reversible commands (`InsertRun`, `DeleteRun`, `MoveRun`, `WrapRun`, `UnwrapRun`, `EditField`, `BindSlot`, `ToggleDisable`, `AddScript`, `DeleteScript`, `MoveScript`) behind one `DocumentEditor`, plus `DocumentTransaction` and `DocumentLists`. Each command captures the index it needs to put itself back, because "put it back where it was" cannot be recomputed after the fact. `RunFrom` returns the grabbed block *and everything below it*, which is what makes a stack drag one run — and why a downward move within its own stack is a no-op rather than a reorder. A transaction applies in order and reverts the earlier commands when a later one is refused: refusals are returns, not exceptions, so it has to unwind by hand. `EditField` coalesces with the command already on top (keeping the older `Before`, the newer `After`) so a typed word is one undo rather than one per keystroke. `DropResolver`'s gaps now carry the body and the index they would insert at — they could not be acted on before, and P1c's `Index: 0` throughout was a stub that only became obvious once something wanted to act on it; a container's mouth is offered at the foot of its body as well as the top. 26 new tests, including a 1000-gesture random property test that undoes everything and compares the serialized document byte for byte against the start; full suite **587 green**. The P4a as-built record lists the four things that were wrong first, including a test generator that threw on an empty stack — a legal state, since a drag that takes everything can empty one | **milestone 7 — see commit** |
@@ -1667,6 +1669,47 @@ save, sidecar persistence, legacy import.
 
 **Exit criteria.** End to end: build a program, save, regenerate, the plugin builds; reload restores
 it exactly; a legacy workspace migrates and still compiles.
+
+### 9.6.1 As built (P5a) — the editors, and what the panel will not claim
+
+`SlotValue` in Core reads a slot's value and turns a typed one back into a `BlockInput`. It is the piece
+that decides **which member of the input** carries the value, and that is the decision worth having in a
+tested place: a number in `Text` and a name in `Number` is a document that validates, emits, and produces
+something other than what the user typed — the one failure here that is completely silent.
+
+`InspectorViewModel` holds the rows. Each row reads through to the block every time it is asked and
+writes only through the editor, so the panel cannot disagree with the canvas about what a block contains —
+which is the failure mode of an editor that keeps its own copy and writes it back on a button.
+
+**Three things the design asked for, and what they became.**
+
+- *One text field per type, with affordances.* Part 9.6 lists ten editor types. Each editor binding to the
+  property it cares about means the type switch appears once, in `SlotValue`, instead of ten times in the
+  view — and the tenth one would be the one that was wrong.
+- *The row expression is labelled "Row expression", not "Generated".* Emitting one block properly needs a
+  whole action around it — a signature, a body, the host guard — so the panel shows the catalogue row's
+  own text and says so. The pane at the bottom of the panel is the one that may claim to be what Save
+  writes, because it goes through `VisualEmitter.CompileTarget` and carries the compile problems with it.
+- *Clicking a hole selects the slot, not just the block.* Part 9.6 wants selection to work both ways
+  between canvas and inspector, and a click on a hole names something more specific than its block.
+
+**Two refusals worth having.** A number slot rejects a word and a boolean rejects anything that is not
+true or false, before the keystroke reaches the document — so there is nothing to undo, and the field
+keeps what was typed for the user to correct. And Clear is hidden for a boolean, because emptying a
+required boolean produces a document the validator turns into an error: a button whose only possible
+result is an unsaveable document is worse than no button.
+
+**One defect the window found, which no test could.** Typing `7` into a count of `10` produced `710`. The
+row committed the first keystroke, the canvas rebuilt, and the rebuild handed the binding the freshly-read
+value back — so the next character appended to it rather than replacing it. The row now reads through to
+the block whenever its draft matches the block, and only prefers its own copy while the two differ, which
+is the one rule that stops the panel and the canvas arguing about who is right.
+
+### P5b — save, load, dirty state
+
+**Scope.** Target picker, save to the workspace, dirty tracking, reload restores the document exactly,
+legacy import. The exit criterion is P5's: build a program, save, regenerate, the plugin builds; reload
+restores it exactly.
 
 ### P6 — Shell integration, retire Blocks
 

@@ -40,6 +40,10 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
             Controls.Blocks.BlockTile.SelectionRequestedEvent,
             new RoutedEventHandler(Tile_SelectionRequested));
 
+        AddHandler(
+            Controls.Blocks.InputSlotView.SlotClickedEvent,
+            new RoutedEventHandler(Slot_Clicked));
+
         Palette.RowPressed += Palette_RowPressed;
         PreviewKeyDown += OnPreviewKeyDown;
         _vm.PropertyChanged += (_, args) => Workspace.Refresh();
@@ -194,6 +198,66 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
         {
             _vm.Select(selected.Block);
             Workspace.ScrollTo(selected.Block.Id);
+        }
+    }
+
+    /// <summary>
+    /// Selects the block that owns a clicked hole, and asks the inspector for that slot's row.
+    /// </summary>
+    /// <remarks>
+    /// The one case where a click on the canvas names something more specific than a block. The argument
+    /// carries the slot, because the bubbling event's <c>Source</c> is the hole's inner border and knows
+    /// nothing about which slot it is standing in for.
+    /// </remarks>
+    private void Slot_Clicked(object sender, RoutedEventArgs args)
+    {
+        if (args is Controls.Blocks.SlotClickedEventArgs clicked)
+        {
+            _vm.SelectSlot(clicked.Block.Id, clicked.Slot.Name);
+        }
+    }
+
+    /// <summary>
+    /// Drives a numeric slot's spinner, from a button whose <c>Tag</c> is the row.
+    /// </summary>
+    /// <remarks>
+    /// The arithmetic is on the view model rather than in the markup because there are two steppers and a
+    /// toggle, and three copies of "read the number, add one, clamp, write it back" is three chances to get
+    /// the clamping wrong. The row is named by <c>Tag</c> rather than by a binding because the binding
+    /// would have to reach up out of the template to find the list.
+    /// </remarks>
+    private void Slot_Increment(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ViewModels.Visual.SlotEditor row })
+        {
+            row.Number = row.Number + 1;
+        }
+    }
+
+    /// <summary>Steps a numeric slot down, by the same route.</summary>
+    private void Slot_Decrement(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ViewModels.Visual.SlotEditor row })
+        {
+            row.Number = row.Number - 1;
+        }
+    }
+
+    /// <summary>Flips a boolean slot from the inspector's toggle.</summary>
+    private void Slot_Toggle(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ViewModels.Visual.SlotEditor row })
+        {
+            row.Boolean = !row.Boolean;
+        }
+    }
+
+    /// <summary>Empties a slot from the inspector's clear button.</summary>
+    private void Slot_Clear(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: ViewModels.Visual.SlotEditor row })
+        {
+            row.ClearCommand.Execute(null);
         }
     }
 

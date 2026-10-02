@@ -32,6 +32,7 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         Validation = VisualSampleProject.ValidationContext;
         Palette = new PaletteViewModel();
         Editor = new DocumentEditor(Document);
+        Inspector = new InspectorViewModel(this);
         Editor.Changed += () => Build();
 
         Build();
@@ -50,6 +51,17 @@ public sealed partial class VisualEditorViewModel : ObservableObject
 
     /// <summary>The category rail and the palette.</summary>
     public PaletteViewModel Palette { get; }
+
+    /// <summary>
+    /// The inspector: the editors for the selected block's slots and dropdowns.
+    /// </summary>
+    /// <remarks>
+    /// Owned by this view model rather than by the page, because it has to be rebuilt on every edit as well
+    /// as on every selection, and the page sees neither. The canvas rebuilds on both and so does the
+    /// diagnostics list; a panel wired to selection alone shows the values the document had before the last
+    /// drag.
+    /// </remarks>
+    public InspectorViewModel Inspector { get; }
 
     /// <summary>The target whose scripts are on the canvas.</summary>
     public VisualTarget Target => Document.Targets[0];
@@ -159,6 +171,9 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(CanRedo));
         OnPropertyChanged(nameof(UndoLabel));
         OnPropertyChanged(nameof(RedoLabel));
+
+        Inspector.Build(Selected);
+        Inspector.BuildCode(Document);
 
         // The selection holds a view model over a block, and a rebuild replaces every one of them. A
         // selection that pointed at the old object would keep the inspector showing a block that is no
@@ -337,6 +352,31 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Selects the block a diagnostic is about, and centres it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Part 9.7's "click a diagnostic to select and centre the block". The block is named by id in the
+    /// diagnostic, and a diagnostic with nothing to name is left alone rather than clearing the selection:
+    /// a document-level problem is not about any particular block, and clicking it should not make the
+    /// canvas look empty.
+    /// </para>
+    /// <para>
+    /// A command rather than an event handler because the diagnostics live in an
+    /// <c>ItemsControl</c> whose rows are buttons with no reference to this view model — the same reason the
+    /// tile's selection is a routed event rather than a command binding.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private void SelectDiagnostic(VisualDiagnostic? diagnostic)
+    {
+        if (diagnostic?.BlockId is { Length: > 0 } blockId)
+        {
+            SelectById(blockId);
+        }
+    }
+
     /// <summary>Undoes one gesture.</summary>
     [RelayCommand]
     private void Undo()
@@ -384,10 +424,33 @@ public sealed partial class VisualEditorViewModel : ObservableObject
 
         OnPropertyChanged(nameof(Selected));
         OnPropertyChanged(nameof(HasSelection));
+
+        // The inspector rebuilds on selection as well as on edit. Wiring it only to the editor's Changed
+        // leaves the panel showing the previous block's rows, which is invisible until a user selects a
+        // second block and finds the first one's fields still on screen.
+        Inspector.Build(Selected);
     }
 
     /// <summary>Selects by block id, for a keyboard move or a diagnostic click.</summary>
     public void SelectById(string blockId) => Select(AllNodes().FirstOrDefault(node => node.Id == blockId));
+
+    /// <summary>
+    /// Selects a block and focuses one of its slots, for a click on a hole.
+    /// </summary>
+    /// <remarks>
+    /// Part 9.6's "selecting a block in the canvas selects it in the inspector and vice versa", for the
+    /// case where the click named a *slot* rather than a block. Both happen, and they happen together:
+    /// the block is what the inspector is about, and the slot is which row of it the user was aiming at.
+    /// </remarks>
+    public void SelectSlot(string blockId, string slotName)
+    {
+        SelectById(blockId);
+
+        if (Selected?.Id == blockId)
+        {
+            Inspector.FocusSlot(slotName);
+        }
+    }
 
     /// <summary>Every block view model on the canvas, in visual order.</summary>
     /// <remarks>
@@ -453,5 +516,9 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         Selected.IsSelected = true;
         OnPropertyChanged(nameof(Selected));
         OnPropertyChanged(nameof(HasSelection));
+
+        // The replacement is a different object, so the inspector's rows are built over different view
+        // models and every one of them has to be rebuilt rather than reused.
+        Inspector.Build(Selected);
     }
 }

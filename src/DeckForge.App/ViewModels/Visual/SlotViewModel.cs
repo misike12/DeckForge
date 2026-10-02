@@ -43,6 +43,17 @@ public sealed partial class SlotViewModel : ObservableObject
         IsReference = input?.Variable is not null;
     }
 
+    /// <summary>
+    /// The inspector's row for this slot, once it has been built.
+    /// </summary>
+    /// <remarks>
+    /// Set by <see cref="InspectorViewModel.Build"/> rather than looked up on demand, because the row is a
+    /// view model with its own state — the draft a user is typing into — and re-creating one per keystroke
+    /// to read one number would throw that state away. Null while the panel is showing a different block,
+    /// which every caller here treats as "nothing to do" rather than as an error.
+    /// </remarks>
+    public SlotEditor? Editor { get; internal set; }
+
     /// <summary>The block this slot belongs to, so a nested reporter knows its own context.</summary>
     public BlockNodeViewModel Owner { get; }
 
