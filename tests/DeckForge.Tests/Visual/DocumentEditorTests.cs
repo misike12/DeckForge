@@ -662,6 +662,58 @@ public sealed class DocumentEditorTests
         return project;
     }
 
+    [Test]
+    public void Loading_a_document_drops_the_history_that_belonged_to_the_old_one()
+    {
+        var document = Document();
+        var editor = new DocumentEditor(document);
+        var script = document.Targets[0].Scripts[0];
+        editor.Delete(BodyRef.ScriptBody(script.Hat.Id), script.Body[1]);
+
+        Assert.That(editor.CanUndo, Is.True, "an edit before the load is undoable while it is still current");
+
+        var loaded = Document();
+        var loadedScript = loaded.Targets[0].Scripts[0];
+        loadedScript.Body.Add(Block("ui.log"));
+
+        editor.ReplaceDocument(loaded);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(editor.Project, Is.SameAs(loaded), "the editor must own what the page is showing");
+            Assert.That(editor.CanUndo, Is.False,
+                "every command on the old stack names blocks that are not in the loaded document, so "
+                + "replaying one would edit a document nobody can see and report success");
+            Assert.That(editor.CanRedo, Is.False);
+        });
+    }
+
+    [Test]
+    public void The_editor_edits_the_loaded_document_and_not_the_old_one()
+    {
+        var first = Document();
+        var editor = new DocumentEditor(first);
+        var second = Document();
+
+        editor.ReplaceDocument(second);
+
+        var script = second.Targets[0].Scripts[0];
+        var replacedBody = script.Body;
+        var firstBody = first.Targets[0].Scripts[0].Body;
+        var firstIds = firstBody.Select(block => block.Id).ToList();
+
+        // The last block, so the delete takes one block and not the whole stack under it.
+        editor.Delete(BodyRef.ScriptBody(script.Hat.Id), replacedBody.Last());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(replacedBody, Has.Count.EqualTo(2),
+                "the delete must land in the document the editor now owns");
+            Assert.That(firstIds, Is.EqualTo(firstBody.Select(block => block.Id).ToList()),
+                "the document the page replaced must not be touched by the next edit");
+        });
+    }
+
     private static Block Block(string kind)
     {
         var descriptor = BlockCatalog.Find(kind);

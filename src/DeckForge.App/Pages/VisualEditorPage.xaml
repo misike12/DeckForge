@@ -95,6 +95,16 @@
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
 
                     <!--
+                        The file line. Whether there is anywhere to save to and whether what is on screen is
+                        what is on disk, both in the header where the design puts the honesty note. It is a
+                        sentence rather than a dot because "unsaved" with no file name beside it leaves the
+                        user guessing which file, and a canvas is the thing they are most likely to lose work
+                        in.
+                    -->
+                    <TextBlock Text="{Binding FileLine}" TextWrapping="Wrap" FontSize="11.5" Margin="0,2,0,0"
+                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+
+                    <!--
                         The refusal line. A drop that is not allowed is a thing a user does constantly while
                         learning which shapes fit where, and the design's own answer is that the indicator
                         simply does not appear. Saying why once, quietly, is what teaches the rule; an
@@ -119,6 +129,20 @@
                                IsEnabled="{Binding CanUndo}" ToolTip="{Binding UndoLabel}" />
                     <ui:Button Content="Redo" Padding="10,4" Margin="8,0,0,0" Click="Redo_Click"
                                IsEnabled="{Binding CanRedo}" ToolTip="{Binding RedoLabel}" />
+
+                    <!--
+                        Save and Revert, before Undo, because they are the two that decide whether the work
+                        survives leaving the page. Both are disabled rather than hidden when they do
+                        nothing: Revert with nothing to revert to would discard a canvas the user can only
+                        get back by redoing every gesture, and Save with no workspace open would have
+                        nowhere to write and no honest success to report.
+                    -->
+                    <ui:Button Content="Save" Padding="10,4" Margin="8,0,0,0" Click="Save_Click"
+                               IsEnabled="{Binding CanSave}"
+                               ToolTip="Write the canvas to the workspace's .deckforge/canvas.json" />
+                    <ui:Button Content="Revert" Padding="10,4" Margin="8,0,0,0" Click="Revert_Click"
+                               IsEnabled="{Binding HasWorkspace}"
+                               ToolTip="Discard the canvas on screen and read the saved file back" />
                     <ui:Button x:Name="DocsButton" Content="Docs" Padding="10,4" Margin="8,0,0,0"
                                Click="OpenDocs_Click" ToolTip="Open the documentation for actions" />
                 </StackPanel>

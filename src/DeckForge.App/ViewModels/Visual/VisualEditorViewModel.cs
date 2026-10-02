@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeckForge.Core.Visual;
+using DeckForge.Core.Workspace;
 
 namespace DeckForge.App.ViewModels.Visual;
 
@@ -24,11 +26,19 @@ namespace DeckForge.App.ViewModels.Visual;
 /// </remarks>
 public sealed partial class VisualEditorViewModel : ObservableObject
 {
+    private readonly WorkspaceManager _workspaces;
+    private string? _canvasWorkspace;
     private string _message = string.Empty;
 
-    public VisualEditorViewModel()
+    public VisualEditorViewModel(WorkspaceManager workspaces)
     {
-        Document = VisualSampleProject.Build();
+        _workspaces = workspaces;
+
+        // A workspace with a canvas opens that canvas; one without keeps the sample, because a canvas is
+        // not worth hiding until there is somewhere to put it. The sample is the empty state P3 needed and
+        // it is also what a user sees before they have picked a workspace to draw in.
+        var saved = LoadFromWorkspace();
+        Document = saved ?? VisualSampleProject.Build();
         Validation = VisualSampleProject.ValidationContext;
         Palette = new PaletteViewModel();
         Editor = new DocumentEditor(Document);
@@ -38,7 +48,7 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         Build();
     }
 
-    /// <summary>The document on screen. The sample until Phase 5 gives it a file.</summary>
+    /// <summary>The document on screen: the workspace's canvas, or the sample when there is none.</summary>
     public VisualProject Document { get; private set; }
 
     /// <summary>
@@ -139,6 +149,175 @@ public sealed partial class VisualEditorViewModel : ObservableObject
           + $"{Diagnostics.Count(d => d.Severity == VisualSeverity.Warning)} warning(s), "
           + $"{Diagnostics.Count(d => d.Severity == VisualSeverity.Info)} note(s).";
 
+    // ---- the file -----------------------------------------------------------------------------------
+
+    /// <summary>Whether there is a workspace to save into.</summary>
+    /// <remarks>
+    /// Part 9.1's rule that the Save button is disabled when no plugin is open. It is disabled rather than
+    /// hidden, so the place the command will be stays visible and the button can say why it is off.
+    /// </remarks>
+    public bool HasWorkspace => Workspace is not null;
+
+    /// <summary>Whether there is a workspace whose canvas this document belongs to.</summary>
+    public WorkspaceContext? Workspace => _workspaces.Current;
+
+    /// <summary>Whether the document differs from the file behind it.</summary>
+    /// <remarks>
+    /// <para>
+    /// Compared by serialising the document and comparing text against what is on disk, rather than by a
+    /// flag set whenever an edit happens. A flag is wrong in two ways that both matter: it survives an undo
+    /// that took the document back to the saved state, and it is set by edits that were then reverted, so
+    /// the title says unsaved when nothing is.
+    /// </para>
+    /// <para>
+    /// The cost is a serialisation per rebuild. The document is a few hundred blocks and the rebuild
+    /// already walks all of them to project view models, so this is not the expensive part of the frame.
+    /// </para>
+    /// </remarks>
+    public bool IsDirty => Workspace is not { } workspace || VisualStore.IsDirty(workspace, Document);
+
+    /// <summary>What the header says about the file, and whether it holds unsaved work.</summary>
+    public string FileLine => Workspace is not { } workspace
+        ? "No workspace open — this canvas is not saved anywhere."
+        : IsDirty
+            ? $"Unsaved changes · {Path.GetFileName(VisualStore.PathFor(workspace))}"
+            : $"Saved · {Path.GetFileName(VisualStore.PathFor(workspace))}";
+
+    /// <summary>Whether there is anything to save.</summary>
+    public bool CanSave => HasWorkspace && IsDirty;
+
+    /// <summary>Saves the canvas to the workspace's sidecar.</summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing is validated before the write. A document that does not compile is still the document the
+    /// user built, and refusing to save it would leave them editing in memory with no file behind them —
+    /// which is the situation the backup exists for and also cannot help with, because there is no file yet.
+    /// The diagnostics pane says what is wrong; the Save button's job is to keep the work.
+    /// </para>
+    /// <para>
+    /// Afterwards the undo history is dropped. The history refers to the document that was on screen when
+    /// it was built, and after a save the user's next question is "what did I change since" — not "what
+    /// could I have undone before I saved". Keeping a history across a save produces an undo that appears
+    /// to work and then changes the file on disk behind the title's back.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private void Save()
+    {
+        if (Workspace is not { } workspace)
+        {
+            Report("Open a plugin project first — the canvas saves into the workspace.");
+            return;
+        }
+
+        var result = VisualStore.Save(workspace, Document);
+        Report(result.Message);
+        Editor.ClearHistory();
+        Build();
+    }
+
+    /// <summary>Discards the canvas and reads the workspace's file back.</summary>
+    [RelayCommand]
+    private void Revert()
+    {
+        if (Workspace is not { } workspace)
+        {
+            Report("Open a plugin project first.");
+            return;
+        }
+
+        var result = VisualStore.Load(workspace);
+
+        if (result is { Ok: true, Project: { } project })
+        {
+            Document = project;
+            Editor.ReplaceDocument(project);
+            Message = string.Empty;
+        }
+
+        // The store's own sentence when it has one worth repeating — a recovered or refused read has
+        // something to explain, and a plain read does not: "discarded the canvas on screen and read the
+        // file back" is the answer the user asked for and the file name alone would not be.
+        Report(result is { Ok: true, Recovered: false }
+            ? $"Discarded the canvas on screen and read {Path.GetFileName(result.Path)} back."
+            : result.Message);
+
+        Build();
+    }
+
+    /// <summary>
+    /// Shell hook: read the workspace's canvas when the workspace behind the canvas changes.
+    /// </summary>
+    /// <remarks>
+    /// The same rule <see cref="BlockActionViewModel"/> uses and for the same reason. A plain navigation
+    /// reloads nothing, because this page is a singleton and its document is the one on screen; a genuine
+    /// workspace switch does reload, because that is what raises <c>CurrentChanged</c>.
+    /// </remarks>
+    public void RefreshOnNavigate()
+    {
+        if (string.Equals(
+                _canvasWorkspace,
+                _workspaces.Current?.PluginProjectDirectory,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        LoadFromOpenWorkspace();
+    }
+
+    /// <summary>Reads the open workspace's canvas into the page, or puts the sample back.</summary>
+    private void LoadFromOpenWorkspace()
+    {
+        var loaded = LoadFromWorkspace();
+
+        Document = loaded ?? VisualSampleProject.Build();
+        Editor.ReplaceDocument(Document);
+        _canvasWorkspace = Workspace?.PluginProjectDirectory;
+
+        if (loaded is not null)
+        {
+            Message = string.Empty;
+        }
+
+        Build();
+    }
+
+    /// <summary>
+    /// The open workspace's canvas, or null when there is nothing to read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A failure is not fatal and does not replace the document on screen. Refusing to draw anything
+    /// because a file could not be read would hide the work that is already there, and the one case where
+    /// the file is unreadable and there is no work yet — no canvas at all — is answered by the sample.
+    /// </para>
+    /// <para>
+    /// Anything other than a plain read of the expected file is announced. That includes the recovered
+    /// cases, and the window is what insisted on it: with a corrupt <c>canvas.json</c> and a good backup,
+    /// the page quietly drew the previous save and said nothing, so the header read "Unsaved changes" —
+    /// which is true, and tells the user nothing about the fact that what is on screen is not what is on
+    /// disk. They would have concluded they had unsaved work rather than that the app had recovered.
+    /// </para>
+    /// </remarks>
+    private VisualProject? LoadFromWorkspace()
+    {
+        _canvasWorkspace = _workspaces.Current?.PluginProjectDirectory;
+
+        if (_workspaces.Current is not { } workspace)
+        {
+            return null;
+        }
+
+        var result = VisualStore.Load(workspace);
+
+        _pendingLoadMessage = result.Recovered || !result.Ok ? result.Message : null;
+
+        return result is { Ok: true, Project: { } project } ? project : null;
+    }
+
+    private string? _pendingLoadMessage;
+
     /// <summary>What a diagnostic means in words, for the pane's severity column.</summary>
     public static string SeverityText(VisualDiagnostic diagnostic) => diagnostic.Severity switch
     {
@@ -171,6 +350,20 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(CanRedo));
         OnPropertyChanged(nameof(UndoLabel));
         OnPropertyChanged(nameof(RedoLabel));
+
+        // The file line is a sentence about the document, so it changes on every edit rather than on a
+        // save. That is the point of showing the name: "Unsaved changes · canvas.json" appearing the
+        // instant something moves is what tells a user the Save button is worth pressing.
+        OnPropertyChanged(nameof(HasWorkspace));
+        OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(CanSave));
+        OnPropertyChanged(nameof(FileLine));
+
+        if (_pendingLoadMessage is { } loadMessage)
+        {
+            _pendingLoadMessage = null;
+            Report(loadMessage);
+        }
 
         Inspector.Build(Selected);
         Inspector.BuildCode(Document);

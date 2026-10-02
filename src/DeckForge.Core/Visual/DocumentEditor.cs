@@ -41,7 +41,7 @@ public sealed class DocumentEditor
 {
     private readonly List<DocumentCommand> _undo = [];
     private readonly List<DocumentCommand> _redo = [];
-    private readonly VisualProject _project;
+    private VisualProject _project;
 
     public DocumentEditor(VisualProject project)
     {
@@ -50,6 +50,31 @@ public sealed class DocumentEditor
 
     /// <summary>The document this editor owns. Mutate it only through here.</summary>
     public VisualProject Project => _project;
+
+    /// <summary>
+    /// Puts a different document in front of the editor and drops the history.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For loading a file. Every command on the stack carries the <see cref="Block"/> and
+    /// <see cref="VisualScript"/> objects it was built from, and after a load those objects are not in the
+    /// document any more — so replaying one would edit the old document and report success. The history is
+    /// dropped rather than carried over for the same reason.
+    /// </para>
+    /// <para>
+    /// Mutating the field rather than returning a new editor is a compromise: everything holding the editor
+    /// — the page, the inspector's rows, the canvas's drag state — keeps working, and the cost is that this
+    /// one method can silently invalidate commands anyone kept a reference to. It is the only place that
+    /// happens, and it is the only place it should.
+    /// </para>
+    /// </remarks>
+    public void ReplaceDocument(VisualProject project)
+    {
+        _project = project ?? throw new ArgumentNullException(nameof(project));
+        _undo.Clear();
+        _redo.Clear();
+        _lastAppliedAt = DateTimeOffset.MinValue;
+    }
 
     /// <summary>
     /// The clock coalescing is measured against. Assignable so a test does not have to sleep.

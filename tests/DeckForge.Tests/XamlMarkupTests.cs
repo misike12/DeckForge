@@ -309,6 +309,46 @@ public sealed class XamlMarkupTests
             + string.Join(Environment.NewLine, problems));
     }
 
+    [Test]
+    public void Every_handler_the_visual_page_names_exists_in_its_code_behind()
+    {
+        // The Visual page wires five of its events from markup. A name that does not resolve is a build
+        // failure with a message about an event handler that plainly exists, so this cannot go unnoticed at
+        // compile time - but what it *can* do is hide a button that renders and does nothing if the
+        // handler is spelled differently in the two files, and on a page whose buttons are Save and
+        // Revert, a button that looks live and is not is worse than no button at all.
+        var markup = FindDirectory("DeckForge.App") is not { } app
+            ? throw new InvalidOperationException("The App project was not found.")
+            : Path.Combine(app, "Pages", "VisualEditorPage.xaml");
+
+        if (!File.Exists(markup))
+        {
+            Assert.Ignore("The Visual page's markup was not found.");
+            return;
+        }
+
+        var codeBehind = Path.ChangeExtension(markup, ".xaml.cs");
+        var handlers = Regex.Matches(File.ReadAllText(markup), @"Click=""(?<name>\w+)""")
+            .Select(match => match.Groups["name"].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var text = File.ReadAllText(codeBehind);
+        var missing = handlers
+            .Where(name => !Regex.IsMatch(text, $@"void\s+{name}\s*\("))
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(handlers, Is.Not.Empty, "No Click handlers were found; the check is vacuous.");
+            Assert.That(
+                missing,
+                Is.Empty,
+                "These buttons name a handler the code-behind does not define, so they render and do "
+                + "nothing:" + Environment.NewLine + string.Join(Environment.NewLine, missing));
+        });
+    }
+
     /// <summary>
     /// Direct children of <paramref name="grid"/> whose <c>Grid.Row</c> or <c>Grid.Column</c> is past
     /// the last definition, described well enough to find in the file.

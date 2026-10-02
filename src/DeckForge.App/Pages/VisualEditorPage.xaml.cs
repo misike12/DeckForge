@@ -173,15 +173,15 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
         Grid.SetRowSpan(element, rowSpan);
     }
 
-    /// <summary>Does nothing yet, on purpose.</summary>
+    /// <summary>
+    /// Reloads the canvas only when the workspace behind it is not the one already on screen.
+    /// </summary>
     /// <remarks>
-    /// The document here is the sample, not a file, so there is nothing to reload and nothing that could
-    /// be stale. When Phase 5 loads from a workspace this becomes a reload guarded by "the workspace
-    /// changed", which is the shape <see cref="BlockActionViewModel"/> already uses.
+    /// Part 9.1's rule, and the same one <see cref="BlockActionViewModel"/> follows. The document on this
+    /// page is the user's unsaved work, so a plain navigation must not touch it; a genuine workspace switch
+    /// must, because the file behind it is now somebody else's.
     /// </remarks>
-    public void RefreshOnNavigate()
-    {
-    }
+    public void RefreshOnNavigate() => _vm.RefreshOnNavigate();
 
     /// <summary>
     /// Selects the clicked block for the inspector.
@@ -263,6 +263,28 @@ public partial class VisualEditorPage : Page, IRefreshOnNavigate
 
     private void OpenDocs_Click(object sender, RoutedEventArgs e) =>
         ShellMessenger.NavigateTo("docs::features/actions");
+
+    /// <summary>
+    /// Saves the canvas, or says why it could not be saved.
+    /// </summary>
+    /// <remarks>
+    /// A handler rather than a command binding because the button lives in the page's own header, where a
+    /// binding would work perfectly well — and this is written as a handler so the Save keyboard shortcut
+    /// and the button share one path. There is no Ctrl+S binding yet; Part 9.5 does not list one, and a
+    /// shortcut nobody documented is a shortcut nobody finds.
+    /// </remarks>
+    private void Save_Click(object sender, RoutedEventArgs e) => _vm.SaveCommand.Execute(null);
+
+    /// <summary>
+    /// Discards the canvas and reads the file back.
+    /// </summary>
+    /// <remarks>
+    /// Not undoable, and that is deliberate: the editor is replaced rather than rewound, because the
+    /// document on disk is not one of the states the undo stack was built from. The buttons are placed
+    /// either side of Undo and Redo on purpose — the one action that throws work away should be the hardest
+    /// of the three to press by accident.
+    /// </remarks>
+    private void Revert_Click(object sender, RoutedEventArgs e) => _vm.RevertCommand.Execute(null);
 
     /// <summary>
     /// Starts a drag from a palette row.
