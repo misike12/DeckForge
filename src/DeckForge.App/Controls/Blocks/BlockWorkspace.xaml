@@ -66,7 +66,18 @@
                     both kinds of column is the reason the hit test, the traversal and the drop
                     resolver each have one path instead of two.
                 -->
-                <Canvas x:Name="Surface" MinWidth="1600" Margin="16" Background="Transparent">
+                    <!--
+        The zoom lives on the surface's RenderTransform and nothing else. Part 10's zoom and pan are applied
+        once, here, on the way to the screen; every number Core works in is in workspace units, so a zoom
+        applied anywhere else would put the drop resolver's arithmetic out by a factor the user cannot see.
+    -->
+    <Canvas x:Name="Surface" MinWidth="1600" Margin="16" Background="Transparent">
+        <Canvas.RenderTransform>
+            <TransformGroup>
+                <ScaleTransform x:Name="ZoomTransform" ScaleX="1" ScaleY="1" />
+                <TranslateTransform x:Name="PanTransform" X="0" Y="0" />
+            </TransformGroup>
+        </Canvas.RenderTransform>
                     <ItemsControl ItemsSource="{Binding Columns}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>

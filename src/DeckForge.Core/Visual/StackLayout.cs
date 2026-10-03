@@ -9,7 +9,32 @@ namespace DeckForge.Core.Visual;
 /// The y of the block's notch — where the next block's tab wants to sit. For a C-block this is the
 /// bottom edge of the whole block, not the label line, because that is where a drop lands.
 /// </param>
-public readonly record struct BlockRect(double X, double Y, double Width, double Height, double NotchY);
+/// <param name="Id">
+/// The block's id, when the caller knows it. Optional because the layout walks blocks without needing to
+/// name them and every existing call site says so; required by the minimap, which has to key its
+/// rectangles by block to draw one per block rather than one per anonymous rectangle.
+/// </param>
+public readonly record struct BlockRect(
+    double X,
+    double Y,
+    double Width,
+    double Height,
+    double NotchY,
+    string? Id = null)
+{
+    /// <summary>Where this block lands once a view's zoom and pan are applied.</summary>
+    /// <param name="view">The zoom and pan it is drawn through.</param>
+    /// <remarks>
+    /// The zoom is applied once, here, on the way to the screen. Every number the user writes down — "the
+    /// block is 40 pixels wide", "the notch is at 22" — is in workspace units, so a zoom applied earlier
+    /// would put all of them out by a factor nobody can see.
+    /// </remarks>
+    public (double X, double Y, double Width, double Height) Project(CanvasView view) =>
+        ((X - view.PanX) * view.ClampedZoom,
+         (Y - view.PanY) * view.ClampedZoom,
+         Width * view.ClampedZoom,
+         Height * view.ClampedZoom);
+}
 
 /// <summary>
 /// The geometry of one script: a rectangle per block, computed from the document.

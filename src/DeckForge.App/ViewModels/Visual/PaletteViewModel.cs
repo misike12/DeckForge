@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DeckForge.App.Controls.Blocks;
 using DeckForge.Core.Visual;
+using DeckForge.Core.Workspace;
 
 namespace DeckForge.App.ViewModels.Visual;
 
@@ -60,20 +61,57 @@ public sealed partial class PaletteViewModel : ObservableObject
     [ObservableProperty]
     private CategoryRowViewModel? _selectedCategory;
 
-    public PaletteViewModel()
+    public PaletteViewModel(WorkspaceContext? workspace = null)
     {
         Categories = new ObservableCollection<CategoryRowViewModel>(BlockCatalog.Categories.Select(category => new CategoryRowViewModel(category)));
 
         _selectedCategory = Categories.FirstOrDefault();
         Rows = [];
+        Recents = [];
+        Favourites = [];
+
+        // Loaded from the workspace when there is one. A workspace with no file is not an error: that is
+        // what a new one looks like, and the palette opens with an empty recency row either way.
+        var known = BlockCatalog.Blocks.Select(block => block.Kind).ToHashSet(StringComparer.Ordinal);
+        _workspace = workspace;
+        Memory = workspace is null
+            ? new PaletteMemory()
+            : PaletteStore.Load(workspace, known).Memory;
+
         Refilter();
+        RebuildRecents();
     }
+
+    /// <summary>The workspace whose palette memory this is, or null when none is open.</summary>
+    private readonly WorkspaceContext? _workspace;
+
+    /// <summary>The recency and pin rules, in Core.</summary>
+    public PaletteMemory Memory { get; private set; }
 
     /// <summary>The rail, in rail order.</summary>
     public ObservableCollection<CategoryRowViewModel> Categories { get; }
 
     /// <summary>The palette's rows: one real block each.</summary>
     public ObservableCollection<BlockNodeViewModel> Rows { get; }
+
+    /// <summary>
+    /// The blocks this workspace reaches for most, most recent first.
+    /// </summary>
+    /// <remarks>
+    /// A strip above the category's blocks rather than a category of its own: recency is a *cross-section*
+    /// of the catalogue, and a rail entry would make it compete with the eleven categories for a place in
+    /// a rail that already cannot hold twelve more entries.
+    /// </remarks>
+    public ObservableCollection<BlockNodeViewModel> Recents { get; }
+
+    /// <summary>The blocks this workspace has pinned, in the order they were pinned.</summary>
+    public ObservableCollection<BlockNodeViewModel> Favourites { get; }
+
+    /// <summary>Whether there is anything in the recency strip.</summary>
+    public bool HasRecents => Recents.Count > 0;
+
+    /// <summary>Whether anything is pinned.</summary>
+    public bool HasFavourites => Favourites.Count > 0;
 
     /// <summary>Whether the palette has anything to show.</summary>
     public bool HasRows => Rows.Count > 0;
@@ -98,6 +136,86 @@ public sealed partial class PaletteViewModel : ObservableObject
     public bool IsSearching => !string.IsNullOrWhiteSpace(SearchText);
 
 partial void OnSearchTextChanged(string value) => Refilter();
+
+    /// <summary>
+    /// Records that a block was used, and saves the habit.
+    /// </summary>
+    /// <remarks>
+    /// Called from the palette's drag start rather than from the document, so the list records what the
+    /// user reached for rather than what ended up in the script — a drag the user abandoned with Escape is
+    /// still a reach, and a block that arrived some other way never was.
+    /// </remarks>
+    /// <param name="kind">The catalogue kind that was dragged.</param>
+    public void NoteUse(string kind)
+    {
+        Memory.Note(kind);
+        RebuildRecents();
+        Save();
+    }
+
+    /// <summary>Pins or unpins a block.</summary>
+    /// <param name="kind">The catalogue kind.</param>
+    /// <returns>Whether it is pinned now.</returns>
+    public bool ToggleFavourite(string kind)
+    {
+        var pinned = Memory.ToggleFavourite(kind);
+        RebuildRecents();
+        Save();
+
+        return pinned;
+    }
+
+    /// <summary>Whether a row's block is pinned, for the star beside it.</summary>
+    /// <param name="kind">The catalogue kind.</param>
+    public bool IsFavourite(string kind) => Memory.IsFavourite(kind);
+
+    /// <summary>Rebuilds the recency and pinned strips from the memory.</summary>
+    private void RebuildRecents()
+    {
+        Recents.Clear();
+        foreach (var row in PreviewRows(Memory.Recents))
+        {
+            Recents.Add(row);
+        }
+
+        Favourites.Clear();
+        foreach (var row in PreviewRows(Memory.Favourites))
+        {
+            Favourites.Add(row);
+        }
+
+        OnPropertyChanged(nameof(HasRecents));
+        OnPropertyChanged(nameof(HasFavourites));
+    }
+
+    /// <summary>
+    /// Turns stored kinds back into rows, dropping any the catalogue no longer has.
+    /// </summary>
+    /// <remarks>
+    /// Dropped rather than shown blank. A strip row with nothing in it can be neither dragged nor read,
+    /// and a habit file written by an older build is exactly how that state is reached.
+    /// </remarks>
+    private static IEnumerable<BlockNodeViewModel> PreviewRows(IEnumerable<string> kinds) =>
+        kinds
+            .Select(BlockCatalog.Find)
+            .Where(descriptor => descriptor is not null)
+            .Select(descriptor => new BlockNodeViewModel(BlockFactory.Preview(descriptor!)) { IsPaletteRow = true });
+
+    /// <summary>
+    /// Writes the habit, when there is somewhere to write it.
+    /// </summary>
+    /// <remarks>
+    /// Quietly, because this runs on a drag and on a star click: a message line that says "could not save
+    /// your recents" every time a workspace directory is read-only is noise about something nobody was
+    /// doing on purpose. The memory is still right for this session.
+    /// </remarks>
+    private void Save()
+    {
+        if (_workspace is not null)
+        {
+            PaletteStore.Save(_workspace, Memory);
+        }
+    }
 
     partial void OnSelectedCategoryChanged(CategoryRowViewModel? value)
     {

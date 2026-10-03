@@ -27,10 +27,48 @@ public partial class PaletteList : UserControl
     public PaletteList()
     {
         InitializeComponent();
+        Loaded += OnLoaded;
 
         PreviewMouseLeftButtonDown += OnPreviewMouseDown;
     }
 
+    /// <summary>
+    /// Pins or unpins the row's block.
+    /// </summary>
+    /// <remarks>
+    /// The row's own data context, not a <c>Tag</c> and not a lookup: the star lives inside the row's
+    /// template, so the only thing that knows which block it belongs to is the tile the template bound.
+    /// </remarks>
+    private void Favourite_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: BlockNodeViewModel node } && DataContext is PaletteViewModel model)
+        {
+            model.ToggleFavourite(node.Kind);
+            RefreshStars();
+        }
+    }
+
+    /// <summary>
+    /// Re-states every row's star after a pin changes.
+    /// </summary>
+    /// <remarks>
+    /// By rebuilding the rows, because a star that only changed on the row clicked is a star that is wrong
+    /// everywhere else: pinning a block should also light it in the recency strip, and unpinning it should
+    /// clear both. Rows are rebuilt in the same <c>Refilter</c> pass a search already uses, so there is one
+    /// path rather than two.
+    /// </remarks>
+    private void RefreshStars()
+    {
+        if (DataContext is not PaletteViewModel model)
+        {
+            return;
+        }
+
+        foreach (var row in model.Rows.Concat(model.Recents).Concat(model.Favourites))
+        {
+            row.IsFavourite = model.IsFavourite(row.Kind);
+        }
+    }
     /// <summary>
     /// Puts the keyboard in the search box, for Ctrl+F.
     /// </summary>
@@ -40,6 +78,15 @@ public partial class PaletteList : UserControl
     /// what makes the shortcut useful - Ctrl+F on a filtered palette with no caret in it would leave the
     /// user typing into nothing.
     /// </remarks>
+    /// <summary>
+    /// States every row's star from the memory, once the rows exist.
+    /// </summary>
+    /// <remarks>
+    /// Called from the control's own Loaded, because the rows are built by a binding and the memory lives
+    /// in the view model: there is no moment at which one of them can ask the other for this.
+    /// </remarks>
+    private void OnLoaded(object sender, RoutedEventArgs e) => RefreshStars();
+
     public void FocusSearch()
     {
         SearchBox.Text = string.Empty;

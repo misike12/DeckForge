@@ -75,6 +75,15 @@ public partial class BlockWorkspace : UserControl
         _vm = vm;
         _drag = new DragController(vm);
         _scroll = new AutoScroll(Scroller);
+        Scroller.PreviewMouseDown += (_, args) => OnViewportInput(this, args);
+        Scroller.PreviewMouseMove += (_, args) =>
+        {
+            if (PanOrigin is not null)
+            {
+                PanTo(args.GetPosition(Scroller));
+                args.Handled = true;
+            }
+        };
     }
 
     /// <summary>Starts a drag from a palette row, which begins outside this control.</summary>
@@ -119,6 +128,150 @@ public partial class BlockWorkspace : UserControl
     /// coordinate system the method does not know, which is how a drag ends up starting 180 pixels off.
     /// </remarks>
     public FrameworkElement SurfaceElement => Surface;
+
+    /// <summary>
+    /// The canvas's zoom and pan, as Core's value.
+    /// </summary>
+    /// <remarks>
+    /// The transform and the arithmetic are one object rather than two, because a <c>ScaleTransform</c> and a
+    /// zoom factor that disagree by a factor of the zoom is exactly the bug that makes a canvas drop a block
+    /// where the ghost is not. The workspace implements the host interface so the view model never has to
+    /// ask a control where anything is.
+    /// </remarks>
+    public CanvasView View { get; private set; } = new();
+
+    /// <summary>Applies a view to the canvas.</summary>
+    /// <param name="view">The view to draw through.</param>
+    public void ApplyView(CanvasView view)
+    {
+        View = view;
+
+        ZoomTransform.ScaleX = view.ClampedZoom;
+        ZoomTransform.ScaleY = view.ClampedZoom;
+        PanTransform.X = -view.PanX * view.ClampedZoom;
+        PanTransform.Y = -view.PanY * view.ClampedZoom;
+    }
+
+    /// <summary>
+    /// Every block's rect in workspace units, for the minimap.
+    /// </summary>
+    /// <remarks>
+    /// Read from the live tiles rather than recomputed from the document, because the minimap has to
+    /// agree with what is on screen including anything the canvas has since adjusted — and because the
+    /// tiles already paid for their own measurement to be drawn. The transform is taken to the surface
+    /// rather than to the window, so the canvas's own pan and zoom do not leak into the numbers: Core works
+    /// in workspace units, and a rect that arrived already scaled would be scaled twice.
+    /// </remarks>
+    public IReadOnlyList<BlockRect> Rects
+    {
+        get
+        {
+            var rects = new List<BlockRect>();
+
+            foreach (var tile in CanvasHitTest.Tiles(Surface))
+            {
+                if (tile.DataContext is not BlockNodeViewModel node || tile.ActualWidth <= 0)
+                {
+                    continue;
+                }
+
+                var origin = tile.TransformToAncestor(Surface).Transform(new Point(0, 0));
+
+                rects.Add(new BlockRect(
+                    origin.X,
+                    origin.Y,
+                    tile.ActualWidth,
+                    tile.ActualHeight,
+                    tile.ActualHeight,
+                    node.Id));
+            }
+
+            return rects;
+        }
+    }
+    /// <summary>The canvas viewport's size in pixels.</summary>
+    public (double Width, double Height) Viewport => (Surface.ActualWidth, Surface.ActualHeight);
+
+    /// <summary>
+    /// Zooms about the pointer on Ctrl+wheel, and pans on middle-drag.
+    /// </summary>
+    /// <remarks>
+    /// Attached to the scroller rather than the surface, because the pointer may well be over a tile and a
+    /// tile that swallows the wheel is a canvas that cannot be zoomed with the mouse over the thing being
+    /// looked at. Middle-drag pans because it is the one drag a pointer has that means "move the view" and
+    /// nothing else claims it.
+    /// </remarks>
+    private void OnViewportInput(object sender, MouseEventArgs args)
+    {
+        if (args is MouseWheelEventArgs wheel && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            ZoomByWheel?.Invoke(this, new CanvasZoomEventArgs(wheel.Delta / 120, wheel.GetPosition(Scroller)));
+            wheel.Handled = true;
+            return;
+        }
+
+        if (args is not MouseButtonEventArgs button)
+        {
+            return;
+        }
+
+        if (button.ChangedButton == MouseButton.Middle)
+        {
+            // A press starts the pan and a release ends it; both arrive as the same event type, so the
+            // state is the only thing that tells them apart. Reading a property that only exists on
+            // MouseButtonEventArgs through MouseEventArgs is a compile error, which is the good outcome.
+            if (button.ButtonState == MouseButtonState.Pressed)
+            {
+                PanStart?.Invoke(this, button.GetPosition(Scroller));
+            }
+            else
+            {
+                PanEnd?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>Raised for a Ctrl+wheel notch, carrying the notch count and where the pointer is.</summary>
+    public static event EventHandler<CanvasZoomEventArgs>? ZoomByWheel;
+
+    /// <summary>Raised when a middle-drag begins, with where it began.</summary>
+    public static event EventHandler<Point>? PanStart;
+
+    /// <summary>Raised when a middle-drag ends.</summary>
+    public static event EventHandler? PanEnd;
+
+    /// <summary>Where a middle-drag began, for the panner.</summary>
+    public Point? PanOrigin { get; private set; }
+
+    /// <summary>Moves the view with a middle-drag.</summary>
+    /// <param name="position">Where the pointer is now, in the scroller's coordinates.</param>
+    public void PanTo(Point position)
+    {
+        if (PanOrigin is not { } origin)
+        {
+            return;
+        }
+
+        PanBy?.Invoke(this, new Point(position.X - origin.X, position.Y - origin.Y));
+        PanOrigin = position;
+    }
+
+    /// <summary>Raised while a middle-drag moves, with the delta in pixels.</summary>
+    public static event EventHandler<Point>? PanBy;
+
+    /// <summary>Captures the pointer for a middle-drag, so the drag survives leaving the canvas.</summary>
+    public void BeginPan(Point position)
+    {
+        PanOrigin = position;
+        Surface.CaptureMouse();
+    }
+
+    /// <summary>Ends a middle-drag and gives the pointer back.</summary>
+    public void EndPan()
+    {
+        PanOrigin = null;
+        Surface.ReleaseMouseCapture();
+    }
 
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs args)
     {
@@ -468,4 +621,16 @@ public partial class BlockWorkspace : UserControl
 
         base.OnMouseLeave(args);
     }
+}
+
+/// <summary>A Ctrl+wheel notch: how many, and where the pointer was.</summary>
+/// <param name="Notches">Positive zooms in.</param>
+/// <param name="At">The pointer's position in the viewport's coordinates.</param>
+public sealed class CanvasZoomEventArgs(int notches, Point at) : EventArgs
+{
+    /// <summary>Wheel notches, positive for zooming in.</summary>
+    public int Notches { get; } = notches;
+
+    /// <summary>Where the pointer is, so the zoom can be about it.</summary>
+    public Point At { get; } = at;
 }

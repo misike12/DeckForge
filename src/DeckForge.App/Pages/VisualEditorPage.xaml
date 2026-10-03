@@ -162,7 +162,63 @@
 
             <Border x:Name="CanvasPanel" CornerRadius="12"
                     BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
-                <blocks:BlockWorkspace x:Name="Workspace" />
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!--
+                        The zoom row, above the canvas rather than in the header.
+
+                        In the header it would be a fourth thing between the title and the panels, and the
+                        title is the one line that explains what the page is. Beside the canvas it is next
+                        to the thing it changes and out of the way when nobody is looking at the canvas.
+                    -->
+                    <Grid Grid.Row="0" Margin="10,8,10,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Zoom" FontSize="11" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                            <TextBlock Text="{Binding Canvas.ZoomText}" FontSize="11" Margin="8,0,0,0"
+                                       VerticalAlignment="Center" MinWidth="42"
+                                       Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                            <ui:Button Content="−" Padding="8,3" Margin="8,0,0,0"
+                                       Click="ZoomOut_Click" ToolTip="Zoom out (Ctrl+wheel down)" />
+                            <ui:Button Content="+" Padding="8,3" Margin="6,0,0,0"
+                                       Click="ZoomIn_Click" ToolTip="Zoom in (Ctrl+wheel up)" />
+                            <ui:Button Content="Fit" Padding="10,3" Margin="6,0,0,0"
+                                       Click="ZoomFit_Click" ToolTip="Show the whole document" />
+                            <ui:Button Content="100%" Padding="10,3" Margin="6,0,0,0"
+                                       Click="ZoomActual_Click" ToolTip="Back to actual size" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" TextWrapping="Wrap" FontSize="10.5" Margin="12,0,12,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                                   Text="Ctrl+wheel zooms about the pointer; middle-drag pans." />
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <blocks:BlockWorkspace x:Name="Workspace" />
+
+                        <!--
+                            The minimap, over the canvas's bottom-right corner.
+
+                            Over rather than beside: a fifth column for a 240-pixel thumbnail would take the
+                            width from the canvas, which is the one panel with none to spare, and the map is
+                            only useful while the canvas is being looked at.
+                        -->
+                        <blocks:CanvasMinimap x:Name="Minimap" DataContext="{Binding Canvas}"
+                                               HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                               Margin="0,0,12,12" ViewRequested="Minimap_ViewRequested" />
+                    </Grid>
+                </Grid>
             </Border>
 
             <!--

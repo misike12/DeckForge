@@ -60,6 +60,24 @@ AddHandler(
         PreviewKeyDown += OnPreviewKeyDown;
         _vm.PropertyChanged += OnEditorPropertyChanged;
         _vm.Stage.PropertyChanged += OnStagePropertyChanged;
+
+        // The zoom's input handlers, subscribed here because the workspace raises them and this page is the
+        // only thing that knows which view model should answer. Static events on the workspace are a
+        // compromise — a control cannot hold a reference to a view model that does not exist yet — so the
+        // wiring is in one place rather than three.
+        Controls.Blocks.BlockWorkspace.ZoomByWheel += (_, args) =>
+        {
+            Canvas.ZoomByWheel(args.Notches, args.At.X, args.At.Y);
+            Minimap.Draw();
+        };
+
+        Controls.Blocks.BlockWorkspace.PanStart += (_, point) => Workspace.BeginPan(point);
+        Controls.Blocks.BlockWorkspace.PanBy += (_, delta) =>
+        {
+            Canvas.PanBy(delta.X, delta.Y);
+            Minimap.Draw();
+        };
+        Controls.Blocks.BlockWorkspace.PanEnd += (_, _) => Workspace.EndPan();
         SizeChanged += (_, args) => ApplyLayout(args.NewSize.Width);
         ApplyLayout(ActualWidth);
     }
@@ -494,6 +512,10 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
     {
         _vm.Select(row);
 
+        // Recorded here, at the press rather than at the drop: the recency row is a list of what the user
+        // reached for, and a drag they abandoned with Escape was still a reach.
+        _vm.Palette.NoteUse(row.Kind);
+
         if (Workspace.SurfaceElement is not { } surface)
         {
             return;
@@ -508,6 +530,72 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
     /// <summary>Undoes. The editor raises Changed, the page rebuilds, and the inspector follows.</summary>
     private void Undo_Click(object sender, RoutedEventArgs e) => _vm.UndoCommand.Execute(null);
 
+    /// <summary>The canvas's zoom, pan and minimap.</summary>
+    /// <remarks>
+    /// The view model takes the workspace as its host rather than reaching into the control, so the zoom's
+    /// arithmetic is Core's and the canvas only ever applies a view it is given. A zoom the canvas computed
+    /// for itself would be a second implementation of a rule the drop resolver also uses.
+    /// </remarks>
+    private ViewModels.Visual.CanvasViewModel Canvas => _canvas ??= CreateCanvas();
+
+    private ViewModels.Visual.CanvasViewModel? _canvas;
+
+    /// <summary>
+    /// Builds the canvas view model and hands it the workspace as its host.
+    /// </summary>
+    /// <remarks>
+    /// The host interface exists so the view model never names the control: it asks for a view, a list of
+    /// rects and a viewport size, and the workspace supplies all three. Without it the view model would hold
+    /// a <c>BlockWorkspace</c>, and every test of the zoom would need a window.
+    /// </remarks>
+    private ViewModels.Visual.CanvasViewModel CreateCanvas()
+    {
+        var canvas = new ViewModels.Visual.CanvasViewModel(new WorkspaceHost(Workspace));
+        _vm.Canvas = canvas;
+
+        return canvas;
+    }
+
+    /// <summary>The workspace, seen as the host the canvas view model asks for.</summary>
+    /// <param name="workspace">The real one.</param>
+    private sealed class WorkspaceHost(Controls.Blocks.BlockWorkspace workspace)
+        : ViewModels.Visual.CanvasViewModel.BlockWorkspaceHost
+    {
+        /// <inheritdoc />
+        public Core.Visual.CanvasView View
+        {
+            get => workspace.View;
+            set => workspace.ApplyView(value);
+        }
+
+        /// <inheritdoc />
+        public void ApplyView(Core.Visual.CanvasView view) => workspace.ApplyView(view);
+
+        /// <inheritdoc />
+        public IReadOnlyList<Core.Visual.BlockRect> Rects => workspace.Rects;
+
+        /// <inheritdoc />
+        public (double Width, double Height) Viewport => workspace.Viewport;
+    }
+
+    private void ZoomIn_Click(object sender, RoutedEventArgs e) => Canvas.Zoom += 0.25;
+
+    private void ZoomOut_Click(object sender, RoutedEventArgs e) => Canvas.Zoom -= 0.25;
+
+    private void ZoomFit_Click(object sender, RoutedEventArgs e)
+    {
+        Workspace.Refresh();
+        Canvas.ZoomToFit();
+    }
+
+    private void ZoomActual_Click(object sender, RoutedEventArgs e) => Canvas.ZoomToActualSize();
+
+    /// <summary>Moves the canvas where the user clicked on the minimap.</summary>
+    private void Minimap_ViewRequested(object sender, Controls.Blocks.ViewRequestedEventArgs e)
+    {
+        Canvas.Apply(e.View);
+        Minimap.Draw();
+    }
     /// <summary>Redoes, for the same reason.</summary>
     private void Redo_Click(object sender, RoutedEventArgs e) => _vm.RedoCommand.Execute(null);
 

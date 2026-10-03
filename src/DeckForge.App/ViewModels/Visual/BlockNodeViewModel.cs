@@ -129,6 +129,15 @@ public sealed partial class BlockNodeViewModel : ObservableObject
     [ObservableProperty]
     private bool _isCurrent;
 
+    /// <summary>Whether the palette row's block is pinned, for the star beside it.</summary>
+    /// <remarks>
+    /// Written by the palette when the memory changes rather than read from it per row, because a row that
+    /// queried the memory on every paint would be asking a question sixty times a second and a
+    ///  notification would still be needed for the other half of the problem.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _isFavourite;
+
     /// <summary>Whether the block carries a comment.</summary>
     public bool HasComment => !string.IsNullOrWhiteSpace(Block.Comment);
 

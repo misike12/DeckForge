@@ -40,7 +40,10 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         var saved = LoadFromWorkspace();
         Document = saved ?? VisualSampleProject.Build();
         Validation = VisualSampleProject.ValidationContext;
-        Palette = new PaletteViewModel();
+        // The palette's recency and pins belong to the workspace, so it is handed the one behind the
+        // canvas. A sample document with no workspace gets a palette that remembers nothing, which is what
+        // a palette is supposed to do when there is nowhere to remember it.
+        Palette = new PaletteViewModel(workspaces.Current);
 Editor = new DocumentEditor(Document);
         Inspector = new InspectorViewModel(this);
         Stage = new StageViewModel(this);
@@ -76,6 +79,14 @@ Editor = new DocumentEditor(Document);
 
 /// <summary>The target whose scripts are on the canvas.</summary>
     public VisualTarget Target => Document.Targets[0];
+
+    /// <summary>The canvas's zoom, pan and minimap, once the page has asked for them.</summary>
+    /// <remarks>
+    /// Settable and nullable rather than built here, because the view model needs the workspace *control*
+    /// as its host and the control cannot reach a view model that does not exist yet. The page creates it on
+    /// first use, which is also why the canvas panel's bindings are null until it does.
+    /// </remarks>
+    public CanvasViewModel? Canvas { get; set; }
 
     /// <summary>
     /// The stage: the simulated host, the interpreter and everything they show.
