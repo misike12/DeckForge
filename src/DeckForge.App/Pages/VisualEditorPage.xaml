@@ -143,6 +143,9 @@
                     <ui:Button Content="Revert" Padding="10,4" Margin="8,0,0,0" Click="Revert_Click"
                                IsEnabled="{Binding HasWorkspace}"
                                ToolTip="Discard the canvas on screen and read the saved file back" />
+                    <ui:Button Content="Export SVG" Padding="10,4" Margin="8,0,0,0"
+                               Click="ExportSvg_Click"
+                               ToolTip="Write the canvas as a vector image, beside the workspace" />
                     <ui:Button x:Name="DocsButton" Content="Docs" Padding="10,4" Margin="8,0,0,0"
                                Click="OpenDocs_Click" ToolTip="Open the documentation for actions" />
                 </StackPanel>

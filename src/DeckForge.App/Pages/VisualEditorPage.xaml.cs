@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -368,6 +370,47 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
 
     private void OpenDocs_Click(object sender, RoutedEventArgs e) =>
         ShellMessenger.NavigateTo("docs::features/actions");
+
+    /// <summary>
+    /// Writes the canvas as a vector image, beside the workspace.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A save dialog rather than a fixed path: an export is something the user is going to put somewhere, and
+    /// a tool that decides where its output goes is a tool that eventually overwrites something.
+    /// </para>
+    /// <para>
+    /// What lands in the file is labels and the user's literals, and nothing else — §27.2's rule, and the
+    /// reason the renderer is in Core where it can be tested rather than in a control where it cannot.
+    /// </para>
+    /// </remarks>
+    private void ExportSvg_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export the canvas as SVG",
+            FileName = "canvas.svg",
+            DefaultExt = ".svg",
+            Filter = "SVG image (*.svg)|*.svg",
+        };
+
+        if (dialog.ShowDialog() is not true)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, DeckForge.Core.Visual.SvgRenderer.RenderDocument(_vm.Document), new UTF8Encoding(false));
+            _vm.Report($"Exported {_vm.Document.Targets.Sum(target => target.Scripts.Count)} script(s) to {dialog.FileName}.");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // The refusal has to name the path: "could not save" with no file name leaves the user looking
+            // for whatever it tried to write.
+            _vm.Report($"Could not write {dialog.FileName}: {error.Message}");
+        }
+    }
 
     /// <summary>
     /// Saves the canvas, or says why it could not be saved.
