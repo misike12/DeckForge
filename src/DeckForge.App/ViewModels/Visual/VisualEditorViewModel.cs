@@ -425,6 +425,12 @@ Editor = new DocumentEditor(Document);
     {
         _canvasWorkspace = _workspaces.Current?.PluginProjectDirectory;
 
+        // The workspace's resx, before anything is built: block labels are read while the view models are
+        // constructed, so a lookup installed afterwards would leave the canvas saying English until the
+        // next unrelated rebuild. Part 21's translations come from the same file the Localization page
+        // edits, and a workspace that has never been translated falls back to the catalogue's English.
+        Services.BlockText.Use(_workspaces.Current?.LocalizationDirectory);
+
         if (_workspaces.Current is not { } workspace)
         {
             return null;
@@ -553,7 +559,7 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
             .Where(descriptor => descriptor.IsHat && !descriptor.Kind.StartsWith("proc.", StringComparison.Ordinal))
             .Select(descriptor => new HatChoice(
                 descriptor.Kind,
-                BlockLabel.PreviewText(descriptor),
+                BlockLabel.PreviewText(descriptor, Services.BlockText.Current),
                 descriptor.Summary)),
     ];
 

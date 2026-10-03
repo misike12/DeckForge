@@ -106,22 +106,88 @@ public static class BlockLabel
     }
 
     /// <summary>
+    /// The label's pieces, localized.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Part 21.1 keys a whole label rather than each of its words, and that is what makes the shape of a
+    /// translation a contract: the translated string still contains <c>{count}</c>, and the same parse runs
+    /// over it to find the holes. Word-level keys would survive a reworded label better but would leave the
+    /// translator responsible for the order the words appear in, which is the one thing a translator
+    /// should not have to guess.
+    /// </para>
+    /// <para>
+    /// A translation whose placeholders do not match the row's slots degrades the same way an English label
+    /// does: an unknown <c>{name}</c> becomes a text run holding the marker, so a mistranslated hole is
+    /// visible on the block instead of silently disappearing from it.
+    /// </para>
+    /// </remarks>
+    /// <param name="descriptor">The block's row.</param>
+    /// <param name="lookup">Where translations come from.</param>
+    public static IReadOnlyList<BlockLabelRun> Plan(BlockDescriptor descriptor, IBlockTextLookup lookup)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(lookup);
+
+        var translated = BlockLabelKeys.Text(lookup, BlockLabelKeys.Label(descriptor), descriptor.Label ?? string.Empty);
+
+        return translated == descriptor.Label
+            ? Plan(descriptor)
+            : Plan(descriptor with { Label = translated }, lookup);
+    }
+
+    /// <summary>
     /// What the label says when nothing is filled in: the words, and a hint in each hole.
     /// </summary>
     /// <remarks>
     /// Used for the palette's search results and for tooltips, where a miniature tile would be too small
-    /// to read. The hole text is deliberately short — it is a placeholder, not a value, and anything
+    /// to read. The hole text is deliberately short - it is a placeholder, not a value, and anything
     /// longer turns "repeat {count}" into a sentence.
     /// </remarks>
     public static string PreviewText(BlockDescriptor descriptor) =>
+        PreviewText(descriptor, NoTranslations.Instance);
+
+    /// <summary>What the label says when nothing is filled in, localized.</summary>
+    /// <param name="descriptor">The block's row.</param>
+    /// <param name="lookup">Where translations come from.</param>
+    public static string PreviewText(BlockDescriptor descriptor, IBlockTextLookup lookup) =>
         string.Join(
             " ",
-            Plan(descriptor).Select(run => run.Kind switch
+            Plan(descriptor, lookup).Select(run => run.Kind switch
             {
                 BlockLabelRunKind.Text => run.Text,
                 BlockLabelRunKind.Menu => run.Menu?.Default ?? "?",
                 _ => Hole(run.Slot),
             }));
+
+    /// <summary>
+    /// What a menu's chosen value says, translated when it is one of the row's own options.
+    /// </summary>
+    /// <remarks>
+    /// The condition is the point: the chosen value is the user's data, so a value that is *not* a declared
+    /// option - a stale field from an older row, or a block from a plugin whose catalogue has moved on - is
+    /// shown as written. Translating it would be a lookup miss reported as a wrong word.
+    /// </remarks>
+    /// <param name="descriptor">The block's row.</param>
+    /// <param name="menu">The menu.</param>
+    /// <param name="chosen">The value in the document.</param>
+    /// <param name="lookup">Where translations come from.</param>
+    public static string MenuText(
+        BlockDescriptor descriptor,
+        MenuDescriptor menu,
+        string? chosen,
+        IBlockTextLookup lookup)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(menu);
+        ArgumentNullException.ThrowIfNull(lookup);
+
+        var value = string.IsNullOrWhiteSpace(chosen) ? menu.Default ?? string.Empty : chosen!;
+
+        return menu.Options.Contains(value, StringComparer.Ordinal)
+            ? BlockLabelKeys.Text(lookup, BlockLabelKeys.Menu(descriptor, value), value)
+            : value;
+    }
 
     /// <summary>
     /// What one hole says when nothing is filled in: the row's own default if it declared one, and

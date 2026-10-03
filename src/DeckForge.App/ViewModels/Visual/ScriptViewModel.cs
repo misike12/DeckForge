@@ -30,7 +30,7 @@ public sealed class ScriptViewModel : ColumnViewModel
     /// <summary>What the script starts with, in words, for the strip's second line.</summary>
     public string HatLabel =>
         BlockCatalog.Find(Script.Hat.Kind) is { } descriptor
-            ? BlockLabel.PreviewText(descriptor)
+            ? BlockLabel.PreviewText(descriptor, Services.BlockText.Current)
             : Script.Hat.Kind;
 
     public override BodyRef Address => BodyRef.ScriptBody(Script.Hat.Id);

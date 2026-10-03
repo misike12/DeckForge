@@ -34,7 +34,7 @@ public sealed partial class BlockNodeViewModel : ObservableObject
         Kind = block.Kind;
         Id = block.Id;
 
-        Title = Descriptor is null ? block.Kind : BlockLabel.PreviewText(Descriptor);
+        Title = Descriptor is null ? block.Kind : BlockLabel.PreviewText(Descriptor, Services.BlockText.Current);
         Summary = Descriptor?.Summary ?? "A block this build does not know.";
         Sdk = Descriptor?.Sdk.VerifiedAgainst ?? string.Empty;
         DocsPath = Descriptor?.DocsPath;
@@ -212,7 +212,7 @@ public sealed partial class BlockNodeViewModel : ObservableObject
 
         var parts = new List<LabelPartViewModel>();
 
-        foreach (var run in BlockLabel.Plan(Descriptor))
+        foreach (var run in BlockLabel.Plan(Descriptor, Services.BlockText.Current))
         {
             switch (run.Kind)
             {
@@ -262,7 +262,7 @@ public sealed partial class BlockNodeViewModel : ObservableObject
 
         foreach (var descriptor in Descriptor?.Menus ?? [])
         {
-            menus.Add(new MenuViewModel(descriptor, Block.Field(descriptor.Name)));
+            menus.Add(new MenuViewModel(descriptor, Block.Field(descriptor.Name), Descriptor, Services.BlockText.Current));
         }
 
         return menus;

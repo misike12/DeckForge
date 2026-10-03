@@ -127,12 +127,21 @@ public sealed partial class SlotViewModel : ObservableObject
 /// </remarks>
 public sealed class MenuViewModel
 {
-    public MenuViewModel(MenuDescriptor descriptor, string? selected)
+    public MenuViewModel(
+        MenuDescriptor descriptor,
+        string? selected,
+        BlockDescriptor? row = null,
+        Core.Visual.IBlockTextLookup? lookup = null)
     {
         Descriptor = descriptor;
         Selected = selected ?? descriptor.Default;
         Options = descriptor.Options;
+        _row = row;
+        _lookup = lookup ?? Core.Visual.NoTranslations.Instance;
     }
+
+    private readonly BlockDescriptor? _row;
+    private readonly Core.Visual.IBlockTextLookup _lookup;
 
     public MenuDescriptor Descriptor { get; }
 
@@ -146,7 +155,15 @@ public sealed class MenuViewModel
     public string Selected { get; }
 
     /// <summary>The chosen option, for the tile.</summary>
-    public string Display => Selected;
+    /// <remarks>
+    /// Translated when the row declares the value and shown as written when it does not - a value the
+    /// catalogue never listed is a saved document from an older row, not something to look up. See
+    /// <see cref="BlockLabel.MenuText"/>, which is where the decision lives so it can be tested.
+    /// </remarks>
+    public string Display =>
+        _row is null
+            ? Selected
+            : BlockLabel.MenuText(_row, Descriptor, Selected, _lookup);
 }
 
 /// <summary>One wrapped body: a label and the statements inside it.</summary>
