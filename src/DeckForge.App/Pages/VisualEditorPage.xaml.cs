@@ -488,6 +488,7 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
 
         if (dialog.ShowDialog() is not true)
         {
+            _vm.Report("Export cancelled. Nothing was written.");
             return;
         }
 
@@ -1007,6 +1008,12 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
         PaletteOverlay.Visibility == Visibility.Visible || ShortcutOverlay.Visibility == Visibility.Visible;
 
     /// <summary>Opens the command palette.</summary>
+    /// <summary>Opens the command palette from the header button, so Ctrl+K is not the only way in.</summary>
+    private void OpenPalette_Click(object sender, RoutedEventArgs e) => OpenPalette();
+
+    /// <summary>Opens the shortcut sheet from the header button.</summary>
+    private void OpenShortcuts_Click(object sender, RoutedEventArgs e) => OpenShortcuts();
+
     private void OpenPalette()
     {
         CloseOverlays();

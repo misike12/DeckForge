@@ -15,7 +15,7 @@
         <Border Background="#99000000" />
 
         <Border Width="620" MaxHeight="560" VerticalAlignment="Center" CornerRadius="12"
-                Background="{DynamicResource Liquid.ControlElevationBrush}"
+                Background="{DynamicResource Liquid.CardBrush}"
                 BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top" Margin="20,18,20,10">

@@ -156,6 +156,20 @@
                     <ui:Button Content="Export SVG" Padding="10,4" Margin="8,0,0,0"
                                Click="ExportSvg_Click"
                                ToolTip="Write the canvas as a vector image, beside the workspace" />
+
+                    <!--
+                        The command palette and the shortcut sheet, as buttons.
+
+                        Both were reachable only from the keyboard, which makes them unreachable for anyone
+                        who does not already know the chord - and a feature you cannot find is a feature you
+                        do not have. The sheet in particular is the page's own documentation of its
+                        shortcuts, so hiding it behind one of those shortcuts is circular.
+                    -->
+                    <ui:Button Content="Palette" Padding="10,4" Margin="8,0,0,0" Click="OpenPalette_Click"
+                               ToolTip="Every command on this page (Ctrl+K)" />
+                    <ui:Button x:Name="ShortcutsButton" Content="?" Padding="10,4" Margin="8,0,0,0"
+                               Click="OpenShortcuts_Click" ToolTip="The keyboard shortcuts for this page (Ctrl+/)" />
+
                     <ui:Button x:Name="DocsButton" Content="Docs" Padding="10,4" Margin="8,0,0,0"
                                Click="OpenDocs_Click" ToolTip="Open the documentation for actions" />
                 </StackPanel>

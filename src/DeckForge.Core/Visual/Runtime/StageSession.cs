@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 
 namespace DeckForge.Core.Visual.Runtime;
@@ -158,9 +159,48 @@ public sealed class StageSession
     public IReadOnlyList<StageParameterRow> Parameters { get; private set; } = [];
 
     /// <summary>One parameter and the value this run supplies for it.</summary>
-    /// <param name="Name">Its name.</param>
-    /// <param name="Value">What the user typed.</param>
-    public sealed record StageParameterRow(string Name, string Value);
+    /// <remarks>
+    /// A class with a setter that pushes into the host, not a record. The stage's Parameters table binds
+    /// two-way to <see cref="Value"/>, and against an init-only record that write-back failed silently: the
+    /// box accepted the caret, the binding produced a WPF error nobody sees, and the run used an empty
+    /// value - so a hole with no parameter behind it printed as written, produced by a control that looks
+    /// exactly like one that had. Nothing in the app called SetParameter at all, which is the same defect
+    /// seen from the other side.
+    /// </remarks>
+    public sealed class StageParameterRow : INotifyPropertyChanged
+    {
+        private readonly Action<string, string?> _apply;
+        private string _value = string.Empty;
+
+        internal StageParameterRow(string name, Action<string, string?> apply)
+        {
+            Name = name;
+            _apply = apply;
+        }
+
+        /// <summary>The parameter's name.</summary>
+        public string Name { get; }
+
+        /// <summary>What the user typed, and what the next run will use.</summary>
+        public string Value
+        {
+            get => _value;
+            set
+            {
+                if (string.Equals(_value, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _value = value;
+                _apply(Name, value);
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+            }
+        }
+
+        /// <inheritdoc />
+        public event PropertyChangedEventHandler? PropertyChanged;
+    }
 
     /// <summary>Why the last run ended, in a sentence.</summary>
     public string Outcome { get; private set; } = "Nothing has run yet.";
@@ -436,7 +476,7 @@ public sealed class StageSession
 
         Parameters = (parameters ?? [])
             .OrderBy(name => name, StringComparer.Ordinal)
-            .Select(name => new StageParameterRow(name, string.Empty))
+            .Select(name => new StageParameterRow(name, SetParameter))
             .ToList();
 
         Reset();
