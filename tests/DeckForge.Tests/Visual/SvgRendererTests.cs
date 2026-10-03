@@ -16,8 +16,17 @@ namespace DeckForge.Tests.Visual;
 [TestFixture]
 public sealed class SvgRendererTests
 {
+    private static readonly System.Globalization.CultureInfo PriorCulture =
+        System.Globalization.CultureInfo.CurrentCulture;
+
     [OneTimeSetUp]
     public void ForceInvariant() => Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+
+    // Restored, because the suite is sequential and the next fixture on this thread inherited the invariant
+    // culture for the rest of the run - which is how a test somewhere else ends up asserting formatting that
+    // only holds in one culture and nobody can say why.
+    [OneTimeTearDown]
+    public void RestoreCulture() => Thread.CurrentThread.CurrentCulture = PriorCulture;
 
     private static VisualProject Project(params VisualScript[] scripts)
     {
@@ -81,13 +90,21 @@ public sealed class SvgRendererTests
             Assert.That(Count(svg, "<rect"), Is.EqualTo(expected.Count),
                 "one rectangle per block, which is the only way an export can be checked against a layout");
 
-            foreach (var rect in expected.Values)
-            {
-                Assert.That(
-                    svg,
-                    Does.Contain($"x=\"{F(rect.X + 16)}\"").And.Contain($"y=\"{F(rect.Y + 16)}\""),
-                    "the export draws the block where the canvas draws it, not somewhere near it");
-            }
+            // Compared per element, from the parsed document, rather than as two independent substring
+            // searches over the whole file: an x from one rectangle and a y from a *different* rectangle
+            // satisfied the old assertion, so it passed whatever the renderer did with either value.
+            var drawn = XDocument.Parse(svg)
+                .Descendants()
+                .Where(element => element.Name.LocalName == "rect")
+                .Select(element => (
+                    X: double.Parse(element.Attribute("x")!.Value, System.Globalization.CultureInfo.InvariantCulture),
+                    Y: double.Parse(element.Attribute("y")!.Value, System.Globalization.CultureInfo.InvariantCulture)))
+                .ToList();
+
+            var wanted = expected.Values.Select(rect => (rect.X + 16, rect.Y + 16)).OrderBy(pair => pair).ToList();
+
+            Assert.That(drawn.Select(pair => (pair.X, pair.Y)).OrderBy(pair => pair), Is.EqualTo(wanted),
+                "each rectangle at the position the layout model put that same block");
         });
     }
 

@@ -144,6 +144,29 @@ public sealed class ResxTextLookupTests
     }
 
     [Test]
+    public void An_unset_menu_shows_its_default_translated_and_a_menu_with_no_default_shows_nothing()
+    {
+        // The only branch MenuText's tests never reached: a value nobody chose. A menu whose default is not
+        // one of its declared options is nonsense data, and the row has to say something rather than throw.
+        var row = Row("ui.log");
+        var menu = (row.Menus ?? []).First(candidate => candidate.Options.Count > 0);
+        var option = menu.Options[0];
+        var noDefault = menu with { Default = null! };
+
+        WriteResx("Strings.de.resx", (BlockLabelKeys.Menu(row, menu.Default), "Warnung"));
+        var lookup = new ResxTextLookup(_directory, "de");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(BlockLabel.MenuText(row, menu, null, lookup), Is.EqualTo("Warnung"),
+                "an unset menu falls back to its default, and the default is translatable like any option");
+            Assert.That(BlockLabel.MenuText(row, menu, "   ", lookup), Is.EqualTo("Warnung"),
+                "whitespace is not a choice either");
+            Assert.That(BlockLabel.MenuText(row, noDefault, null, lookup), Is.EqualTo(string.Empty));
+        });
+    }
+
+    [Test]
     public void A_workspace_with_no_resx_at_all_answers_nothing_and_says_so()
     {
         var lookup = new ResxTextLookup(_directory);

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
@@ -382,8 +383,13 @@ public partial class ConfigFlowEditorViewModel : ObservableObject
 
             StatusText = $"Generated {className}.cs: {Steps.Count} step(s), " + string.Join(", ", notes) + ".";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Logged as well as shown. The bare catch this replaced reduced every failure - a bad input, a
+            // full disk, a bug in the generator - to one status line with no stack and no record, so a
+            // product defect and a user's typo were indistinguishable from the outside and neither could be
+            // chased afterwards.
+            App.Logger.LogError(ex, "Generating the design failed.");
             StatusText = $"Generation failed: {ex.Message}";
         }
     }

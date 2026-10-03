@@ -13,11 +13,18 @@ namespace DeckForge.App.Controls.Blocks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// One column per script, laid out left to right. Part 9.4 describes a <c>ScrollViewer</c> around a zoom
-/// <c>ScaleTransform</c> around a <c>Canvas</c> holding one view per script; the transform and the absolute
-/// positions are deliberately not here yet. Zoom and pan are Phase 10, and building them now means a
-/// second layout that Phase 10 throws away — plus a coordinate system nothing is tested against, since the
-/// drop resolver's rectangles only become real here, where the blocks actually are.
+/// One column per script, laid out left to right, inside Part 9.4's <c>ScrollViewer</c> -&gt; zoom
+/// <c>ScaleTransform</c> -&gt; <c>PanTransform</c> -&gt; <c>Canvas</c>. This paragraph used to say the
+/// transform and the absolute positions were "deliberately not here yet" and that zoom and pan were a
+/// later phase - on a class that now has <see cref="View"/>, <see cref="ApplyView"/>, a scale transform, a
+/// pan transform and three pan events. A header that tells the next contributor a feature is absent is
+/// how a second implementation gets built beside the first.
+/// </para>
+/// <para>
+/// The arithmetic is still Core's. This control applies a <see cref="Core.Visual.CanvasView"/> it is given
+/// and measures what is on screen; it does not decide what a zoom or a pan means, because the drop
+/// resolver, the minimap and the stage all need the same answer and three implementations of it would
+/// disagree the first time any one of them changed.
 /// </para>
 /// <para>
 /// This control owns the pointer half of Part 9.5 and nothing else: it translates mouse events into
@@ -226,8 +233,18 @@ public partial class BlockWorkspace : UserControl
             return rects;
         }
     }
-    /// <summary>The canvas viewport's size in pixels.</summary>
-    public (double Width, double Height) Viewport => (Surface.ActualWidth, Surface.ActualHeight);
+    /// <summary>
+    /// What the user can see, in pixels.
+    /// </summary>
+    /// <remarks>
+    /// The scroller's viewport, not the surface's own size. The surface is content-sized, so on a canvas
+    /// narrower than the window its width is the content's and its height is the tallest column's - and
+    /// zoom is centred on this number. Centring on the content instead of the window put the centre of the
+    /// document off screen as soon as the zoom changed, and the canvas went blank on the first press of the
+    /// zoom-out button. It also mis-drew the minimap's "you are here" rectangle, which is meant to be the
+    /// part of the document on screen.
+    /// </remarks>
+    public (double Width, double Height) Viewport => (Scroller.ViewportWidth, Scroller.ViewportHeight);
 
     /// <summary>
     /// Zooms about the pointer on Ctrl+wheel, and pans on middle-drag.
@@ -496,17 +513,7 @@ public partial class BlockWorkspace : UserControl
 
         (found is not null ? found : Surface).BringIntoView();
     }
-
-    /// <summary>
-    /// Shows or hides the drag adornments for whatever the editor says is in progress.
-    /// </summary>
-    /// <remarks>
-    /// Called from the page on every change notification, because the keyboard's carry mode is owned by the
-    /// editor and not by any pointer event. One adorner serves both paths and its <c>OnRender</c> decides
-    /// which of them to draw, so "is anything in hand" is one question with one answer rather than two
-    /// adorners that have to be kept in step.
-    /// </remarks>
-    /// <summary>
+/// <summary>
     /// Puts the keyboard back on the canvas.
     /// </summary>
     /// <remarks>
@@ -531,6 +538,14 @@ public partial class BlockWorkspace : UserControl
 
         Focus();
     }
+
+    /// <summary>
+    /// Shows or hides the drag adornments for whatever the editor says is in progress.
+    /// </summary>
+    /// <remarks>
+    /// Called from the page on every change notification, because the keyboard's carry mode is owned by the
+    /// editor and the adorners are owned by this control.
+    /// </remarks>
     public void Refresh()
     {
         // Re-focus the selected block, because every edit rebuilds the canvas and the rebuild replaces

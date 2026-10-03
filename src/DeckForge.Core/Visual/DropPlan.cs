@@ -3,6 +3,13 @@ namespace DeckForge.Core.Visual;
 /// <summary>
 /// What a drag is carrying, as the document knows it.
 /// </summary>
+/// <remarks>
+/// Every refusal from this file carries a <c>vis-</c> code, in one namespace with the validator's. They
+/// used to be six codes of their own - <c>drop-shape</c>, <c>landing-stale</c>, <c>slot-no-name</c>,
+/// <c>onto-self</c>, <c>hat-needs-canvas</c>, <c>canvas-needs-hat</c> - which were in no table and covered
+/// by no test, so anything switching on <c>DocumentEditResult.Code</c> had to handle two vocabularies and a
+/// wrong code here was invisible. Prefixed, and Appendix F now lists them.
+/// </remarks>
 /// <param name="Source">The body the run came from, or null when it came from the palette.</param>
 /// <param name="First">The block that was grabbed, or null for a palette drag.</param>
 /// <param name="Run">
@@ -162,9 +169,16 @@ public static class DropPlan
         // The run is built here rather than handed to DocumentEditor.Move, which re-reads the whole tail
         // from the block it is given. That is the right default for a caller that wants a stack drag, and
         // the wrong thing entirely for one that has already decided what the run is - which is exactly
+        // The catalogue's label rather than the kind, so the pointer path and the keyboard path agree:
+        // this read "Undo Move control.forever" where DocumentEditor.Describe reads "Undo Move repeat 10",
+        // and the same gesture had two names in the same session.
+        var described = BlockCatalog.Find(payload.Kind)?.Label is { } label
+            ? label.Replace('{', ' ').Replace('}', ' ').Trim()
+            : payload.Kind;
+
         // what Alt means. Passing the payload's run through keeps the narrowed drag narrowed.
         return editor.Execute(new MoveRun(
-            payload.Source!.Value, where, payload.Run!, landing.Index, $"Move {payload.Kind}"));
+            payload.Source!.Value, where, payload.Run!, landing.Index, $"Move {described}"));
     }
 
     /// <summary>

@@ -330,7 +330,13 @@ Editor = new DocumentEditor(Document);
             : $"Saved · {Path.GetFileName(VisualStore.PathFor(workspace))}";
 
     /// <summary>Whether there is anything to save.</summary>
-    public bool CanSave => HasWorkspace && IsDirty;
+    /// <summary>Whether Save should do anything, and why not when it should not.</summary>
+    /// <remarks>
+    /// <see cref="IsCanvasReadOnly"/> is checked before <see cref="IsDirty"/> because a read-only canvas is
+    /// always "dirty" - it is the sample standing in for a file this build cannot read - and comparing the
+    /// two would leave the button enabled on exactly the canvas where pressing it destroys something.
+    /// </remarks>
+    public bool CanSave => HasWorkspace && !IsCanvasReadOnly && IsDirty;
 
     /// <summary>Saves the canvas to the workspace's sidecar.</summary>
     /// <remarks>
@@ -472,8 +478,25 @@ Editor = new DocumentEditor(Document);
 
         _pendingLoadMessage = result.Recovered || !result.Ok ? result.Message : null;
 
+        // A file this build cannot read is also a file this build must not write. The load says so in a
+        // message; without this the page showed the sample document with Save enabled, and one press put the
+        // sample where the newer file had been.
+        _readOnlyCanvas = result.ReadOnly;
+
         return result is { Ok: true, Project: { } project } ? project : null;
     }
+
+    private bool _readOnlyCanvas;
+
+    /// <summary>
+    /// Whether the canvas on screen came from a file this build refused to read.
+    /// </summary>
+    /// <remarks>
+    /// True means the document being edited is the sample, not the user's work: the real file is newer than
+    /// this build. Saving is refused outright rather than offered with a warning, because there is nothing
+    /// here worth saving over it.
+    /// </remarks>
+public bool IsCanvasReadOnly => _readOnlyCanvas;
 
     private string? _pendingLoadMessage;
 

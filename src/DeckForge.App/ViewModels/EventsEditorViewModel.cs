@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -219,8 +220,13 @@ public partial class EventsEditorViewModel : ObservableObject
 
             StatusText = $"Added event '{EventId}' to PluginIntegration.cs (IEventProvider), resx keys and events:publish permission. Publish it with context.Events.Publish(\"{EventId}\", payload).";
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Logged as well as shown. The bare catch this replaced reduced every failure - a bad input, a
+            // full disk, a bug in the generator - to one status line with no stack and no record, so a
+            // product defect and a user's typo were indistinguishable from the outside and neither could be
+            // chased afterwards.
+            App.Logger.LogError(ex, "Generating the design failed.");
             StatusText = $"Generation failed: {ex.Message}";
         }
     }

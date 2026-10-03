@@ -145,4 +145,38 @@ public sealed class BlockContrastTests
         Assert.That(shapes, Has.Count.GreaterThanOrEqualTo(4),
             "stack, reporter, boolean and hat are four silhouettes a user can tell without colour");
     }
+
+    [Test]
+    public void The_outline_thickens_as_contrast_rises_and_is_never_hairline_at_the_top()
+    {
+        // StrokeWidthFor had no test at all, and it is the one part of the contrast decision a user sees
+        // directly: a rule nobody checked is a rule that can quietly become 1.
+        var standard = BlockContrast.StrokeWidthFor(ContrastLevel.Standard);
+        var strong = BlockContrast.StrokeWidthFor(ContrastLevel.Strong);
+        var monochrome = BlockContrast.StrokeWidthFor(ContrastLevel.Monochrome);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(standard, Is.EqualTo(1.25), "the block outline's own width");
+            Assert.That(strong, Is.GreaterThan(standard));
+            Assert.That(monochrome, Is.GreaterThan(strong),
+                "monochrome is the level where colour has gone entirely, so the outline is all there is");
+            Assert.That(monochrome, Is.GreaterThanOrEqualTo(2),
+                "a one-pixel outline disappears at some zoom levels and on some panels");
+        });
+    }
+
+    [Test]
+    public void An_unrecognised_level_falls_back_to_the_standard_width_rather_than_to_nothing()
+    {
+        var unknown = (ContrastLevel)999;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(BlockContrast.StrokeWidthFor(unknown), Is.EqualTo(BlockContrast.StrokeWidthFor(ContrastLevel.Standard)));
+            Assert.That(BlockContrastRules.For(BlockCategory.Control, unknown).StrokeThickness,
+                Is.EqualTo(BlockContrast.StrokeWidthFor(ContrastLevel.Standard)),
+                "a level this build has never heard of still has to draw something visible");
+        });
+    }
 }

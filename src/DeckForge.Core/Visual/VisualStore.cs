@@ -26,8 +26,19 @@ public sealed record VisualStoreResult(
     string Path,
     string Message,
     VisualProject? Project = null,
-    bool Recovered = false)
+    bool Recovered = false,
+    bool ReadOnly = false)
 {
+    /// <summary>
+    /// The file on disk is newer than this build and must not be written back.
+    /// </summary>
+    /// <remarks>
+    /// Carried through from the load rather than left as a message. The load refused the file and said it
+    /// "will not be overwritten"; the page then showed the sample document with Save enabled, and Save put
+    /// the sample where the newer file had been - after which the backup held the newer file and the
+    /// promise had been kept in the only sense that still had the old text available. A refusal the caller
+    /// cannot act on is not a refusal.
+    /// </remarks>
     /// <summary>A save that worked, or a load that read the file the user expected.</summary>
     public static VisualStoreResult Saved(string path, string message, VisualProject? project = null) =>
         new(true, path, message, project);
@@ -102,6 +113,14 @@ public static class VisualStore
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
+            // Serialised first, into a temporary file, and only then does anything on disk change. The
+            // backup used to be copied before the temporary was written, so a failure after that point
+            // left `canvas.previous.json` holding what had been in `canvas.json` before *this* save - the
+            // save before last - while the failure message said nothing on disk had changed. Ordering the
+            // write first means the claim is true: if anything below throws, both files are as they were.
+            var temporary = path + ".tmp";
+            File.WriteAllText(temporary, VisualProjectJson.Serialize(project));
+
             if (backup && File.Exists(path))
             {
                 File.Copy(path, BackupPathFor(workspace), overwrite: true);
@@ -109,8 +128,6 @@ public static class VisualStore
 
             // Beside, then replace. A write in place that is interrupted leaves a file that cannot be
             // parsed, and a canvas that cannot be parsed is a canvas that is gone.
-            var temporary = path + ".tmp";
-            File.WriteAllText(temporary, VisualProjectJson.Serialize(project));
             File.Move(temporary, path, overwrite: true);
 
             var blocks = project.Targets.Sum(target => target.Scripts.Count);
@@ -250,8 +267,14 @@ public static class VisualStore
                     project),
                 VisualLoadOutcome.LoadedFromLegacy => VisualStoreResult.Migrated(
                     path,
-                    $"{message} The original is kept at {Path.GetFileName(path)}.migrated.json.",
+                                        // The file that is still on disk, not a copy nothing makes. This named
+                    // `x.migrated.json`, which no writer in the project produces, so a user who believed it
+                    // went looking for a safety copy that does not exist - while the real original was
+                    // sitting untouched under the name they already had.
+                    $"{message} The original {Path.GetFileName(path)} has not been changed.",
                     project),
+                VisualLoadOutcome.UnsupportedSchema => new VisualStoreResult(
+                    false, path, message, ReadOnly: true),
                 _ => VisualStoreResult.Failed(path, message),
             };
         }

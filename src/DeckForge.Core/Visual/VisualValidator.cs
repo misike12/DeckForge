@@ -273,7 +273,7 @@ public static class VisualValidator
         var walk = new StackWalk();
         foreach (var statement in script.Body)
         {
-            walk.Push(statement, loopDepth: 0, inProcedure: false);
+            walk.Push(loopDepth: 0, inProcedure: false);
             foreach (var diagnostic in ValidateStatement(statement, walk, context, declarations, procedures))
             {
                 yield return diagnostic;
@@ -291,7 +291,7 @@ public static class VisualValidator
         var walk = new StackWalk();
         foreach (var statement in procedure.Body)
         {
-            walk.Push(statement, loopDepth: 0, inProcedure: true, procedure);
+            walk.Push(loopDepth: 0, inProcedure: true, procedure);
             foreach (var diagnostic in ValidateStatement(statement, walk, context, declarations, procedures))
             {
                 yield return diagnostic;
@@ -384,7 +384,7 @@ public static class VisualValidator
                 yield return diagnostic;
             }
 
-            foreach (var diagnostic in ValidateReachability(block, descriptor, walk))
+            foreach (var diagnostic in ValidateBusyLoops(block, descriptor, walk))
             {
                 yield return diagnostic;
             }
@@ -406,7 +406,7 @@ public static class VisualValidator
                 || descriptor.IsContainer && IsLoopBody(descriptor, bodyName);
             foreach (var child in body)
             {
-                walk.Push(child, insideLoop ? walk.LoopDepth + 1 : walk.LoopDepth, walk.InProcedure);
+                walk.Push(insideLoop ? walk.LoopDepth + 1 : walk.LoopDepth, walk.InProcedure);
                 foreach (var diagnostic in ValidateStatement(child, walk, context, declarations, procedures))
                 {
                     yield return diagnostic;
@@ -522,7 +522,7 @@ public static class VisualValidator
                 {
                     foreach (var child in body)
                     {
-                        walk.Push(child, 0, walk.InProcedure);
+                        walk.Push(0, walk.InProcedure);
                         foreach (var childDiagnostic in ValidateStatement(child, walk, context, declarations, procedures))
                         {
                             yield return childDiagnostic;
@@ -740,7 +740,7 @@ public static class VisualValidator
         count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 
     /// <summary>What follows a cap, and a forever with nothing that yields inside it.</summary>
-    private static IEnumerable<VisualDiagnostic> ValidateReachability(
+    private static IEnumerable<VisualDiagnostic> ValidateBusyLoops(
         Block block,
         BlockDescriptor descriptor,
         StackWalk walk)
@@ -853,11 +853,15 @@ public static class VisualValidator
                 break;
 
             case SlotType.Variable:
+                // Its own code. This reported "vis-name-duplicate" - defined in Appendix F as two things
+                // sharing a name - for a variable that does not exist at all, so one diagnostics list mixed
+                // "you have a duplicate name" with "that name is not declared" under one heading, and a
+                // user searching the log for duplicates found the wrong thing.
                 if (!declarations.Contains(text)
                     && (!context.NamesResolved || !context.HostVariables.Contains(text, StringComparer.Ordinal)))
                 {
                     yield return Unknown(
-                        "vis-name-duplicate", blockId, slotName, text,
+                        "vis-name-unknown", blockId, slotName, text,
                         "Set it first with one of the variable blocks, or declare it in the document.");
                 }
                 break;
@@ -867,7 +871,7 @@ public static class VisualValidator
                     && (!context.NamesResolved || !context.HostVariables.Contains(text, StringComparer.Ordinal)))
                 {
                     yield return Unknown(
-                        "vis-name-duplicate", blockId, slotName, text,
+                        "vis-name-unknown", blockId, slotName, text,
                         "Declare the list in the document, or set it first with a list block.");
                 }
                 break;
@@ -978,7 +982,7 @@ public static class VisualValidator
         /// <summary>The procedure whose body this statement is in, or null for a script.</summary>
         public ProcedureDeclaration? Procedure => _frames.Count > 0 ? _frames.Peek().Procedure : null;
 
-        public void Push(Block block, int loopDepth, bool inProcedure, ProcedureDeclaration? procedure = null) =>
+        public void Push(int loopDepth, bool inProcedure, ProcedureDeclaration? procedure = null) =>
             _frames.Push((loopDepth, inProcedure ? procedure : null));
 
         public void Pop() => _frames.Pop();

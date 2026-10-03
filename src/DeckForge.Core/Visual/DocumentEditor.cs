@@ -461,15 +461,7 @@ public sealed class DocumentEditor
 
     // ---- refusing ----------------------------------------------------------------------------------
 
-    /// <summary>
-    /// The check every command passes before it is applied, returning null when the edit is legal.
-    /// </summary>
-    /// <remarks>
-    /// Appendix G's third rule. Two things are refused: a move that would put a run inside itself, and a
-    /// reference to a block or body that does not exist. Both would otherwise fail deep inside a command
-    /// with an exception the user cannot act on, or — worse — succeed against the wrong list.
-    /// </remarks>
-    /// <summary>
+/// <summary>
     /// An edit that was asked for and would change nothing, and is therefore not a refusal either.
     /// </summary>
     /// <remarks>
@@ -480,6 +472,19 @@ public sealed class DocumentEditor
     /// </remarks>
     private static DocumentEditResult Declined() => new(false);
 
+    /// <summary>
+    /// The check every command passes before it is applied, returning null when the edit is legal.
+    /// </summary>
+    /// <remarks>
+    /// Appendix G's third rule. Two things are refused: a move that would put a run inside itself, and a
+    /// reference to a block or body that does not exist. Both would otherwise fail deep inside a command
+    /// with an exception the user cannot act on, or - worse - succeed against the wrong list.
+    /// <para>
+    /// This block sat above <see cref="Declined"/> rather than above this method, so IntelliSense on
+    /// <c>Declined</c> showed the refusal check's text and the method that decides whether an edit is legal
+    /// had no documentation at all.
+    /// </para>
+    /// </remarks>
     private DocumentEditResult? Refuse(DocumentCommand command)
     {
         switch (command)

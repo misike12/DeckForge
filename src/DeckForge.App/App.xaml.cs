@@ -16,6 +16,17 @@ public partial class App : Application
 {
     private static readonly ILogger Log =
         LoggerFactory.Create(builder => builder.AddDebug()).CreateLogger("DeckForge");
+
+    /// <summary>
+    /// The application's logger, for the few places that catch a failure and carry on.
+    /// </summary>
+    /// <remarks>
+    /// Public because "show a message and keep the app alive" is a decision that needs a record. Three
+    /// generators reduced every failure - a bad input, a full disk, a bug in the generator - to one status
+    /// line, so from the outside a product defect and a user's typo were the same event, and afterwards
+    /// there was nothing to look at. A page that survives a failure should say so *and* leave a trace.
+    /// </remarks>
+    public static ILogger Logger => Log;
     public static IServiceProvider Services { get; private set; } = null!;
 
     protected override void OnStartup(StartupEventArgs e)

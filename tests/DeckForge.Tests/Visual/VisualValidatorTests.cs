@@ -332,7 +332,10 @@ public sealed class VisualValidatorTests
 
         var diagnostics = Validate(script);
 
-        var findings = diagnostics.Where(d => d.Code == "vis-name-duplicate").ToList();
+        // Its own code, not vis-name-duplicate. Nothing here duplicates anything: `neverSet` is simply not
+        // declared, and reporting it under the duplicate code sent anyone reading the log to the wrong part
+        // of the design.
+        var findings = diagnostics.Where(d => d.Code == "vis-name-unknown").ToList();
         Assert.Multiple(() =>
         {
             Assert.That(findings, Has.Count.EqualTo(1),
@@ -506,7 +509,7 @@ public sealed class VisualValidatorTests
         var declared = new[]
         {
             "vis-shape-mismatch", "vis-type-mismatch", "vis-unbound-slot", "vis-menu-key-unknown",
-            "vis-name-duplicate", "vis-local-collision", "vis-param-unknown", "vis-host-var-unknown",
+            "vis-name-duplicate", "vis-name-unknown", "vis-local-collision", "vis-param-unknown", "vis-host-var-unknown",
             "vis-loop-control-outside-loop", "vis-return-outside-procedure", "vis-forever-no-wait",
             "vis-cap-unreachable", "vis-procedure-missing", "vis-unverified-block",
         };

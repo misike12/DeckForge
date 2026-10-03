@@ -155,6 +155,27 @@ public sealed class PaletteStoreTests
         Assert.That(theirs.Recents, Is.Empty);
     }
 
+    [Test]
+    public void A_save_that_cannot_be_written_says_so_instead_of_throwing_out_of_a_star_click()
+    {
+        // The write-failure arm had no test, because provoking one means making the directory unwritable.
+        // A file in the way of the directory does it without changing any permissions, and it is the
+        // closest thing to the real case: the state path exists as a file because something else made it one.
+        var workspace = Workspace();
+        var state = Path.Combine(Root, "probe", ".deckforge");
+        Directory.Delete(state, recursive: true);
+        File.WriteAllText(state, "not a directory");
+
+        var memory = new PaletteMemory();
+        memory.Note("control.wait");
+
+        var result = default((string Path, bool Saved));
+
+        Assert.That(() => result = PaletteStore.Save(workspace, memory), Throws.Nothing,
+            "a habit is not worth an exception out of a click");
+        Assert.That(result.Saved, Is.False, "and the caller is told it did not happen");
+    }
+
     // ---- helpers -------------------------------------------------------------------------------------
 
     private static WorkspaceContext Workspace(string name = "probe")
