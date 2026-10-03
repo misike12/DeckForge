@@ -5,9 +5,18 @@ using System.Text;
 namespace DeckForge.CliAdapter.Processes;
 
 /// <param name="Combined">
-/// stdout and stderr interleaved in the order the child actually wrote them. Null only for results
+/// Both streams as one transcript, each stream in the order the child wrote it. Null only for results
 /// built by hand in a test.
 /// </param>
+/// <remarks>
+/// The two streams are not interleaved in the order the child wrote them, and cannot be: they are two
+/// separate pipes drained by two separate reader threads, so which line lands first is a scheduling
+/// accident. The documentation claimed otherwise, a test asserted otherwise, and that test failed 11
+/// times out of 20 in isolation while passing in a full suite run - which is worse than either outcome,
+/// because a flaky test gets ignored and a contract nobody can keep gets relied on. Cross-stream order
+/// is available where it is actually wanted by merging at the call site (`2&gt;&amp;1`), which gives one
+/// pipe and therefore one order.
+/// </remarks>
 public sealed record ProcessResult(
     int ExitCode,
     string StandardOutput,

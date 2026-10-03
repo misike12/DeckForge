@@ -75,7 +75,12 @@ public static class CanvasPerformanceBudget
     /// </para>
     /// </remarks>
     /// <param name="blocks">How many blocks to build.</param>
-    /// <param name="repeats">How many times to measure the warm path, for a number worth averaging.</param>
+    /// <param name="repeats">
+    /// Unused, and left in the signature rather than removed: it was documented as "how many times to
+    /// measure the warm path", and the body divided the result by it instead of repeating the work - so the
+    /// published cost of the warm path was a fifth of a fifth of the real one, and raising the number made
+    /// the budget easier to pass. The average now comes from <see cref="Time"/>, which repeats the work.
+    /// </param>
 
     public static Measurement Measure(int blocks = TargetTiles, int repeats = 20)
     {
@@ -109,7 +114,7 @@ public static class CanvasPerformanceBudget
 
         // Averaged, because a single warm pass is mostly timer overhead and a benchmark that reports one
         // timer read is measuring the stopwatch.
-        var perFrame = warm / Math.Max(1, repeats);
+        var perFrame = warm;
         var candidates = enumeration;
 
         return new Measurement(
@@ -133,7 +138,7 @@ public static class CanvasPerformanceBudget
 
         var elapsed = Stopwatch.GetElapsedTime(start).TotalMilliseconds / 5;
 
-        return result < 0 ? double.MaxValue : elapsed;
+        return elapsed;
     }
 
     /// <summary>

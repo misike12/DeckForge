@@ -131,9 +131,14 @@ public static class BlockLabel
 
         var translated = BlockLabelKeys.Text(lookup, BlockLabelKeys.Label(descriptor), descriptor.Label ?? string.Empty);
 
-        return translated == descriptor.Label
-            ? Plan(descriptor)
-            : Plan(descriptor with { Label = translated }, lookup);
+        // Not recursion. This re-parsed `descriptor with { Label = translated }` through itself and stopped
+        // only because the key does not depend on the label, so the second pass found the same string and
+        // fell through. Any future key derived from the label's own text would have made it unbounded.
+        var effective = translated == descriptor.Label ? descriptor : descriptor with { Label = translated };
+
+        return lookup.Find(BlockLabelKeys.Label(effective)) is { Length: > 0 }
+            ? Plan(effective)
+            : Plan(descriptor);
     }
 
     /// <summary>

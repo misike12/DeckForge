@@ -39,7 +39,12 @@ public sealed record BlockWriteResult(bool Success, string Content, string Messa
 public static class BlockProgramWriter
 {
     /// <summary>The signature the region is spliced into when the action has no region yet.</summary>
-    public const string ExecutorAnchor = "public Task<ActionResult> ExecuteAsync(ActionExecutionContext context)";
+    // Without the `public ` prefix. The writer's own output is `public async Task<ActionResult>
+    // ExecuteAsync(...)` - `async` goes in between - so an anchor that included `public` stopped
+    // matching the moment the file had been written once, and the second save of an action reported
+    // "could not find the anchor" against a file the first save had produced. VisualProgramWriter
+    // already used the shorter form for exactly this reason; the two are the same anchor now.
+    public const string ExecutorAnchor = VisualProgramWriter.ExecutorAnchor;
 
     /// <summary>
     /// Produces the action source that runs <paramref name="program"/>.

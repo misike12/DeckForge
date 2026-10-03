@@ -20,19 +20,34 @@ public sealed class CapabilityCatalogTests
 
     private static HashSet<string> LoadKnownGlyphs()
     {
-        // Wpf.Ui.Controls.SymbolRegular, read by name. The test project has no reference to the UI
-        // assembly, so it is loaded reflectively and the check skipped if that is not possible.
+        // Wpf.Ui.Controls.SymbolRegular, read by name from the WPF-UI assembly beside this one.
+        //
+        // Two ways this went wrong before, both of which look like success from outside:
+        //   - It loaded "DeckForge.App", which this test project has no reference to. The load threw
+        //     FileNotFoundException, the catch returned an empty set, and an `Assume` skipped the test for
+        //     ever. The suite reported 848 passed, 0 failed and 0 skipped while 849 tests had been
+        //     discovered - a gate on a whole defect class, since a typo'd glyph renders as a blank box,
+        //     that had never once checked a name.
+        //   - It then named a WPF *control* to reach the enum, which fails at runtime for a different
+        //     reason: this project targets net10.0, so PresentationFramework is not loadable here.
+        //
+        // So: the assembly is loaded from disk and only the enum is asked for. An enum's base is
+        // System.Enum, which is why this works without the WPF assemblies being present at all.
         try
         {
-            var app = System.Reflection.Assembly.Load("DeckForge.App");
-            var symbol = app.GetType("Wpf.Ui.Controls.SymbolIconSource")
-                ?.GetProperty("Symbol")?.PropertyType;
+            var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Wpf.Ui.dll");
+            if (!System.IO.File.Exists(path))
+            {
+                return [];
+            }
+
+            var symbol = System.Reflection.Assembly.LoadFrom(path).GetType("Wpf.Ui.Controls.SymbolRegular");
 
             return symbol is { IsEnum: true }
                 ? [.. Enum.GetNames(symbol)]
                 : [];
         }
-        catch (System.IO.FileNotFoundException)
+        catch (System.IO.IOException)
         {
             return [];
         }
@@ -53,7 +68,9 @@ public sealed class CapabilityCatalogTests
     [Test]
     public void Every_glyph_is_one_the_icon_library_actually_defines()
     {
-        Assume.That(KnownGlyphs, Is.Not.Empty, "The icon enum could not be read from this test host.");
+        // An assert, not an Assume: a test that cannot check its subject must fail rather than quietly
+        // stop running, and the summary line's "Skipped: 0" hid this one for months.
+        Assert.That(KnownGlyphs, Is.Not.Empty, "The icon enum could not be read from this test host.");
 
         var unknown = CapabilityCatalog.All
             .Select(c => new { c.Id, c.Glyph })

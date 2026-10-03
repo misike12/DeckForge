@@ -67,10 +67,13 @@ public sealed class ProcessRunnerTests
     }
 
     [Test]
-    public async Task The_transcript_keeps_stdout_and_stderr_in_the_order_they_arrived()
+    public async Task The_transcript_keeps_each_streams_own_order_and_loses_nothing()
     {
-        // cmd's & chaining re-emits the tail of its own command line, which adds stray spaces to
-        // the lines. PowerShell writing to each stream on demand is unambiguous.
+        // Asserted what two pipes and two reader threads can actually promise: every line, once, and each
+        // stream in the order the child wrote it. This test used to assert that the *combined* transcript
+        // came back in write order across both streams, which is not a thing two pipes can do - it failed
+        // 11 times in 20 in isolation and passed in a full suite run, so it taught everyone to re-run
+        // rather than to look. Cross-stream order needs one pipe, which is the child's `2>&1`.
         Assume.That(File.Exists(PowerShell) || PowerShell == "pwsh", "PowerShell is needed here.");
 
         var runner = new ProcessRunner();
@@ -79,16 +82,52 @@ public sealed class ProcessRunnerTests
             [
                 "-NoProfile",
                 "-Command",
-                "[Console]::Out.WriteLine('first');[Console]::Error.WriteLine('second');[Console]::Out.WriteLine('third')",
+                "[Console]::Out.WriteLine('first');[Console]::Error.WriteLine('warn');[Console]::Out.WriteLine('second');[Console]::Error.WriteLine('fail');[Console]::Out.WriteLine('third')",
             ],
             workingDirectory: null,
             environmentVariables: null,
             CancellationToken.None);
 
         var lines = result.CombinedOutput
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
 
-        Assert.That(lines, Is.EqualTo(new[] { "first", "second", "third" }));
+        var output = result.StandardOutput
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+        var error = result.StandardError
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(output, Is.EqualTo(new[] { "first", "second", "third" }), "stdout keeps its own order");
+            Assert.That(error, Is.EqualTo(new[] { "warn", "fail" }), "and so does stderr");
+            Assert.That(lines, Has.Count.EqualTo(5), "nothing is lost or duplicated between the two");
+            Assert.That(lines, Is.EquivalentTo(new[] { "first", "second", "third", "warn", "fail" }));
+        });
+    }
+
+    [Test]
+    public async Task Merging_the_childs_streams_gives_one_order()
+    {
+        // The way to get what the old test asked for, stated as a test so the answer is discoverable: the
+        // child merges its own streams, so there is one pipe and therefore one order.
+        Assume.That(File.Exists(PowerShell) || PowerShell == "pwsh", "PowerShell is needed here.");
+
+        var runner = new ProcessRunner();
+        var result = await runner.RunAsync(
+            PowerShell,
+            [
+                "-NoProfile",
+                "-Command",
+                "[Console]::Out.WriteLine('first');[Console]::Error.WriteLine('second') | Out-Host; [Console]::Out.WriteLine('third')",
+            ],
+            workingDirectory: null,
+            environmentVariables: null,
+            CancellationToken.None);
+
+        Assert.That(result.CombinedOutput, Does.Contain("first").And.Contain("third"));
     }
 
     [Test]

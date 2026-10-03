@@ -84,6 +84,9 @@ public sealed class XamlEventWiringTests
     [Test]
     public void A_handler_markup_wires_is_declared_with_the_args_type_it_asks_for()
     {
+        Assert.That(Files("*.xaml").Any(), Is.True,
+            "the App source tree was not found from " + AppContext.BaseDirectory
+            + ", so this test would have asserted nothing at all");
         // The rule, and it is narrower than "every custom event needs a custom delegate": an event may
         // perfectly well be a plain RoutedEventHandler that a handler receives as RoutedEventArgs and then
         // casts - four of this project's events do exactly that. The failure is only when markup names a
@@ -146,6 +149,9 @@ public sealed class XamlEventWiringTests
     [Test]
     public void Every_known_event_wired_in_markup_has_a_handler_in_the_code_behind()
     {
+        Assert.That(Files("*.xaml").Any(), Is.True,
+            "the App source tree was not found from " + AppContext.BaseDirectory
+            + ", so this test would have asserted nothing at all");
         var missing = new List<string>();
 
         foreach (var markup in Files("*.xaml"))

@@ -464,11 +464,23 @@ public static partial class BlockCompiler
             return opened.Insert(newClose, nl + braceLine);
         }
 
+                // Any run of whitespace immediately before the insertion point goes first. It is the residue of
+        // whatever used to be there - a return the async repair blanked, or the line a removed region left
+        // behind - and leaving it meant every save added one more blank line above the region, without
+        // bound. The old anchor hid this completely: the second save failed to find the anchor and
+        // returned its input unchanged, so a test asserting "saving twice produces the same file" was
+        // passing on a writer that had never once saved the same action twice.
+        var trimmed = insertAt;
+        while (trimmed > open + 1 && char.IsWhiteSpace(source[trimmed - 1]))
+        {
+            trimmed--;
+        }
+
         var insertion = nl + Apply(compiled).TrimEnd() + nl + LineIndentOf(source, anchorIndex);
 
         if (insertAt != close)
         {
-            return source.Insert(insertAt, insertion);
+            return source[..trimmed].TrimEnd(' ', '\t') + insertion + source[insertAt..];
         }
 
         // Appending the closing brace's indent to what is already in front of the brace indents it twice,

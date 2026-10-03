@@ -143,6 +143,13 @@ public partial class LocalizationManagerViewModel : ObservableObject
         }
 
         var defaults = _resx.ReadKeys(defaultPath);
+
+        // Said out loud. An unreadable resx now answers with no keys instead of throwing, and a page of
+        // zero rows is indistinguishable from a project that has never been translated - so the file that
+        // could not be read is named, rather than the translator being left to wonder why their work
+        // vanished.
+        var unreadable = _resx.LastReadError;
+
         Keys.Clear();
         foreach (var (key, value) in defaults.OrderBy(k => k.Key, StringComparer.Ordinal))
         {
@@ -159,6 +166,11 @@ public partial class LocalizationManagerViewModel : ObservableObject
         }
 
         SelectedKey = Keys.FirstOrDefault();
+
+        if (unreadable is not null)
+        {
+            StatusText = unreadable;
+        }
     }
 
     private void RunDiagnostics(WorkspaceContext ws)
