@@ -63,9 +63,19 @@ public static class VisualValidator
     public static readonly IReadOnlyList<string> ReservedNames =
         ["context", "_logger", "_integration"];
 
-    /// <summary>Validates a whole document.</summary>
+    /// <summary>
+    /// Validates a whole document against a plugin that is known to declare nothing.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="VisualValidationContext.None"/> rather than <c>Empty</c>, deliberately. A caller who
+    /// does not pass a context has not said "I don't know what exists" - it has said nothing, and the
+    /// honest reading of nothing is "nothing is declared", which is the reading that keeps the check
+    /// useful. A caller who genuinely has not resolved the names says so by passing
+    /// <see cref="VisualValidationContext.Empty"/>, which is what the Visual page does until a workspace
+    /// is open.
+    /// </remarks>
     public static IReadOnlyList<VisualDiagnostic> Validate(VisualProject project) =>
-        Validate(project, VisualValidationContext.Empty);
+        Validate(project, VisualValidationContext.None);
 
     /// <summary>
     /// Validates a whole document against what the plugin actually declares.
@@ -819,7 +829,12 @@ public static class VisualValidator
         switch (slotType)
         {
             case SlotType.Parameter:
-                if (!context.Parameters.Contains(text, StringComparer.Ordinal))
+                // An empty declaration set means "nobody has told me what exists yet", not "nothing
+                // exists". `VisualValidationContext.Empty` promises the first, and the App relies on it:
+                // the page validates against it until a workspace's action parameters are resolved, and
+                // treating an empty set as a plugin that declares nothing turned every parameter
+                // reference on every canvas into a red "not a name anything declares".
+                if (context.NamesResolved && !context.Parameters.Contains(text, StringComparer.Ordinal))
                 {
                     yield return Unknown(
                         "vis-param-unknown", blockId, slotName, text,
@@ -828,7 +843,7 @@ public static class VisualValidator
                 break;
 
             case SlotType.HostVariable or SlotType.UserVariable:
-                if (!context.HostVariables.Contains(text, StringComparer.Ordinal))
+                if (context.NamesResolved && !context.HostVariables.Contains(text, StringComparer.Ordinal))
                 {
                     yield return Unknown(
                         "vis-host-var-unknown", blockId, slotName, text,
@@ -838,7 +853,8 @@ public static class VisualValidator
                 break;
 
             case SlotType.Variable:
-                if (!declarations.Contains(text) && !context.HostVariables.Contains(text, StringComparer.Ordinal))
+                if (!declarations.Contains(text)
+                    && (!context.NamesResolved || !context.HostVariables.Contains(text, StringComparer.Ordinal)))
                 {
                     yield return Unknown(
                         "vis-name-duplicate", blockId, slotName, text,
@@ -847,7 +863,8 @@ public static class VisualValidator
                 break;
 
             case SlotType.List:
-                if (!declarations.Contains(text) && !context.HostVariables.Contains(text, StringComparer.Ordinal))
+                if (!declarations.Contains(text)
+                    && (!context.NamesResolved || !context.HostVariables.Contains(text, StringComparer.Ordinal)))
                 {
                     yield return Unknown(
                         "vis-name-duplicate", blockId, slotName, text,

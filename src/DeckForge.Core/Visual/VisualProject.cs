@@ -284,6 +284,33 @@ public sealed class VisualProject
     }
 
     /// <summary>
+    /// The next free procedure id in the form the design uses, <c>proc1</c>, <c>proc2</c>, …
+    /// </summary>
+    /// <remarks>
+    /// The highest existing number plus one, exactly as <see cref="NextBlockId"/> does for blocks, and for
+    /// the same reason: the count is not the highest number. Add two procedures, delete the first, add
+    /// again — <c>proc1</c>, <c>proc2</c>, then <c>proc2</c> a second time, because a body is addressed by
+    /// its declaration's id and the editor resolves the first match. A block dropped into the procedure on
+    /// screen then landed in the other one, and undo reverted against the wrong list. Scanning for the
+    /// highest number costs one pass over a list that holds a handful of declarations.
+    /// </remarks>
+    public string NextProcedureId()
+    {
+        var highest = 0;
+
+        foreach (var procedure in Procedures)
+        {
+            if (procedure.Id.Length > 4 && procedure.Id.StartsWith("proc", StringComparison.Ordinal)
+                && int.TryParse(procedure.Id.AsSpan(4), out var number) && number > highest)
+            {
+                highest = number;
+            }
+        }
+
+        return "proc" + (highest + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
     /// The next free block id in the form the design uses, <c>b1</c>, <c>b2</c>, …
     /// </summary>
     /// <remarks>

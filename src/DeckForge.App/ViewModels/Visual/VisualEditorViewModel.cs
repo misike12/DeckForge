@@ -39,7 +39,12 @@ public sealed partial class VisualEditorViewModel : ObservableObject
         // it is also what a user sees before they have picked a workspace to draw in.
         var saved = LoadFromWorkspace();
         Document = saved ?? VisualSampleProject.Build();
-        Validation = VisualSampleProject.ValidationContext;
+        // Empty, not the sample's. The sample's context carries its own two parameter names and one host
+        // variable, and every real canvas was being validated against them: binding a declared parameter
+        // produced "that is not a name anything declares", and a name that happened to be `text` or
+        // `count` never warned even when nothing declared it. Empty is what the context is for - an editor
+        // that has not resolved the workspace's names shows a canvas without a wall of false positives.
+        Validation = VisualValidationContext.Empty;
         // The palette's recency and pins belong to the workspace, so it is handed the one behind the
         // canvas. A sample document with no workspace gets a palette that remembers nothing, which is what
         // a palette is supposed to do when there is nowhere to remember it.
@@ -64,7 +69,7 @@ Editor = new DocumentEditor(Document);
     public VisualValidationContext Validation { get; }
 
     /// <summary>The category rail and the palette.</summary>
-    public PaletteViewModel Palette { get; }
+    public PaletteViewModel Palette { get; private set; }
 
     /// <summary>
     /// The inspector: the editors for the selected block's slots and dropdowns.
@@ -451,6 +456,13 @@ Editor = new DocumentEditor(Document);
         // edits, and a workspace that has never been translated falls back to the catalogue's English.
         Services.BlockText.Use(_workspaces.Current?.LocalizationDirectory);
 
+        // The palette's recents and pins belong to a workspace, and the page is a singleton that
+        // outlives the workspace it was built for. Left alone, opening plugin A and then plugin B still
+        // showed A's recents and wrote every star click to A's palette.json, so B's own pins could never
+        // be seen or saved. Rebuilt whenever the workspace behind the canvas changes.
+        Palette = new PaletteViewModel(_workspaces.Current);
+        OnPropertyChanged(nameof(Palette));
+
         if (_workspaces.Current is not { } workspace)
         {
             return null;
@@ -688,7 +700,7 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
         var name = NextProcedureName();
         var declaration = new ProcedureDeclaration
         {
-            Id = "proc" + (Document.Procedures.Count + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Id = Document.NextProcedureId(),
             Name = name,
         };
 

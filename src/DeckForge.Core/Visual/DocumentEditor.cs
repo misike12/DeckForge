@@ -559,6 +559,26 @@ public sealed class DocumentEditor
                 }
 
                 break;
+
+            case EditProcedure edit when edit.After is { } after:
+                // A procedure's name is how the interpreter resolves a call, and it resolves it through a
+                // dictionary keyed on the name. Letting two procedures share one therefore broke the *next*
+                // rebuild rather than the rename: the editor applied the edit, the page rebuilt, and
+                // ToDictionary threw "an item with the same key has already been added" out of a WPF event
+                // handler - after which the canvas could not be opened, edited or saved without hand-fixing
+                // the json. Refused here, with the code the validator uses for the same condition, so the
+                // name box explains itself instead of bricking the page. Compared by id, because that is the
+                // one thing an edit never changes.
+                if (_project.Procedures.Any(procedure =>
+                        !string.Equals(procedure.Id, after.Id, StringComparison.Ordinal)
+                        && string.Equals(procedure.Name, after.Name, StringComparison.Ordinal)))
+                {
+                    return DocumentEditResult.Refused(
+                        $"There is already a procedure called {after.Name}.",
+                        "vis-name-duplicate");
+                }
+
+                break;
         }
 
         return null;

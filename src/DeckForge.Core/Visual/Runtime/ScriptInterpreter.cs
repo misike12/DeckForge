@@ -39,7 +39,7 @@ public enum RunOutcome
 /// </remarks>
 public sealed class ScriptInterpreter
 {
-    private readonly Random _random;
+    private Random _random;
     private VisualScript? _script;
 
     /// <summary>
@@ -62,7 +62,15 @@ public sealed class ScriptInterpreter
 
         Seed = seed;
         Steps = [.. project.Targets.SelectMany(target => target.Scripts)];
-        Procedures = project.Procedures.ToDictionary(procedure => procedure.Name, StringComparer.Ordinal);
+        // First one wins, rather than throwing on the second. Two procedures with the same name should be
+        // impossible - the editor refuses the rename that would make it so - but a document can arrive from
+        // a file that predates the rule or from a hand edit, and a duplicate key here threw out of a WPF
+        // event handler and took the canvas with it: the page could not be opened, edited or saved until
+        // someone hand-fixed the json. A canvas that reports the duplicate is a bug report; one that cannot
+        // be opened is a brick.
+        Procedures = project.Procedures
+            .GroupBy(procedure => procedure.Name, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
         foreach (var script in Steps)
         {
@@ -228,6 +236,10 @@ public sealed class ScriptInterpreter
         Trace.Clear();
         Executed = 0;
         _script = script ?? Steps.FirstOrDefault();
+        // Reseeded, because the class promises that the same document produces the same trace every time
+        // and a Random carried across runs produces a different one: pick random {from} to {to} gave 3 and
+        // then 7. The seed is the run's, so a run is reproducible and two runs are not.
+        _random = new Random(Seed);
         _bodies = _script is null ? [] : [new Frame(_script.Body)];
         _running = _script is not null;
         _paused = false;
@@ -753,7 +765,7 @@ public sealed class ScriptInterpreter
                 var template = Values.Text(Reporters(block, "template"));
                 var line = Values.FillTemplate(template, Host.Parameters, DeclaredParameters);
 
-                Host.Log.Write(NotificationLevel.Information, line);
+                Host.Log.Write(LevelOf(level), line);
                 Trace.Add(new ExecutionStep(
                     ExecutionStepKind.LogEmitted, block.Id, line, level, "log", level,
                     Host.Clock.ElapsedMilliseconds));
@@ -975,21 +987,46 @@ public sealed class ScriptInterpreter
         foreach (var (name, input) in block.Inputs)
         {
             var shown = input.Block is { } nested
-                ? BlockLabel.PreviewText(BlockCatalog.Find(nested.Kind)!) + "…"
+                ? NestedLabel(nested)
                 : Values.Text(input.Text ?? input.Variable ?? input.Number?.ToString(CultureInfo.InvariantCulture));
 
             text = text.Replace("{" + name + "}", shown);
         }
 
+        // Menus come out of Fields, not Inputs, and a hole this forgets to fill shows the marker itself -
+        // so a trace line read "log {level} Action ran" for a block that had chosen a level. Every other
+        // reader of a label (the tile, the SVG export) reads Fields; this one did not.
+        foreach (var (name, value) in block.Fields)
+        {
+            if (descriptor.Menu(name) is { } menu)
+            {
+                text = text.Replace("{" + name + "}", BlockLabel.MenuText(descriptor, menu, value, NoTranslations.Instance));
+            }
+        }
+
         return text;
     }
+
+    /// <summary>How a nested block reads in a label, or its kind when this build does not know it.</summary>
+    /// <remarks>
+    /// The null-forgiving version of this threw out of the timer callback when a document named a block kind
+    /// this build has - which is exactly what a canvas written by a newer DeckForge looks like. Three other
+    /// readers of the same situation already fall back to the kind; this one now does too.
+    /// </remarks>
+    private static string NestedLabel(Block nested) =>
+        BlockCatalog.Find(nested.Kind) is { } descriptor
+            ? BlockLabel.PreviewText(descriptor) + "…"
+            : nested.Kind;
 
     /// <summary>
     /// The trace, which tells an observer as it grows.
     /// </summary>
     /// <remarks>
-    /// Only <see cref="Add"/> is intercepted, because every step in this interpreter goes through a list add
-    /// and a run that cannot be watched is the run the stage panel would have to fake.
+    /// Every path that adds a step notifies, not just <c>Add</c>: <c>AddRange</c> and <c>Insert</c> are list
+    /// members any caller may use, and an observer that only hears about some of the steps is the stage
+    /// panel showing a run that is not the run happening. The remark this replaces claimed every step goes
+    /// through a list add, which was true and was also why the compiler warned (CS0108) that the hiding was
+    /// unintentional.
     /// </remarks>
     public sealed class PacedTrace : List<ExecutionStep>
     {
@@ -997,10 +1034,41 @@ public sealed class ScriptInterpreter
         public Action<ExecutionStep>? Observer { get; set; }
 
         /// <summary>Records a step and tells the observer.</summary>
-        public void Add(ExecutionStep step)
+        public new void Add(ExecutionStep step)
         {
             base.Add(step);
             Observer?.Invoke(step);
+        }
+
+        /// <summary>Records several steps and tells the observer about each, in order.</summary>
+        public new void AddRange(IEnumerable<ExecutionStep> steps)
+        {
+            ArgumentNullException.ThrowIfNull(steps);
+
+            foreach (var step in steps)
+            {
+                base.Add(step);
+                Observer?.Invoke(step);
+            }
+        }
+
+        /// <summary>Records a step at a position and tells the observer.</summary>
+        public new void Insert(int index, ExecutionStep step)
+        {
+            base.Insert(index, step);
+            Observer?.Invoke(step);
+        }
+
+        /// <summary>Records several steps at a position and tells the observer about each, in order.</summary>
+        public new void InsertRange(int index, IEnumerable<ExecutionStep> steps)
+        {
+            ArgumentNullException.ThrowIfNull(steps);
+
+            foreach (var step in steps)
+            {
+                base.Insert(index++, step);
+                Observer?.Invoke(step);
+            }
         }
     }
 }

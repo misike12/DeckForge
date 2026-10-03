@@ -89,7 +89,14 @@
                        Visibility="{Binding IsSearching, Converter={StaticResource TrueHidden}}" />
         </StackPanel>
 
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
+        <!--
+            Row 4, the star row, not row 3. In an Auto row a ScrollViewer is measured at its content's
+            height, so it never had anything to scroll: it simply drew the first few blocks and clipped
+            the rest. With 28 blocks in Control that meant about four were reachable and the wheel over the
+            palette did nothing at all - the one control on the page where a missing scrollbar makes most
+            of the editor unreachable.
+        -->
+        <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
             <Grid>
                 <ItemsControl ItemsSource="{Binding Rows}" Margin="4,0,4,8">
                     <ItemsControl.ItemTemplate>

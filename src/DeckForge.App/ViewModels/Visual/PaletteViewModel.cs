@@ -195,11 +195,25 @@ partial void OnSearchTextChanged(string value) => Refilter();
     /// Dropped rather than shown blank. A strip row with nothing in it can be neither dragged nor read,
     /// and a habit file written by an older build is exactly how that state is reached.
     /// </remarks>
-    private static IEnumerable<BlockNodeViewModel> PreviewRows(IEnumerable<string> kinds) =>
+    private IEnumerable<BlockNodeViewModel> PreviewRows(IEnumerable<string> kinds) =>
         kinds
             .Select(BlockCatalog.Find)
             .Where(descriptor => descriptor is not null)
-            .Select(descriptor => new BlockNodeViewModel(BlockFactory.Preview(descriptor!)) { IsPaletteRow = true });
+            .Select(descriptor => Row(descriptor!));
+
+    /// <summary>A palette row for a catalogue row, with its pin already stated.</summary>
+    /// <remarks>
+    /// The pin is set here rather than by the control after the fact, because the control only re-stated
+    /// the stars on load and on a star click - so filtering the palette rebuilt every row unpinned and a
+    /// pinned block's star went dark while the block stayed pinned. The row is created knowing which block
+    /// it is; leaving the answer to a later pass is how the two drifted apart.
+    /// </remarks>
+    private BlockNodeViewModel Row(BlockDescriptor descriptor) =>
+        new(BlockFactory.Preview(descriptor))
+        {
+            IsPaletteRow = true,
+            IsFavourite = Memory.IsFavourite(descriptor.Kind),
+        };
 
     /// <summary>
     /// Writes the habit, when there is somewhere to write it.
@@ -252,7 +266,7 @@ partial void OnSearchTextChanged(string value) => Refilter();
         Rows.Clear();
         foreach (var descriptor in descriptors)
         {
-            Rows.Add(new BlockNodeViewModel(BlockFactory.Preview(descriptor)) { IsPaletteRow = true });
+            Rows.Add(Row(descriptor));
         }
 
         OnPropertyChanged(nameof(HasRows));

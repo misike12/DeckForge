@@ -124,7 +124,7 @@ public static class DropResolver
 
         DropCandidate? best = null;
         var bestScore = double.NegativeInfinity;
-        var bestDistance = double.PositiveInfinity;
+        var bestGapY = 0d;
 
         foreach (var candidate in candidates)
         {
@@ -148,7 +148,7 @@ public static class DropResolver
             {
                 bestScore = score;
                 best = candidate;
-                bestDistance = distance;
+                bestGapY = candidate.Y;
             }
         }
 
@@ -158,7 +158,16 @@ public static class DropResolver
         }
 
         var magnet = MagnetRadius * zoom;
-        var magnetic = bestDistance <= magnet;
+
+        // Vertical distance only. This compared the *weighted* scoring distance, which carries a
+        // |dx| / 2 term - and a block on this canvas is about four hundred pixels wide, so holding the
+        // pointer anywhere past the first eighty of it put the weighted distance past the forty-pixel
+        // radius on the horizontal term alone. Every drop was then refused with "drop it closer to a
+        // block" while the indicator was sitting on the gap the user was aiming at, which is why drag and
+        // drop appeared to do nothing at all. The radius is about snapping the ghost's notch to the gap's,
+        // which is a vertical alignment; how far sideways the pointer may be is the canvas's question and it
+        // already answers it with HorizontalReach when it enumerates candidates.
+        var magnetic = Math.Abs(pointerY - bestGapY) <= magnet;
         var snapX = magnetic ? best.X : pointerX;
         var snapY = magnetic ? best.Y : pointerY;
         return new DropResolution(best, snapX, snapY, magnetic);

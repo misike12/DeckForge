@@ -192,16 +192,23 @@ public sealed record Minimap(
         var document = CanvasView.FitTo(extent, boxWidth, boxHeight, margin: 4);
         var zoom = document.ClampedZoom;
 
-        // The viewport in workspace units first, because that is the unit the extent is in: the pan is how
-        // far the document has been shifted, so the visible region starts at the negation of it.
+        // The viewport in workspace units first, because that is the unit the extent is in, and
+        // ToWorkspace is the authority on where the visible region starts: (0, 0) on screen is
+        // (PanX, PanY) in workspace units. Clamping in screen pixels by mistake - which is what this did,
+        // with a negated pan and the zoom already folded in - put the marker at the wrong place, moved it
+        // the wrong way when panning, and moved it at zoom² for every zoom that was not 1.
         var width = Math.Min(viewportWidth / zoom, extent.Width);
         var height = Math.Min(viewportHeight / zoom, extent.Height);
-        var left = Math.Clamp(-view.PanX * zoom, 0, Math.Max(0, extent.Width - width));
-        var top = Math.Clamp(-view.PanY * zoom, 0, Math.Max(0, extent.Height - height));
+        var left = Math.Clamp(view.PanX, 0, Math.Max(0, extent.Width - width));
+        var top = Math.Clamp(view.PanY, 0, Math.Max(0, extent.Height - height));
 
         var (_, offsetY) = Offsets(extent, zoom, boxHeight);
         var offsetX = (boxWidth - (extent.Width * zoom)) / 2;
 
+        // The rectangle may still hang off the box when the document is wider than 240/zoom - at the
+        // smallest zoom a 3000-unit canvas is 750 pixels on a 240-pixel map. That is honest rather than a
+        // bug: it says the visible part is partly off the map, and the control clips. Clamping it into the
+        // box would draw a viewport rectangle that is not the viewport.
         return new Minimap(
             document,
             extent,

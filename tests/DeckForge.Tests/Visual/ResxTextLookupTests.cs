@@ -116,7 +116,7 @@ public sealed class ResxTextLookupTests
     public void A_menu_option_is_translated_only_when_it_is_one_of_the_rows_own_options()
     {
         var row = Row("ui.log");
-        var menu = row.Menus.First(candidate => candidate.Options.Count > 0);
+        var menu = (row.Menus ?? []).First(candidate => candidate.Options.Count > 0);
         var option = menu.Options[0];
         var stale = menu.Options[0] + "-from-an-older-row";
 

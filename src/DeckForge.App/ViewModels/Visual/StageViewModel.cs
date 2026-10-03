@@ -30,7 +30,10 @@ public sealed partial class StageViewModel : ObservableObject
     private StageSession.StageScript? _selectedScript;
     private string _outcome = string.Empty;
     private string _currentBlockId = string.Empty;
-    private double _speed;
+    // The session's own starting speed, so the slider and the run agree from the first frame. It was 0
+    // here and 8 in the session, so the panel said 1 while the trace advanced eight blocks a second until
+    // the slider was touched - and then it jumped to whatever the slider was holding.
+    private double _speed = StageSession.DefaultSpeed;
 
     /// <summary>Builds the stage for a document.</summary>
     /// <param name="editor">The editor whose document is being run.</param>

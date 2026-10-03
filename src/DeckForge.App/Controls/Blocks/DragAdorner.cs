@@ -95,7 +95,13 @@ public sealed class DragAdorner : Adorner
         }
 
         var rects = StackLayout.LayoutRun(run);
-        var top = resolution.SnapY;
+
+        // Translated to where the drop will land. Without the transform every silhouette was drawn at the
+        // canvas origin - BlockOutline produces geometry at (0, 0) - so the ghost sat in the top-left
+        // corner while the indicator showed the real target: the drag showed two things, one of them
+        // somewhere the pointer was not. The layout's own per-block offsets are used inside the transform
+        // so a stack keeps its own spacing.
+        context.PushTransform(new TranslateTransform(resolution.SnapX, resolution.SnapY));
 
         foreach (var block in run)
         {
@@ -109,14 +115,15 @@ public sealed class DragAdorner : Adorner
                 var fill = Resolve(FillKey(category)) ?? Brushes.LightGray;
                 var stroke = Resolve(StrokeKey(category)) ?? Brushes.White;
 
+                context.PushTransform(new TranslateTransform(rect.X, rect.Y));
                 context.PushOpacity(GhostOpacity);
                 context.DrawGeometry(fill, new Pen(stroke, 1.25), outline);
                 context.Pop();
+                context.Pop();
             }
-
-            top += (rects.TryGetValue(block.Id, out var placed) ? placed.Height : BlockMetrics.MinTileHeight)
-                + BlockMetrics.StackGap;
         }
+
+        context.Pop();
     }
 
     /// <summary>

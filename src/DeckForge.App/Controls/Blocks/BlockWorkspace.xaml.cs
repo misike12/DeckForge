@@ -269,13 +269,21 @@ public partial class BlockWorkspace : UserControl
     }
 
     /// <summary>Raised for a Ctrl+wheel notch, carrying the notch count and where the pointer is.</summary>
-    public static event EventHandler<CanvasZoomEventArgs>? ZoomByWheel;
+    /// <remarks>
+    /// Instance events, not static ones. They were static because a control cannot hold a reference to a
+    /// view model that does not exist yet - but a static event outlives every instance that subscribed, and
+    /// the page subscribed with lambdas it held nowhere, so there was no way to unsubscribe. A second page
+    /// (a re-created shell, a test host) doubled every notch and every pan delta, and each stale handler
+    /// drove a canvas that was no longer on screen. <see cref="ViewportChanged"/> on this class was already
+    /// the right shape; these four now match it, and the page adds on Loaded and removes on Unloaded.
+    /// </remarks>
+    public event EventHandler<CanvasZoomEventArgs>? ZoomByWheel;
 
     /// <summary>Raised when a middle-drag begins, with where it began.</summary>
-    public static event EventHandler<Point>? PanStart;
+    public event EventHandler<Point>? PanStart;
 
     /// <summary>Raised when a middle-drag ends.</summary>
-    public static event EventHandler? PanEnd;
+    public event EventHandler? PanEnd;
 
     /// <summary>Where a middle-drag began, for the panner.</summary>
     public Point? PanOrigin { get; private set; }
@@ -294,7 +302,7 @@ public partial class BlockWorkspace : UserControl
     }
 
     /// <summary>Raised while a middle-drag moves, with the delta in pixels.</summary>
-    public static event EventHandler<Point>? PanBy;
+    public event EventHandler<Point>? PanBy;
 
     /// <summary>Captures the pointer for a middle-drag, so the drag survives leaving the canvas.</summary>
     public void BeginPan(Point position)
@@ -486,7 +494,7 @@ public partial class BlockWorkspace : UserControl
         var found = CanvasHitTest.DescendantsOf<FrameworkElement>(Surface)
             .FirstOrDefault(element => ReferenceEquals(element.DataContext, column));
 
-        (found ?? (FrameworkElement?)Surface).BringIntoView();
+        (found is not null ? found : Surface).BringIntoView();
     }
 
     /// <summary>

@@ -64,35 +64,79 @@ AddHandler(
         _vm.PropertyChanged += OnEditorPropertyChanged;
         _vm.Stage.PropertyChanged += OnStagePropertyChanged;
 
-        // The zoom's input handlers, subscribed here because the workspace raises them and this page is the
-        // only thing that knows which view model should answer. Static events on the workspace are a
-        // compromise — a control cannot hold a reference to a view model that does not exist yet — so the
-        // wiring is in one place rather than three.
-        Controls.Blocks.BlockWorkspace.ZoomByWheel += (_, args) =>
-        {
-            Canvas.ZoomByWheel(args.Notches, args.At.X, args.At.Y);
-            Minimap.Draw();
-        };
-
-        Controls.Blocks.BlockWorkspace.PanStart += (_, point) => Workspace.BeginPan(point);
-        Controls.Blocks.BlockWorkspace.PanBy += (_, delta) =>
-        {
-            Canvas.PanBy(delta.X, delta.Y);
-            Minimap.Draw();
-        };
-        Controls.Blocks.BlockWorkspace.PanEnd += (_, _) => Workspace.EndPan();
-
-        // The surface has a size before the page does, and Core's minimap cannot scale anything without
-        // one. Subscribing to the workspace rather than polling is what makes the thumbnail right the first
-        // time the page opens rather than after the first edit.
-        Workspace.ViewportChanged += () =>
-        {
-            Canvas.Refresh();
-            Minimap.Draw();
-        };
+// The zoom's input handlers, subscribed here because the workspace raises them and this page is the
+        // only thing that knows which view model should answer. Named fields rather than lambdas, and
+        // attached in AttachCanvasHandlers rather than here, because these used to be static events the
+        // page subscribed to with lambdas it held nowhere: there was no way to unsubscribe, so a second
+        // page doubled every notch and every pan delta and drove a canvas that was no longer on screen.
+        AttachCanvasHandlers();
 
         SizeChanged += (_, args) => OnPageResized(args.NewSize.Width);
+        Loaded += (_, _) => AttachCanvasHandlers();
+        Unloaded += (_, _) => DetachCanvasHandlers();
         ApplyLayout(ActualWidth);
+    }
+
+    private void OnCanvasZoom(object? sender, Controls.Blocks.CanvasZoomEventArgs args)
+    {
+        Canvas.ZoomByWheel(args.Notches, args.At.X, args.At.Y);
+        Minimap.Draw();
+    }
+
+    private void OnCanvasPanBy(object? sender, Point delta)
+    {
+        Canvas.PanBy(delta.X, delta.Y);
+        Minimap.Draw();
+    }
+
+    private void OnCanvasPanStart(object? sender, Point point) => Workspace.BeginPan(point);
+
+    private void OnCanvasPanEnd(object? sender, EventArgs args) => Workspace.EndPan();
+
+    /// <summary>
+    /// The surface has a size before the page does, and Core's minimap cannot scale anything without one.
+    /// </summary>
+    /// <remarks>
+    /// Subscribing to the workspace rather than polling is what makes the thumbnail right the first time
+    /// the page opens rather than after the first edit. Added and removed with the page's lifetime for the
+    /// same reason as the canvas handlers: a handler that outlives its page is a handler that fires.
+    /// </remarks>
+    private void OnViewportChanged()
+    {
+        Canvas.Refresh();
+        Minimap.Draw();
+    }
+
+    private bool _canvasHandlersAttached;
+
+    private void AttachCanvasHandlers()
+    {
+        if (_canvasHandlersAttached)
+        {
+            return;
+        }
+
+        _canvasHandlersAttached = true;
+        Workspace.ZoomByWheel += OnCanvasZoom;
+        Workspace.PanStart += OnCanvasPanStart;
+        Workspace.PanBy += OnCanvasPanBy;
+        Workspace.PanEnd += OnCanvasPanEnd;
+        Workspace.ViewportChanged += OnViewportChanged;
+    }
+
+    private void DetachCanvasHandlers()
+    {
+        if (!_canvasHandlersAttached)
+        {
+            return;
+        }
+
+        _canvasHandlersAttached = false;
+        Workspace.ZoomByWheel -= OnCanvasZoom;
+        Workspace.PanStart -= OnCanvasPanStart;
+        Workspace.PanBy -= OnCanvasPanBy;
+        Workspace.PanEnd -= OnCanvasPanEnd;
+        Workspace.ViewportChanged -= OnViewportChanged;
     }
 
     /// <summary>
@@ -678,9 +722,17 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
         public (double Width, double Height) Viewport => workspace.Viewport;
     }
 
-    private void ZoomIn_Click(object sender, RoutedEventArgs e) => Canvas.Zoom += 0.25;
+    private void ZoomIn_Click(object sender, RoutedEventArgs e)
+    {
+        Canvas.Zoom += 0.25;
+        Minimap.Draw();
+    }
 
-    private void ZoomOut_Click(object sender, RoutedEventArgs e) => Canvas.Zoom -= 0.25;
+    private void ZoomOut_Click(object sender, RoutedEventArgs e)
+    {
+        Canvas.Zoom -= 0.25;
+        Minimap.Draw();
+    }
 
     private void ZoomFit_Click(object sender, RoutedEventArgs e)
     {
@@ -688,7 +740,11 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
         Canvas.ZoomToFit();
     }
 
-    private void ZoomActual_Click(object sender, RoutedEventArgs e) => Canvas.ZoomToActualSize();
+    private void ZoomActual_Click(object sender, RoutedEventArgs e)
+    {
+        Canvas.ZoomToActualSize();
+        Minimap.Draw();
+    }
 
     /// <summary>Moves the canvas where the user clicked on the minimap.</summary>
     private void Minimap_ViewRequested(object sender, Controls.Blocks.ViewRequestedEventArgs e)

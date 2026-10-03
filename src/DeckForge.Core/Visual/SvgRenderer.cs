@@ -56,7 +56,11 @@ public static class SvgRenderer
             svg.AppendLine("  </g>");
         }
 
-        WriteLabels(svg, script, rects, 0, 0);
+        // The same margin the rects were drawn with, not zero: at zero every label sat eight pixels to the
+        // left of its own block, in the gutter, overlapping whatever was above it. The document path passes
+        // `column.OffsetX + Margin`, which is why only this entry point was wrong - and only the page's
+        // single-script preview ever used it, which is why nothing showed it.
+        WriteLabels(svg, script, rects, Margin, Margin);
 
         CloseDocument(svg);
 

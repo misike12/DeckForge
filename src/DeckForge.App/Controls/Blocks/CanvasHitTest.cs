@@ -40,17 +40,20 @@ internal static class CanvasHitTest
             return null;
         }
 
-        BlockTile? found = null;
-
+        // The *innermost* tile, and therefore the first one found walking up. This walked the whole chain
+        // and kept the last match, which is the outermost: clicking the words of a reporter nested in a
+        // statement's slot selected the statement that owned it, and dragging then picked up the whole
+        // statement. The gap around the outer tile is still reachable - the pointer is only over the
+        // reporter when it is genuinely over the reporter - and the reporter is what the user aimed at.
         for (var current = result.VisualHit; current is not null; current = VisualTreeHelper.GetParent(current))
         {
             if (current is BlockTile tile)
             {
-                found = tile;
+                return tile;
             }
         }
 
-        return found;
+        return null;
     }
 
     /// <summary>

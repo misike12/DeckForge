@@ -34,7 +34,7 @@ public sealed class BlockLabelKeysTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(BlockLabelKeys.Slot(log, log.Slots.First(slot => slot.Name == "template")),
+            Assert.That(BlockLabelKeys.Slot(log, (log.Slots ?? []).First(slot => slot.Name == "template")),
                 Is.EqualTo("Blocks.Ui.UiLog.Slot.Template"));
             Assert.That(BlockLabelKeys.Menu(log, "Warning"), Is.EqualTo("Blocks.Ui.UiLog.Menu.Warning"));
         });

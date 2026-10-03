@@ -30,7 +30,6 @@ public sealed partial class InspectorViewModel : ObservableObject
 {
     private readonly VisualEditorViewModel _editor;
     private string _comment = string.Empty;
-    private BlockNodeViewModel? _selected;
 
     public InspectorViewModel(VisualEditorViewModel editor) => _editor = editor;
 
@@ -93,7 +92,7 @@ public sealed partial class InspectorViewModel : ObservableObject
     /// </remarks>
     private void SetComment(string? value)
     {
-        if (_selected?.Block is not { } block)
+        if (Selected?.Block is not { } block)
         {
             return;
         }
@@ -216,6 +215,16 @@ public sealed partial class InspectorViewModel : ObservableObject
     /// that claimed to be what Save writes and was not would be worse than one that admits it is the row's
     /// own text.
     /// </remarks>
+    /// <summary>
+    /// The block the inspector is showing, which is the page's current selection.
+    /// </summary>
+    /// <remarks>
+    /// Held here rather than read back out of the page because the comment setter needs it and the page
+    /// does not pass one: a setter that had to be handed the block to comment would be a setter called
+    /// from two places with different arguments. Exposed rather than left as a bare field because the
+    /// panel is the only thing that should know which block it is editing.
+    /// </remarks>
+    public BlockNodeViewModel? Selected { get; private set; }
     public string SelectedPreview { get; private set; } = string.Empty;
 
     /// <summary>
@@ -227,28 +236,65 @@ public sealed partial class InspectorViewModel : ObservableObject
     /// </remarks>
     public void Build(BlockNodeViewModel? selected)
     {
-        _selected = selected;
+        Selected = selected;
         _comment = selected?.Comment ?? string.Empty;
         OnPropertyChanged(nameof(Comment));
         OnPropertyChanged(nameof(HasComment));
         OnPropertyChanged(nameof(CommentHelp));
 
-        var previous = Slots.Select(slot => slot.Name).ToHashSet(StringComparer.Ordinal);
+        var wanted = (selected?.Slots ?? []).ToList();
 
-        Slots = new ObservableCollection<SlotEditor>(
-            (selected?.Slots ?? []).Select(slot =>
+        // Rows are kept when the set of slots has not changed, and only replaced when it has. This runs
+        // after every keystroke in a slot field, and replacing the rows destroyed the TextBox being typed
+        // into - so the field lost focus at the end of the first character and the symptom was a box that
+        // ate every letter. `previous` was computed here and thrown away, which is what it was for.
+        var sameSlots = wanted.Count == Slots.Count
+            && wanted.Select(slot => slot.Name).SequenceEqual(Slots.Select(row => row.Name), StringComparer.Ordinal);
+
+        if (!sameSlots)
+        {
+            Slots = new ObservableCollection<SlotEditor>(
+                wanted.Select(slot =>
+                {
+                    var row = new SlotEditor(this, slot);
+
+                    // The link back, so a canvas control can reach the row for the slot it is standing in.
+                    // A row that outlives a rebuild must be re-pointed, or it would write through to the
+                    // block that has just been replaced.
+                    slot.Editor = row;
+                    return row;
+                }));
+        }
+        else
+        {
+            foreach (var slot in wanted)
             {
-                var row = new SlotEditor(this, slot);
+                if (Slots.FirstOrDefault(row => row.Name == slot.Name) is { } row)
+                {
+                    row.Retarget(slot);
+                }
+            }
+        }
 
-                // The link back, so a canvas control can reach the row for the slot it is standing in.
-                // Every slot in the panel gets its row replaced on a rebuild, and a stale one would write
-                // through to a block that is no longer the selected one.
-                slot.Editor = row;
-                return row;
-            }));
+        var wantedMenus = (selected?.Menus ?? []).ToList();
+        var sameMenus = wantedMenus.Count == Menus.Count
+            && wantedMenus.Select(menu => menu.Name).SequenceEqual(Menus.Select(row => row.Name), StringComparer.Ordinal);
 
-        Menus = new ObservableCollection<MenuEditor>(
-            (selected?.Menus ?? []).Select(menu => new MenuEditor(this, menu, selected!)));
+        if (!sameMenus || selected is null)
+        {
+            Menus = new ObservableCollection<MenuEditor>(
+                wantedMenus.Select(menu => new MenuEditor(this, menu, selected!)));
+        }
+        else
+        {
+            foreach (var menu in wantedMenus)
+            {
+                if (Menus.FirstOrDefault(row => row.Name == menu.Name) is { } row)
+                {
+                    row.Retarget(menu);
+                }
+            }
+        }
 
         OnPropertyChanged(nameof(IsPlain));
 
@@ -271,7 +317,6 @@ public sealed partial class InspectorViewModel : ObservableObject
         OnPropertyChanged(nameof(HasPreview));
         OnPropertyChanged(nameof(EmptyText));
 
-        _ = previous;
     }
 
     /// <summary>
@@ -371,7 +416,6 @@ public sealed partial class SlotEditor : ObservableObject
     private readonly InspectorViewModel _panel;
     private readonly VisualEditorViewModel _editor;
     private string _comment = string.Empty;
-    private BlockNodeViewModel? _selected;
     private string _draft = string.Empty;
 
     internal SlotEditor(InspectorViewModel panel, SlotViewModel slot)
@@ -394,7 +438,33 @@ public sealed partial class SlotEditor : ObservableObject
     private bool IsDrafting => !string.Equals(_draft, Value.Text, StringComparison.Ordinal);
 
     /// <summary>The slot this row edits.</summary>
-    public SlotViewModel Model { get; }
+    public SlotViewModel Model { get; private set; }
+
+    /// <summary>
+    /// Points this row at a fresh slot view model for the same slot, keeping the row itself alive.
+    /// </summary>
+    /// <remarks>
+    /// Every edit replaces the block behind the slot, so a row that kept its old model would read and write
+    /// the previous block - the one the user had just changed. Replacing the *model* rather than the row is
+    /// what lets the panel survive a keystroke: the row owns the TextBox, the model owns the document, and
+    /// only the second of those has to change.
+    /// </remarks>
+    /// <param name="slot">The new view model for the same slot name.</param>
+    internal void Retarget(SlotViewModel slot)
+    {
+        Model = slot;
+        _draft = SlotValue.Read(slot.Owner.Block, slot.Descriptor).Text;
+
+        foreach (var name in new[]
+                 {
+                     nameof(Label), nameof(Help), nameof(Type), nameof(Text), nameof(Value),
+                     nameof(HasChild), nameof(ChildLabel), nameof(IsNumber), nameof(IsBoolean),
+                     nameof(IsReference),
+                 })
+        {
+            OnPropertyChanged(name);
+        }
+    }
 
     /// <summary>The slot's key in the catalogue, which is also its key in the document.</summary>
     public string Name => Model.Name;
@@ -573,7 +643,26 @@ public sealed partial class MenuEditor : ObservableObject
     }
 
     /// <summary>The dropdown this row edits.</summary>
-    public MenuViewModel Model { get; }
+    public MenuViewModel Model { get; private set; }
+
+    /// <summary>
+    /// Points this row at a fresh menu view model for the same menu, keeping the row alive.
+    /// </summary>
+    /// <remarks>
+    /// The same reason as <see cref="SlotEditor.Retarget"/>: the block behind the dropdown is a new object
+    /// after every edit, and a row holding the old one would keep writing to the block the user has just
+    /// changed.
+    /// </remarks>
+    /// <param name="menu">The new view model for the same menu name.</param>
+    internal void Retarget(MenuViewModel menu)
+    {
+        Model = menu;
+
+        foreach (var name in new[] { nameof(Label), nameof(Options), nameof(Selected) })
+        {
+            OnPropertyChanged(name);
+        }
+    }
 
     /// <summary>The dropdown's key in the catalogue.</summary>
     public string Name => Model.Name;

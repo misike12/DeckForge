@@ -31,7 +31,7 @@ public sealed record PrerequisiteResult(string Id, string Title, bool Ok, string
 /// Pretending otherwise would either fail or, worse, appear to succeed.
 /// </para>
 /// </remarks>
-public sealed class PrerequisiteInstaller(EnvironmentDoctor doctor, ProcessRunner runner)
+public sealed class PrerequisiteInstaller(ProcessRunner runner)
 {
     /// <summary>
     /// The prerequisites in the order they have to be installed.
@@ -142,7 +142,7 @@ public sealed class PrerequisiteInstaller(EnvironmentDoctor doctor, ProcessRunne
                 check.Id,
                 check.Title,
                 false,
-                $"The install command failed (exit {result.ExitCode}). {LastLine(result.Combined)}".Trim());
+                $"The install command failed (exit {result.ExitCode}). {LastLine(result.Combined ?? string.Empty)}".Trim());
         }
 
         // The check is re-run by the caller; report what the command said, not a guess at success.

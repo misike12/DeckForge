@@ -68,7 +68,17 @@
         </DataTemplate>
     </Page.Resources>
 
-        <Grid x:Name="Layout" Margin="20,16,20,16">
+        <!--
+            The whole editor scrolls, so nothing is unreachable in a short window. At 1200x800 the stacked
+            layout put the Stage below the fold with no way to reach it: Run, Step, the trace and the watch
+            table simply did not exist for that window size, and this application has no other scrolling.
+            Vertical only - the panels are a fixed column budget, and a horizontal scrollbar here would
+            mean a panel could be pushed off the right edge, which is the one thing the layout works to
+            prevent.
+        -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      PanningMode="VerticalOnly">
+            <Grid x:Name="Layout" Margin="20,16,20,16">
             <!--
                 The four panels' rows and columns are assigned in code, not here, because they change with
                 the window width. At the application's minimum width the four columns do not fit beside
@@ -622,7 +632,8 @@
                             <TextBlock Text="{Binding StatusText}" FontSize="11" Margin="0,2,0,0"
                                        TextWrapping="Wrap"
                                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="520">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      MaxHeight="520">
                                 <ItemsControl ItemsSource="{Binding Diagnostics}" ItemTemplate="{StaticResource DiagnosticRow}" Margin="0,4,0,0" />
                             </ScrollViewer>
                         </StackPanel>
@@ -630,4 +641,5 @@
                 </Grid>
             </Border>
         </Grid>
+            </ScrollViewer>
 </Page>

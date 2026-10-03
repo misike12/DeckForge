@@ -111,7 +111,12 @@ public sealed record SlotValue
             or SlotType.Event or SlotType.Action or SlotType.Script or SlotType.Widget
             or SlotType.ConfigEntry or SlotType.Icon or SlotType.Color or SlotType.Variable
             or SlotType.Procedure or SlotType.File
-            => new BlockInput { Variable = text, Text = text },
+            // One member, not two. Both were set so that either reader found the value, but
+            // BlockInput.IsAmbiguous counts non-null members and the loader refuses a document that has more
+            // than one - so the editor was writing files its own reader would reject the moment a second
+            // writer appeared or one field was added by hand. `Text` is the fallback the emitter already
+            // prefers, so `Variable` alone carries it.
+            => new BlockInput { Variable = text },
         _ => new BlockInput { Text = text },
     };
 

@@ -10,17 +10,35 @@ namespace DeckForge.Core.Visual;
 /// the source out of Core is what makes <c>vis-param-unknown</c> testable without a workspace.
 /// </para>
 /// <para>
-/// <see cref="Empty"/> is the "assume everything exists" mode: with no declarations supplied, no
-/// unknown-name warning can fire, so an editor that has not loaded the action's parameters yet shows
-/// a canvas without a wall of false positives rather than one with a wall of wrong ones.
+/// An empty set used to mean two opposite things: "nobody has told me what exists yet" and "the plugin
+/// declares nothing". <see cref="Empty"/> is the first and <see cref="None"/> is the second, so which one
+/// you meant is stated rather than inferred from an empty collection. <see cref="NamesResolved"/> is the
+/// flag that tells them apart.
 /// </para>
 /// </remarks>
 public sealed record VisualValidationContext(
     IReadOnlySet<string> Parameters,
-    IReadOnlySet<string> HostVariables)
+    IReadOnlySet<string> HostVariables,
+    bool NamesResolved = true)
 {
-    /// <summary>No declarations: the reference checks are switched off.</summary>
+    /// <summary>Nobody has said yet: no unknown-name warning can fire.</summary>
+    /// <remarks>
+    /// What the Visual page validates against until it has resolved the open workspace's action
+    /// parameters and host variables. Without it, a canvas full of perfectly good references was reported
+    /// as undeclared names, because the app had no source of names to check them against - and an editor
+    /// that opens with a wall of red is one nobody reads.
+    /// </remarks>
     public static readonly VisualValidationContext Empty = new(
+        new HashSet<string>(StringComparer.Ordinal),
+        new HashSet<string>(StringComparer.Ordinal),
+        NamesResolved: false);
+
+    /// <summary>The plugin declares nothing, and that is known: every reference is unknown.</summary>
+    /// <remarks>
+    /// The opposite of <see cref="Empty"/>, and the one a test wants when it is checking that an undeclared
+    /// name is reported. Two empty sets with two meanings was the bug; this is the second meaning, named.
+    /// </remarks>
+    public static readonly VisualValidationContext None = new(
         new HashSet<string>(StringComparer.Ordinal),
         new HashSet<string>(StringComparer.Ordinal));
 }

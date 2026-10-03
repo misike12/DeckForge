@@ -1,554 +1,143 @@
-# DeckForge audit findings and fix plan
+# Fix plan
 
-Every finding from the seven analysis agents, verified where possible against the real
-Macro Deck monorepo (`Macro-Deck-App/Macro-Deck`, `…/Plugin-Template`, `…/Sample-Plugins`).
-Verified items were reproduced by running the real generators, compiling the output against
-`MacroDeck.Sdk 3.0.0-beta.14`, and executing the real `macrodeck-plugin` CLI.
+Every defect, flaw and visual problem found by the five-lane audit of 2026-10-03, and what was done about
+each. Lanes reported; every fix here was written by hand afterwards, so each finding and each fix are two
+separate acts and can be checked against each other. Status is updated as work lands.
 
-Legend: **[V]** = verified with a compiler diagnostic or CLI exit code, **[R]** = verified by
-reading the real source, **[A]** = agent analysis, unverified.
+## Rules of the audit
 
-SDK version policy: `3.0.0-beta.14` is the newest release line. Previews are older than betas.
-DeckForge pins the exact version deliberately — do not float to `3.0.0-*`.
+- Five lanes ran in parallel. **Only Lane D opened or drove the application**; the other four read code and
+  ran headless commands, so two agents never competed for the window or the mouse.
+- **No lane edited anything.**
+- A finding is only closed when the fix is in the tree, the build is clean and the full suite is green.
+  Anything checked in the window is recorded as checked in the window.
+- Lane D's own crash-log entry turned out to pre-date the fix; and Lane D reported that the harness's
+  `GetCurrentThreadId` P/Invoke was wrong (`user32.dll` instead of `kernel32.dll`), which had been making
+  clicks and hotkeys look dead. That was the harness, not the product — see "Closed without a change".
 
-Independence: Macro Deck is a third-party project and the owner of its own trademarks and
-copyright. DeckForge is an independent tool. Nothing in this repo may reproduce Macro Deck
-source; it may only call the published SDK correctly. Generated plugins carry the plugin
-author's own chosen license, not Macro Deck's.
+## Baseline
+
+| | |
+|---|---|
+| Build | 0 errors, 9 unique warnings (5 introduced by the last three commits) |
+| Suite | 848 passed, 0 failed, 1 never executed; 849 discovered |
+| Wall clock | ~68 s |
 
 ---
 
-## P0 — generators that cannot produce compiling code
+## 1. Blockers
 
-### 0.1 `ActionsEditorViewModel` — parameter name never emitted **[V]**
-`src/DeckForge.App/ViewModels/ActionsEditorViewModel.cs:196-199` builds
-`var args = new List<string> { $"\"{parameter.Name}\"" }` and never reads it. The emitted call
-is built from `factoryArgs` alone, so every `ActionParameter.*` call lacks the required
-`name`. Result: `CS7036` for all 29 editor types, 100% of the time.
+| ID | Severity | Finding | Where | Fix | Status |
+|---|---|---|---|---|---|
+| C1 | blocker | Renaming a procedure onto another procedure's name is accepted, and the next rebuild throws `ArgumentException` out of a WPF handler — the canvas then cannot be opened, edited or saved without hand-editing `canvas.json` | `Runtime/ScriptInterpreter.cs:65`, `DocumentEditor.cs:383`, `VisualEditorViewModel.cs:491` | Refuse the rename in `DocumentEditor.EditProcedure`; make the interpreter's procedure projection tolerant so a file with duplicates opens and is *reported* | pending |
+| B1 | blocker | A malformed `Strings*.resx` still throws `XmlException` out of the Localization page; the crash handler exits the app after three faults. Three layers, three policies, none reporting anything | `LocalizationManagerViewModel.cs:141`, `ResxMerger.cs:134`, `ValidatorParityTests.cs:96`, `OpenFindingsTests.cs:138` | Make an unreadable resx a reported value, not an exception, at all three layers; rename the two tests to what they assert | pending |
+| D1 | blocker | Below ~1200×800 the whole Stage panel is clipped by the window bottom and the page does not scroll — you cannot run anything | `Pages/VisualEditorPage.xaml` | Let the editor+stage rows scroll vertically | pending |
+| D6 | blocker (likely) | Drag and drop never changes the document: the ghost and the indicator render, but nothing is inserted, moved or removed, and Undo stays disabled | `Controls/Blocks/BlockWorkspace.xaml.cs` | Make the indicator and the commit share one coordinate mapping | pending |
 
-Named arguments bind first, then remaining parameters fill positionally in declaration
-order, so the positional factories misbind as well:
-- `Number(name, label, description, min, max, step, defaultValue, required)` —
-  emitted `Number(0, 10, label: …)` → `CS1744` (label already given positionally).
-- `Slider(name, min, max, label, description, step, defaultValue)` — min/max required
-  positional, **no `required:` parameter at all** → `CS1503`/`CS1739`.
-- `Code(name, language, …)` — language required → `CS7036`.
-- `Object(name, children, …)` → `CS7036`. `Array(name, itemTemplate, …)` → `CS7036`.
-- `DynamicChoice(name, label, description, optionsSourceId, placeholder, required)` — has no
-  `options` parameter and no `defaultValue`.
-- `MultiSelect` has **no `placeholder`** parameter → `CS1739`.
-- `Duration(name, …, defaultMilliseconds, required)` — there is no `defaultValue`. The
-  generator adds `defaultMilliseconds: 5000` and then independently adds `defaultValue:` →
-  `CS1739`.
-- `Toggle(… bool defaultValue …)` receiving the string `"true"` → `CS1503`.
-- `WidgetTarget` 4-arg overload defaults `required = true`, so an unticked Required box still
-  emits a required parameter.
+## 2. Bugs
 
-Also:
-- `parameter.Name` is escaped in neither the C# string literal nor the identifier used in
-  `Strings.Actions.X.{ToPascal(name)}.Label()`. A name with a space or quote produces
-  `CS1003`/`CS1010`. `ToPascal` splits on `-` only — no leading-digit or keyword handling.
-- 6 of 11 `ParameterSpec` properties are unreachable from the UI (`Range`, `Options`,
-  `Description`, `Placeholder`, `OnlyWhenParameter`, `OnlyWhenValue`), though the generator
-  consumes all of them.
-- `RegisterInIntegration` returns silently when `PluginIntegration.cs` is missing yet
-  `StatusText` claims success.
-- `IndexOf(']', -1)` → `ArgumentOutOfRangeException` when the anchor is missing.
-- No duplicate class-name or parameter-name validation.
+| ID | Severity | Finding | Where | Fix | Status |
+|---|---|---|---|---|---|
+| C2 | major | `TileAt` returns the *outermost* tile under the pointer, not the innermost — clicking a nested reporter selects the statement that owns it | `Controls/Blocks/CanvasHitTest.cs:45` | Return the first match walking up | pending |
+| C3 | major | Step and Step-into re-arm the transport timer, so one press runs the whole script while the outcome still says "Paused" | `Runtime/StageSession.cs:468` | Do not re-arm after an interactive tick | pending |
+| C4 | major | Step/Step-into run the *first* script, ignoring the picker; `Run` does it correctly | `Runtime/StageSession.cs:449` | Pass the resolved script into the interpreter's reset | pending |
+| C5 | major | The drag ghost is drawn at the canvas origin; the accumulated `top` and the resolution's `SnapX` are computed and never used | `Controls/Blocks/DragAdorner.cs:97` | Push a translate for the snap point and drop `top` | pending |
+| C6 | major | `Minimap.For` flips the pan sign, applies the zoom twice and clamps in the wrong unit, so the viewport rectangle leaves the box | `Core/Visual/CanvasView.cs:197` | Correct the algebra; clamp the emitted rect; test a wide document and a non-zero pan | pending |
+| C7 | major | The stage's parameter boxes bind two-way to an immutable record, so the form can never supply a value and `SetParameter` has no caller in the app | `Controls/Blocks/StagePanel.xaml:210`, `Runtime/StageSession.cs:155` | Make the row a mutable view model whose setter calls `SetParameter` | pending |
+| C8 | major | Every keystroke in a slot field rebuilds the whole inspector row collection, destroying the focused `TextBox` — the field eats every character | `ViewModels/Visual/InspectorViewModel.cs:238` | Rebuild rows only when the set of slot names changes; update in place otherwise | pending |
+| B5 | major | `BlockProgramWriter` cannot write the same action twice — its anchor stops matching its own output — and the two tests claiming to cover a double save cannot fail | `CodeGen/Generation/BlockProgramWriter.cs:42`, `BlockCompiler.cs:375` | Use the same anchor as `VisualProgramWriter` (one shared constant); assert `Success` on the second write | pending |
+| B9 | major | A new procedure's id is `proc{N+1}`, which collides after any deletion; a block dropped into the visible procedure lands in the other one | `ViewModels/Visual/VisualEditorViewModel.cs:691`, `Core/Visual/VisualProject.cs:279` | Add `NextProcedureId()` beside `NextBlockId` and use it in both places | pending |
+| B6 | major | The palette is bound to whichever workspace was open when the singleton was built; after switching, pins and recents belong to the old workspace | `VisualEditorViewModel.cs:46`, `PaletteViewModel.cs:64` | Rebind the palette on a workspace change | pending |
+| B2 | major | `Validation` is permanently the *sample project's* context, so parameter and host-variable diagnostics are wrong on every other document | `VisualEditorViewModel.cs:42,64` | Build it from the workspace; default to `Empty` until then | pending |
+| B3 | major | Pan and zoom are four `public static event`s subscribed with lambdas that can never be removed — every re-created page doubles the zoom | `BlockWorkspace.xaml.cs:272`, `VisualEditorPage.xaml.cs:71` | Make them instance events; `+=` on Loaded, `-=` on Unloaded | pending |
+| B4/E2 | major | The performance budget's "cached layout" half measures a hand-written loop no product code runs, and `repeats` divides a result `Time` already averaged | `Core/Visual/CanvasPerformanceBudget.cs:91`, tests `:116` | Measure the real path (a measured-height dictionary fed to `StackLayout.LayoutRun`), or report the number honestly; make `repeats` loop rather than divide | pending |
+| E1 | major | `ProcessResult.Combined` is documented as stdout and stderr "in the order the child wrote them"; two pipes and two threads cannot do that. The test fails **55%** of isolated runs — a real defect the green suite hides | `CliAdapter/Processes/ProcessRunner.cs:8,120`, `ProcessRunnerTests.cs:70` | Keep the ordering that is real (per stream), say so, and test that | pending |
+| C9 | minor | `Label` null-forgives an unknown nested kind, so a newer `canvas.json` throws out of the timer callback and takes the app down | `Runtime/ScriptInterpreter.cs:978` | Fall back to the kind, as three sibling readers already do | pending |
+| C10 | minor | Label holes are filled from `Inputs` only, so a menu hole renders as `{level}` in the trace | `Runtime/ScriptInterpreter.cs:975` | Fill from `Fields` through `BlockLabel.MenuText` | pending |
+| C11 | minor | `ui.log` writes every entry at `Information` while the trace reports the level the block chose | `Runtime/ScriptInterpreter.cs:752` | `Host.Log.Write(LevelOf(level), line)` | pending |
+| C13 | minor | Single-script SVG export draws rects at `+Margin` but labels at `+0`, so every label sits in the gutter | `Core/Visual/SvgRenderer.cs:53` | Pass `Margin` to the label writer too, as the document path does | pending |
+| C14 | minor | The zoom buttons change the view without redrawing the minimap, so the thumbnail goes stale | `Pages/VisualEditorPage.xaml.cs:681` | Redraw on every zoom command | pending |
+| C15 | minor | `SlotValue.From` writes both `Variable` and `Text` into one `BlockInput`, which Core's own loader classifies as malformed | `Core/Visual/SlotValue.cs:114` | Set one member | pending |
+| C16 | minor | `ScriptStrip.Name_KeyDown` focuses a `TextBox` the rename has already detached, so the keyboard goes nowhere after Enter | `Controls/Blocks/ScriptStrip.xaml.cs:67` | Re-resolve the row after the rebuild | pending |
+| C17 | minor | A canvas from a newer schema is reported "will not be overwritten", then the page shows the sample with Save enabled — and Save overwrites it | `Core/Visual/VisualProjectJson.cs:145`, `VisualStore.cs:255` | Carry a read-only outcome through the store; refuse to save | pending |
+| C19 | minor | Filtering the palette rebuilds every row without re-stating the pin stars, so a pinned block's star goes dark | `PaletteViewModel.cs:252`, `PaletteList.xaml.cs:60` | Refresh the stars after a refilter | pending |
+| C20 | minor | The speed slider starts at 0 while the session runs at 8, so the panel and the run disagree until the slider is touched | `ViewModels/Visual/StageViewModel.cs:33` | Initialise from the session | pending |
+| C23 | nit | `Reset` does not reseed the `Random`, so two runs of one document produce different traces — against the class's stated determinism | `Runtime/ScriptInterpreter.cs:226` | Reseed in `Reset` | pending |
+| C25 | nit | The migration message names a backup file nothing writes | `Core/Visual/VisualStore.cs:253` | Name the file that is actually kept | pending |
+| C22 | nit | The benchmark reports the requested block count, which its own synthetic document does not always produce | `CanvasPerformanceBudget.cs:115` | Count the blocks it built | pending |
+| C24 | nit | `BlockCatalog.Category` throws for `Media`, which has no row, and `BlockContrastRules.For` calls it unconditionally | `BlockCatalog.cs:255` | Return a neutral descriptor | pending |
 
-### 0.2 `ConfigFlowEditorViewModel` — `switch` missing, `ValidateAsync` missing **[V]**
-`RenderFlow` substitutes `$SwitchBody` directly after `{`. `switchBody` is built as a bare
-sequence of `"<stepId>" => { … }` arms with **no `switch (stepId)` header and no closing
-brace** → `CS1002`/`CS1513`. The Config Flow editor has never produced a compiling artifact.
+## 3. Visual and interaction, found only by driving the window
 
-`ValidateOnSubmit` emits `await ValidateAsync(input, cancellationToken)`; `ValidateAsync` is
-never generated by `RenderFlow` or `$StepMethods` → `CS0103`.
+| ID | Severity | Finding | Where | Fix | Status |
+|---|---|---|---|---|---|
+| D2 | major | The palette list does not scroll: ~4 of 28 Control blocks are reachable, the wheel does nothing, no scrollbar. Most blocks are unreachable by mouse | `Pages/VisualEditorPage.xaml`, palette region | Put the palette in a scroll viewer; find whatever is swallowing the wheel | pending |
+| D5 | major | Zooming out blanks the canvas, and "Fit" reports a zoom it does not apply — content is pinned to the right edge and sliced | `VisualEditorPage.xaml.cs` zoom handlers | Scale about the viewport centre; centre the fitted bounds | pending |
+| D4 | major | The minimap draws over the canvas; clicking it jumps zoom 100%→25% and paints over the scripts panel | `Controls/Blocks/CanvasMinimap.*` | Scale labels with the map, keep it in its cell, and let a click set pan only | pending |
+| D7 | major | The inspector's numeric stepper +/− do nothing | inspector editor template | Wire the commands | pending |
+| D8 | major | The command palette and the shortcut sheet have no mouse entry point at all | `Pages/VisualEditorPage.xaml:248` | A header button and a rail entry | pending |
+| D3 | minor | Palette previews clip their last input ("tex" for "text") | palette tile sizing | Size the preview to the block | pending |
+| D9 | minor | A spurious horizontal scrollbar in the scripts list; its last entry is clipped | `ScriptStrip.xaml` | Wrap item text, drop the horizontal scroller | pending |
+| D11 | minor | The trace pane does not scroll and slices its last line — the line naming the block that stopped the run | `StagePanel.xaml` | A scroll viewer with auto-scroll to end | pending |
+| D12 | minor | The speed slider does not respond to dragging | `StagePanel.xaml` | Bind it properly | pending |
+| D13 | minor | With no workspace open, Save / Revert / Export SVG give no feedback at all — indistinguishable from a broken button | header | Disable with a reason | pending |
+| D14 | minor | A rejected drop's hint permanently replaces the document summary line and reflows the page | `VisualEditorPage.xaml` header row | Make it transient | pending |
+| D15 | minor | A nav rail item is clipped at 960×700 | `MainWindow.xaml` | Scroll or collapse the rail earlier | pending |
+| D16 | minor | The category rail and the inspector slice their last line at rest | rail, inspector | Bottom padding or a fade | pending |
+| D17 | nit | A brand-new canvas opens with 15 identical `"False" is not a condition` warnings | `Core/Visual/VisualSampleProject.cs` | Give the sample real boolean conditions | pending |
+| D18 | nit | The header hint paragraph is crushed into five lines when width is scarce | header | Truncate or move it | pending |
 
-Additional:
-- `ConfigFlowResult.Complete(Strings.X.EntryTitle())` passes a `LocalizedString` where
-  `Complete(string title, …)` is required → `CS1503`. The secret branch at `:457` omits the
-  `()` entirely → `CS1503` (method group).
-- Default `FlowName = "Setup"` → stem `Setup` → resx keys `Setup.Setup.Connection.Title` → the
-  real generator emits `class Setup` inside `class Setup` → `CS0542`. Default-triggered.
-- `ActionParameter.DynamicChoice("dyn", [options], label: …)` — `DynamicChoice` has no
-  `options` → `CS1744`.
-- `ConfigFlowStepSpec.SupportsBack` is declared, never bound, never read.
-- `RenderCompletion` with a secret builds a `ConfigFlowValue` dictionary containing only the
-  secret, dropping every other user-entered value.
-- `ToPascal` here splits on `-` and `' '`; the Actions version splits on `-` only — three
-  divergent copies exist (Actions, Events, ConfigFlow, plus `CapabilityScaffolder`).
-- `host:config` is written straight to disk, bypassing Manifest Studio's in-memory document.
-- 13 of 29 editor types offered; `ConfigFlowField.DefaultValue` and `.Options` unbound.
-- Hardcoded English user-facing string `Could not connect - check the values and try again.`
-  inside the VM instead of a resx key.
-- No duplicate-`StepId` detection — two steps with the same id silently collide.
+## 4. Poor code
 
-Real contract (confirmed, `MacroDeck.Sdk/ConfigFlow/IConfigFlow.cs`): `StartAsync` and a
-4-parameter `SubmitAsync(string stepId, IReadOnlyDictionary<string, object?> input,
-IConfigFlowContext, CancellationToken)`. DeckForge's signature is correct. `stepId` is a
-plain string — there is no `ConfigFlowStepId` type. The user can go back, so dispatch on
-`stepId` rather than assuming order; values collected by later steps are absent from `input`.
-`ConfigFlowStep.Fields` is `IReadOnlyList<ActionParameter>`; `AdvancedFields` must not be
-`Required`. The real factories are `Step`, `Error`, `External`, `Complete` (there is no
-`Completed`).
+| ID | Severity | Finding | Where | Fix | Status |
+|---|---|---|---|---|---|
+| B7/A5 | major | Appendix F's diagnostics table and the test enforcing it have both drifted: 10 listed codes are emitted nowhere, 14 emitted codes are unlisted, and a comment claims two live in CodeGen (which builds no diagnostics) | `visual.md` Appendix F, `VisualValidatorTests.cs:502` | Reconcile the table both ways; make the test read the table | pending |
+| A1 | major | §28 is the "definition of done" and lists capabilities that do not exist (PNG, `.dfblock`, clipboard, legacy import, round-trip) while the tracker says all ten phases are complete | `visual.md §28` | A §28.5 "criteria not met" table | pending |
+| A3 | major | The manifest is wrong in both directions: 4 listed paths do not exist, 10 shipped files are unlisted | `visual.md §15` | Reconcile | pending |
+| A6 | major | The document says the catalogue is 187 blocks in six places; it is 160, and §7 has no as-built table although a test's failure message points the reader to one | `visual.md §7, §22` | An as-built table; fix the present-tense numbers | pending |
+| A4 | major | §20 specifies 16 settings keys; none exist. §19's motion table is fiction — there are no durations and no animations | `visual.md §19, §20` | Mark as design, unassigned | pending |
+| A10 | major | A cluster of promised affordances has no implementation: clipboard chords, all three context menus, rubber-band selection, the header target picker, tile automation peers, the transport's Pause | `visual.md §18` | An as-built §18.6 | pending |
+| A7 | major | §11 specifies three files; the implementation writes one plus a backup and a palette file, and a dead constant still carries the old name | `visual.md §11`, `VisualProjectJson.cs:47` | Rewrite §11 as built; delete the dead constant | pending |
+| A8 | major | Three acceptance criteria — 60fps drag, 4.5:1 computed contrast, reduced motion — have no measurement, no test, and for motion no implementation | `visual.md §9.9, §28.2, Appendix H` | State the scope of what was measured | pending |
+| A9 | major | §27.1 says real network is available behind a per-session confirmation in the stage menu; no control calls `AllowRealNetwork` | `visual.md §27.1` | As-built note | pending |
+| A11 | major | The PNG deferral is honest in the tracker and presented as delivered in four other places | `visual.md §9.7, §18.5, §25, §28.1` | Mark each | pending |
+| A12 | major | The promised ~40-document compile corpus and the golden-file snapshots do not exist; the test file named to hold them does not exist | `visual.md §12, §13 P2, §15` | Say what shipped | pending |
+| A2 | blocker | The header says "pre-implementation", the "current position" line says P10 is mid-flight at 820 green, and the tracker says complete at 848 | `visual.md:3, :72, :91` | Make the top of the file agree with the table | pending |
+| B8 | major | `CapabilityId` is on every row, read by two tests, and justified by a warning nothing emits | `BlockCatalog.cs:27` | Emit `vis-capability-missing` or delete the field | pending |
+| B10 | minor | `heightOf` is honoured for leaves and ignored for every container, though the design credits it with the warm/cold budget | `Core/Visual/StackLayout.cs:164` | Thread it through, or delete it and its promise | pending |
+| B11 | minor | "Where every block is" is implemented twice and they disagree about `NotchY`; three members have no caller | `CanvasHitTest.cs:88,120,148`, `BlockWorkspace.xaml.cs:202` | One traversal; delete the dead members | pending |
+| B12 | minor | The facade whose stated job is to stop view models reaching past it omits `RemoveKey`, the one destructive mutation | `App/Services/ResxMergerService.cs` | Add it, or say why not | pending |
+| B13 | minor | `BlockWorkspace`'s class doc says zoom and pan are "not here yet" on a class that implements both | `BlockWorkspace.xaml.cs:15` | Rewrite the header | pending |
+| B14 | minor | Two XML doc blocks stacked on one member, so `Refuse` and `Refresh` are undocumented | `DocumentEditor.cs:464`, `BlockWorkspace.xaml.cs:492` | Move them | pending |
+| B15 | minor | Six public members have no caller and four of them document one; `ResxTextLookup.Reload`'s promise (a saved translation reaches the canvas) is not kept | several | Wire the one that is a real behaviour; delete the rest | pending |
+| B16 | minor | `ValidateReachability` checks no reachability; `vis-name-duplicate` is used for an undeclared name; `StackWalk.Push` takes a parameter it never reads | `VisualValidator.cs:733,844,964` | Rename, split the code, drop the parameter | pending |
+| B17 | minor | `DropPlan` returns six refusal codes in a namespace nothing documents, and its undo label disagrees with the keyboard path's | `Core/Visual/DropPlan.cs` | Prefix and document; share the label | pending |
+| B18 | minor | Three generators catch bare `Exception`, reduce it to a status line and log nothing, making a product bug indistinguishable from bad input | `ActionsEditorViewModel.cs:310` and two others | Narrow, and log | pending |
+| B19 | nit | `ReapplyTheme` opens with a null guard on a non-nullable parameter | `App.xaml.cs:185` | Delete the guard | pending |
+| B20 | nit | The save-failure message says nothing on disk changed, but the backup has already been overwritten | `Core/Visual/VisualStore.cs:105` | Reorder, or name the backup | pending |
 
-### 0.3 `WidgetDesignerViewModel` — 6 confirmed bugs plus silent data loss **[V]**
-- 5 wrong/missing `using` directives. `MacroDeck.Ui` does not exist. Correct:
-  `UiElement`/`UiView` → `MacroDeck.Ui.Dsl` / `MacroDeck.Ui.Runtime`; `UiSurfaceKinds`/
-  `UiSessionModes` → `MacroDeck.Ui.Model.Surfaces`; `IWidgetTypeProvider`/
-  `IWidgetTypeProviderContext` → `MacroDeck.Sdk.Widgets`. → `CS0246`.
-- `UiText.FromFixed` does not exist → `CS0117`. `UiText` has `Of`, `From`, `FromLocalized`,
-  `Optional`, `None`, `TryEvaluate` plus implicit conversions from `string`.
-- `Children.Add` on `IReadOnlyList<UiElement>` → `CS1061`. `UiContainer.Children` is
-  `{ get; init; }`.
-- `Events.Add` on `IReadOnlyList<UiEventHandler>` → `CS1061`. `UiElement.Events` is
-  `{ get; init; } = []`.
-- `public UiSurfaceDeclaration[] Surfaces` → `CS0738`, no covariant returns. Must be
-  `IReadOnlyList<UiSurfaceDeclaration>`.
-- `ViewSession` implements only a `View` property → `CS0535` ×5 for `BuildTree()`,
-  `DrainPatches()`, `Dispatch(UiEvent)`, `Changed`, `Faulted`. It also never disposes the
-  `UiView`, which is the exact leak `IUiSession`'s own doc warns about.
-- **Silent data loss:** `RenderDesignedNodes` does `sb.ToString().TrimEnd() + "\n"`, removing
-  the newline the last `AppendLine` wrote, so the next sibling concatenates onto the same
-  line. When a childless recursion returns the `// (none designed)` placeholder, every
-  following sibling lands inside a comment. Compiles cleanly; nodes vanish.
-- `ToElement` handles 4 of the offered types; the rest fall through to `UiTextRun`.
-- `BuildTree` keeps only the last root (`if (ParentKey is null) root = element;`).
-- `byKey[ParentKey]` unguarded → `KeyNotFoundException` inside the generated plugin.
-- Button states are bound and editable but never generated.
-- `NodeEvent.Detail` and `WidgetNode.IsVisible` are dead.
-- The live preview does not update on Key/Text/Size/Background edits (no change hooks).
-- `OnUnitChanged → UpdatePreview()` is a no-op; `RenderNodeHtml` never reads `Unit`.
-- No C# escaping of `WidgetName`/`WidgetTypeId`; `CSharpString` does not escape newlines.
-- Sequential `.Replace` chain in `RenderProvider` substitutes `$WidgetName` before
-  `$StringsKey`, so a value containing a token corrupts the output.
-- `Surfaces` always declares `UiSurfaceKinds.Config` even when `HasConfiguration` is false.
-- `AddNode` only nests under types containing `"stack"`, so `ui.layer` children are impossible
-  although `BuildTree` handles `UiLayer` parenting.
-- `Generate` writes no `PluginIntegration.cs` registration, unlike every other editor.
-- `WidgetDesignerPage` binds `DataContext.EventNames` / `DataContext.HandlerKinds` /
-  `DataContext.SchemaTypes` on a `Page` whose `DataContext` **is** the ViewModel. All three
-  ComboBoxes are silently empty and unusable.
-- Palette offers 21 node types; the real vocabulary is 24. Missing `ui.transform`,
-  `ui.modifier`, `ui.responsive`.
-- `WidgetTypeDescriptor` emission compiles, but `DataSchema` is emitted even when
-  `HasConfiguration` is false and `AppearanceProperties` is never emitted. Real host rule:
-  `HasConfiguration == true` requires `DataSchema != null` (satisfied).
-- `GetWidgetTypes()` omitted — legal via the default, but the host cannot recover the catalog
-  after a reconnect.
+## 5. Tests
 
-### 0.4 `BlockCompiler` — 6 of 8 statements wrong **[V]**
-`context` in `ExecuteAsync` is `ActionExecutionContext`, which exposes only `Parameters`,
-`OriginClientId`, `Interactions`, `Ui`, `OwnerWidgetId`, `CancellationToken`, `CallDepth`.
-There is no `Deck`, no `Notifications`, no logger.
+| ID | Severity | Finding | Where | Fix | Status |
+|---|---|---|---|---|---|
+| E3 | major | `Every_glyph_is_one_the_icon_library_actually_defines` calls `Assembly.Load("DeckForge.App")`, which the test project cannot load, so it is skipped forever — and the summary line reports 848/848 with zero skips while 849 were discovered | `CapabilityCatalogTests.cs:21` | Load the WPF-UI assembly the project already references; delete the `Assume` | pending |
+| E4 | major | Two `XamlEventWiringTests` pass vacuously when the source tree is not found | `XamlEventWiringTests.cs:53` | Assert the tree was found | pending |
+| E8 | minor | `PacedTrace : List<ExecutionStep>` hides `Add` without `new`, and `AddRange`/`Insert` bypass the observer — against its own remark. Zero test references | `ScriptInterpreter.cs:1000` | Stop inheriting; add a test | pending |
+| E10 | minor | Nine unique warnings, five introduced by the last three commits — including a possibly-null dereference and an unused field in the App, and two null-forgiving `.First()` calls in the new tests | several | Fix all of them | pending |
+| E5 | minor | An SVG test asserts two independent substrings, so an `x` from one rect and a `y` from another satisfy it | `SvgRendererTests.cs:86` | Parse and compare per element | pending |
+| E6 | minor | `BlockContrastRules.StrokeWidthFor` has zero coverage | `BlockContrastRules.cs:53` | A three-case test, or make it private | pending |
+| E7 | minor | `BlockLabel.MenuText`'s default-value branch is never executed | `BlockLabel.cs:185` | Two assertions | pending |
+| E9 | minor | Ten duplicated temp-directory fixtures, three teardown behaviours, six of which throw on a leaked handle | ten files | One `TempDirectory` helper | pending |
+| E11 | nit | An invariant culture set in `OneTimeSetUp` is never restored | `SvgRendererTests.cs:20` | Restore it | pending |
+| E12 | nit | `BlockLabel.Plan(descriptor, lookup)` recurses into itself and terminates only because key derivation happens not to depend on the label | `BlockLabel.cs:134` | An `if` | pending |
+| E13 | nit | A dead `result < 0` arm in the benchmark; `SelectionChanged` listed twice in the new test | `CanvasPerformanceBudget.cs:136`, `XamlEventWiringTests.cs:42` | Delete | pending |
+| E9b | minor | `PaletteStore.Save`'s failure return is never exercised | `PaletteStore.cs:87` | A read-only-directory test | pending |
 
-| Block | Emitted | Verdict |
+## 6. Closed without a change
+
+| ID | Finding | Why it stays |
 |---|---|---|
-| log | `_logger.Information("…", parameterName)` | **CS0103** — the parameter is never bound to a local; **CS1010** — `Escape` handles only `\` and `"`, not `\n`/`\r`/`\t`; the template also has no `{hole}`, so Serilog would drop the value |
-| set-variable | `… ? Convert.ToDouble(value, …) : null` | **CS0173** — `double` vs `<null>`. Same for `value is true`. Two in one scope → **CS0128** on `out var value`. `Sanitize` also mangles the dictionary *key*, so `2bad name` looks up `_2bad_name` |
-| if | `if (left > "right")` | **CS0019** ×4 — `> < >= <=` compare `string` to `string` |
-| return-result | `ActionResult.Success()/.Failed/.Accepted` | **works**. `ErrorCode` is unvalidated, so an arbitrary string becomes a nonexistent member; message is not localizable via `MacroDeckStrings` |
-| delay | `await Task.Delay(ms, context.CancellationToken)` | compiles, but the Actions editor emits a **non-async** executor → **CS4032** |
-| http-request | `new HttpClient(); GetStringAsync(url, ct)` | compiles; same CS4032. New `HttpClient` per call |
-| notify | `context.Notifications?.Notify(t, m)` | **CS1061** + **CS1501**. Real: `void Notify(UserNotificationRequest)` with `required string Title`. Also `?.` is wrong — the interface documents `Notify` as never-throwing |
-| navigate | `context.Deck?.OpenFolder(id, clientId)` | **CS1061** ×2. `OpenFolder` does not exist. `IDeckNavigator` has only `ChangeFolderAsync`, `ChangeProfileAsync`, `GoToParentAsync`, `GoBackAsync`, `GetFolders`, `GetProfiles`, `GetClients`, `ClientChanged`. `Deck` is non-nullable |
-
-`Sanitize` emits C# keywords verbatim → `CS1031`/`CS1001`. `locals` is accumulated and never
-read — the natural place for collision detection. `BlockProgram.Version` and
-`TargetActionId` are ignored. `IfBlock` and `NavigateBlock` are unreachable from the UI.
-`BlockProgramJson` has zero call sites, so a block program is never persisted.
-`BlockActionViewModel.SaveIntoAction` hardcodes `LogMessageAction.cs` and the anchor
-`public Task<ActionResult> ExecuteAsync(ActionExecutionContext context)`, has no `try`, and
-inconsistently uses `TargetActionId` `generated` vs `log-message`.
-
-### 0.5 `MacroDeckCli` + `ShipViewModel` — 4 of 13 commands wrong **[V]**
-| Command | DeckForge emits | Exit | Verdict |
-|---|---|---|---|
-| build | `build --source D --output D --force [--rid r]` | 0 | works. `--output` **is** a directory |
-| validate | `validate --manifest P --level Development --output Json` | 1 | works |
-| validate | `validate --directory D --level … --output Json` | — | works |
-| validate | `validate --artifact A --output Json` | 0 | works — `--level` is not required; the CLI implies `package` |
-| inspect | `inspect --artifact A --output text` | 0 | works |
-| run | `run --project D --stub-host` | — | works |
-| test | `test --project D --report Text [--output P] [--required-only] [--list-checks]` | 0 | works. `--project` is correct |
-| keygen | `keygen --output D` | 0 | works |
-| pack | `pack --source D --output F --force` | — | works. `--output` is a **file** here |
-| sign | `sign --artifact A --key K` | **2** | **broken** |
-| verify | `verify --artifact A` | **2** | **broken** |
-| icon-pack list | `icon-pack list --project D` | **2** | **broken** |
-| icon-pack add | `icon-pack add --project D --pack P` | **2** | **broken** |
-
-Correct forms:
-```
-sign <package> --output <signed> --certificate cert.json --certificate-signature cert.sig \
-     --private-key <name>.private [--issuer-certificate <p> --issuer-certificate-signature <p>] \
-     [--root-public <p>]
-verify <package> [--root-public <p>] [--output text|json]
-icon-pack list  --source <projectDir>
-icon-pack add   <packPath> --source <projectDir> [--key K] [--copy] [--force]
-```
-
-Casing is irrelevant — `CliOptionParsing.ParseToken` is `OrdinalIgnoreCase` and `--level`
-lowercases. DeckForge's mixed `Json`/`text` is cosmetic.
-
-`ShipViewModel.cs:143` globs for `*.key`/`*.pem` while `keygen` writes
-`macrodeck-creator.public` and `macrodeck-creator.private` → `keyPath` is always null and
-signing is permanently unreachable even right after a successful keygen. Signing also needs a
-Creator-Portal certificate that `keygen` explicitly does not issue, so the UI must say so.
-
-9 of 19 `MacroDeckCli` methods are dead; 4 of 8 `DotNetCli` methods are dead.
-`IconPackDesignerViewModel` bypasses `MacroDeckCli.IconPackAddAsync` with an inline call that
-uses a *different* working directory. Exit codes 0/1/2/3/4/70 are declared and never compared.
-
----
-
-## P1 — validator parity
-
-The real tool is 21 `PluginManifestError` values plus a JSON Schema pass plus a permission
-vocabulary plus `files[]` digest verification. DeckForge has the permission list (23/23
-exact **[R]**) and the plugin-id regex (character-identical to the schema **[R]**) and
-nothing else.
-
-### Missing
-- **The whole JSON Schema pass.** Real: `schema:<keyword>` with RFC 6901 pointers. DeckForge
-  reports different codes for the same defects, e.g. `"name": 42` → real
-  `error/schema:type@/name`, DeckForge `Error missing-name`; `"homepage": "notaurl"` → real
-  `error/schema:pattern@/homepage`, DeckForge nothing.
-- `id-mismatch` / `version-mismatch` — id and version must equal the enclosing directory names.
-- `entrypoint-outside-version-directory`.
-- `invalid-dependency` — 9 checks (dup id, self-collision, cross-collision).
-- `invalid-bundled-icon-pack` — 5 checks (key grammar, path safety, dup key, dup path, max 32).
-- `invalid-signature`, `invalid-file-digest` (`sha256:[0-9a-f]{64}`, size, dup path).
-- `invalid-settings` — `shutdown`/`health` shapes.
-- `invalid-compatibility` — SemVer range grammar.
-- `invalid-icon` — forward-slash relative, no `..`.
-- `icon-declared-not-present` (Error, Package+), `bundled-icon-pack-missing` /
-  `-not-in-files` (Warning), `file-missing` / `file-size-mismatch` / `file-digest-mismatch` /
-  `undeclared-file`.
-- `generated-field-authored` (Warning, `Level = null`).
-- `invalid-additional-link` (Error) and `unknown-link-type` (Warning).
-- Localization `MDLOC004` (unknown parameter type) and `MDLOC006` (removed key).
-- **The level model.** Real: 0 findings at `development` → 6 `publication-metadata-missing`
-  warnings at `package` → the same 6 as **errors** at `publication`. Pointers: `/description`,
-  `/icon`, `/license`, `/repository`, `/compatibility`, `/publisher` (or `/publisher/name`).
-  DeckForge's `Validate(string)` has no level parameter, so it over-reports at Development and
-  can never escalate.
-
-### Invented (no counterpart in the real tool)
-- `unknown-rid` — **a false positive.** `entrypoints: { "linux": … }` is `valid=True` in the
-  real CLI; the schema only constrains `^[A-Za-z0-9.-]+$`.
-- `description-missing`, `publisher-missing`, `license-missing`, `repository-missing`,
-  `compatibility-missing` — the real tool uses one code for all six.
-- `publication-metadata-missing` for the `github.com/example/` placeholder — **no such rule
-  exists**; that URL passes the real `^https?://` check.
-- `json` → real is `malformed`.
-- `invalid-manifest-version` → real has only `unsupported-manifest-version`; absence surfaces
-  as `schema:required`.
-- `missing-id` / `missing-name` / `missing-version` / `missing-entrypoint` → no `missing-*`
-  codes exist.
-- `invalid-id` → real is `invalid-plugin-id`.
-- `duplicate-permission` / `duplicate-language` → real is `schema:uniqueItems@…`.
-- `entrypoint-script` → real is `schema:not@…/executable`.
-- `invalid-ai` (×3) → governed by the schema.
-
-### Dead rule **[V]**
-`ManifestValidator.cs:191-196` — the `icon` check has an `if` with no block, so its body *is*
-the compatibility check. The icon value is computed and discarded; no icon finding is ever
-emitted. This is why `/icon` is absent from the output.
-
-### Other Core issues
-- `ValidationResult.ToString` counts `Info` issues as warnings.
-- `PluginManifest` is never instantiated and has no `JsonPropertyName`; serializing it would
-  emit PascalCase that does not match the schema.
-- `ManifestDocument.NewManifest` is dead and its output would immediately fail
-  `missing-entrypoint`.
-- `ManifestDocument.SetString` deletes the key on an empty value, so clearing a field flips
-  the diagnostic code mid-typing.
-- `ManifestDocument.Permissions`/`Languages` throw `InvalidOperationException` on a
-  hand-edited non-string array element; `EnsureEntrypoint`/`RemoveEntrypoint` are dead and
-  `EnsureEntrypoint` silently discards `arguments`.
-- `PermissionCatalog.net:outbound` sits under the `// System` comment but is constructed as
-  `Publishing`; `GroupForUnknown` does not special-case `net:`, so a custom `net:x` classifies
-  as `System`. `KnownPermissions` is a second independent copy of the same 23 strings.
-- `BlockProgramJson`, `CapabilityCatalog.DefaultPresets`, `Find`, `PermissionCatalog.GroupOf`,
-  `WorkspaceContext.BuildConfigPath`/`TestsDirectory`/`EntryExecutableName`/
-  `ManifestEntrypointFor`, `MacroDeckRules.SuggestProjectName` are all dead.
-- `WorkspaceManager.FromPluginProject` assumes `src/<Project>` two levels up unconditionally,
-  trims only `'\\'`, loses publisher/license/platforms/self-contained/languages, and defaults
-  plugin id to the magic string `"unknown"`. The class doc claims JSON persistence that does
-  not exist.
-- `MacroDeckRules.SuggestPluginId` uses `char.IsLetterOrDigit`, so non-ASCII names produce an
-  id its own validator rejects.
-- `NewProjectOptions.FolderName`/`RootNamespace` only strip spaces.
-- `CapabilityDescriptor.IsInDefaultPresets`'s doc comment describes a different property.
-- `IDeckForgeExtension` and `DeckForgeHooks` are entirely unwired — no loader, no
-  implementations, and the documented "Extensions settings page" does not exist.
-
----
-
-## P2 — architecture, shell, services, UI
-
-### Extension model
-- `IDeckForgeExtension` — zero implementations, zero registrations, no discovery, no page.
-- `IProjectContentContributor` — zero implementations, zero registrations. The pipeline is a
-  no-op. Meanwhile the seven editors bypass it entirely and write into the project with string
-  surgery, so there are two parallel generation architectures and the documented one is empty.
-- `ProjectContentBuilder.ExtraIntegrationInterfaces`, `.ExtraIntegrationUsings`,
-  `.ExtraIntegrationMembers` are declared, documented and read by nothing.
-- `MacroDeckTemplateFactory.AddKey` escapes the resx value but not the key attribute.
-- 4 of 11 `Fill` tokens are dead (`SdkVersion`, `DotnetVersion`, `MacroDeckRange`,
-  `EntryExecutable`); SDK values reach output by calling `MacroDeckSdkInfo` directly, bypassing
-  the token layer, so the two can drift.
-- `Directory.Build.props` and `NuGet.config` are added **unfilled** (legitimately keep `$`).
-- `MacroDeckTemplateFactory.MacroDeckBuildJson` ignores the options builder, so
-  `Options.SelfContained` never reaches it; `--self-contained false` is always emitted.
-- `manifest.json` `version` is hardcoded `1.0.0`; `id`/`license`/`homepage` are not JSON
-  escaped.
-- `Tokens(b).ProjectName` and `FolderName` duplicate the same expression in five places.
-
-### CliAdapter
-- `ProcessRunner` does not drain async readers after `WaitForExitAsync`, so
-  `ProcessResult.CombinedOutput` can be truncated and callbacks can outlive the call.
-- `Kill` catches only `InvalidOperationException`; can also throw `Win32Exception`.
-- `StandardLine`/`ErrorLine` are singleton-global, so Build & Run, Ship, Publish and Terminal
-  all bleed into each other.
-- Subscriber exceptions are unhandled on the thread-pool reader.
-- `UTF8` decode is assumed for a child that may emit OEM/ANSI.
-- `StandardInputRedirect` is never set and there is no stdin writer, so any interactive child
-  prompt hangs forever in a `WinExe`.
-- `environmentVariables` and `RunQuotedAsync` are dead; `SplitCommandLine` is broken
-  (no escapes, quotes stripped, empty args lost, spaces split) and
-  `TerminalViewModel.SplitCommandLine` is a byte-for-byte duplicate that is live.
-- `MacroDeckCli.Tokenize` is `Split(' ')` with no quote support at all.
-- `CombinedOutput` reorders the transcript (all stdout, then all stderr).
-- `EnvironmentDoctor`: `GetVersionAsync` returns the whole trimmed stdout, so a `global.json`
-  diagnostic is reported as "dotnet was not found on PATH"; `Version.TryParse` is evaluated
-  twice per check; `HasAspNetCoreFramework()` is called twice and can throw; `FindOnPath`
-  splits on a hardcoded `';'`; the three Macro Deck install paths are internally inconsistent
-  (`MacroDeck` vs `Macro Deck`); no registry/Start-Menu probe; the optional host check renders
-  as a red failure; the CLI check has no version gate and no install button although it claims
-  "DeckForge can install it".
-- `DotNetCli`: `IsAvailableAsync` and `GetVersionAsync` are the same command; `ListPackagesAsync`
-  uses the deprecated `dotnet list package`; `InstallMacroDeckCliAsync`'s doc says install-or-update
-  but `dotnet tool install` errors when already installed.
-- `VelopackPackagingService` is the only process launch that builds an `Arguments` string with
-  hand-rolled `Quote()` instead of `ArgumentList`; it leaks `vpk` on cancellation; `FindVpk`
-  has a dead `catch (IOException)`.
-- `DeckForge.CliAdapter.csproj` references `Microsoft.Extensions.Logging.Abstractions` unused
-  and describes "git/gh" adapters that do not exist. `EnvironmentDoctor` is in the
-  `DeckForge.CliAdapter` namespace despite living in `Tools/`.
-
-### Shell / theming / services
-- `MainWindow.NavigateTo` is a 13-branch `else if` type-test chain; `PageRegistry`'s doc
-  claims one line per page, which is false.
-- `ShortcutTags` does not mirror the sidebar — 7 pages have no digit shortcut and the mapping
-  is off by several positions.
-- `F5` only navigates to Build & Run; three places claim it runs the stub host.
-- `ShellMessenger.Attach` `+=` without storing the delegate, and uses blocking
-  `Dispatcher.Invoke` even when already on the UI thread. `WorkspaceManager.CurrentChanged`
-  has zero subscribers.
-- Every page and ViewModel is `AddSingleton`; `EXTENDING.md` says `AddTransient`, which would
-  lose console state.
-- 11 commands take a `CancellationToken` but no `CancelCommand` is bound anywhere, so every
-  `catch (OperationCanceledException)` is unreachable. No `CancellationTokenSource` is ever
-  created in the App project.
-- Dispatcher usage is inconsistent: `TerminalViewModel` correct, `ManifestStudioViewModel`
-  blocking `Invoke`, `BuildRunViewModel`/`IconPackDesignerViewModel`/`PublishViewModel` none.
-- `ManifestStudioViewModel`: `Permissions` (custom perms) and `RawJson` are never bound;
-  `EnabledCount` drifts +1 per row per visit because `IsChecked` OneWay plus Checked/Unchecked
-  handlers double-fire; no dirty tracking, so navigating away silently discards edits; triple
-  load per navigation; a failed load leaves stale `ManifestPath`/`RawJson`/`Issues`.
-- `LocalizationManagerViewModel`: the `(missing)` run renders unconditionally with no
-  `DataTrigger` on `Exists`; `LoadKeys` re-reads every culture resx per key (500 keys × 5
-  cultures = 2,500 parses per load); `SaveTranslation` writes twice and reaches around its
-  own facade into the static `ResxMerger`; `AddKey` creates `Custom.Key{n}` that collides after
-  deletions and has no rename capability anywhere in the UI.
-- `IconStudioViewModel`: no template is selected on load → blank preview, and
-  `SaveToWorkspace` will overwrite `Assets/icon.svg` with an empty `<svg>`; `SafeColor` uses
-  non-`[GeneratedRegex]` `Regex.IsMatch` twice per keystroke; `HasWorkspace` unbound.
-- `IconPackDesignerViewModel`: the 32 MiB limit is never enforced; `StatusText` clobbers the
-  limit message; duplicate zip entry names; service-locator + null-forgiving `runner!`;
-  `ExportTo` is called outside the `try`; temp packs are never cleaned up; `MaxFiles` message
-  is dead.
-- `NewProjectViewModel`: `OnPublisherChanged` has an empty `if` body, so the publisher never
-  re-derives the id; no platform-change hooks, so `CanCreate` stays true with no platform;
-  double validation per keystroke; `Directory.Exists` on every keystroke; only
-  `GenerationException` is caught; `SelfContained`/`Languages`/`CapabilityPresets` are never
-  set.
-- `WorkspaceViewModel.OpenSolution` picks an arbitrary `src/` subdirectory;
-  `WorkspaceManager.FromPluginProject`'s `FileNotFoundException` is uncaught in three callers.
-- `EventsEditorViewModel`: single-shot generation — a second event is impossible and the
-  designed parameters are silently discarded; missing the `Duration` special case that Actions
-  has; writes resx leaf keys that collide with its own nested classes (contradicts its own
-  `MDLOC008` validator); `AddUsing` inserts before the *first* `using` occurrence.
-- `CapabilityScaffolder`: implements 2 of 22 capabilities while every "Add to plugin" button
-  is enabled; the Events path emits `Strings.Events.SomethingHappened.Name()` without creating
-  that resx key, so the generated project cannot compile; mutually exclusive with the Events
-  editor; `AddUsing` will insert into a comment.
-- `MainViewModel` is ~80% dead; `HomePage` sets `DataContext` to the Workspace VM, so its
-  properties are structurally invisible; the environment doctor never re-runs after the first
-  check.
-- `AppSettings`: 7 of 9 properties are dead or read-only-in-practice; `SettingsPage` has no UI
-  for any of them; only Theme and Accent are editable; there is no selected-accent affordance.
-- `App`: no `ValidateOnBuild`/`ValidateScopes`; the accent is applied twice;
-  `AppTheme.System` is never re-evaluated on OS theme change; the crash log is unbounded; the
-  first 3 exceptions are swallowed.
-- `SettingsService`: only `JsonException` is caught; `Save()` is non-atomic; 7 dead properties.
-- `DocsSnapshotService`: `force` is unreachable so today's snapshot can never be refreshed,
-  despite the UI telling the user to; the page loop does not verify the `DocsOrigin` prefix
-  before slicing; the page filename is remote-controlled with no sanitisation (the asset loop
-  does sanitise); the asset scan only handles double-quoted root-relative attributes and 9
-  extensions; `catch` blocks are empty; `meta.json` is written and never read; only 2 snapshots
-  are kept and `UnauthorizedAccessException` is uncaught; `LoadManifest` returns a
-  case-sensitive dictionary while the write-time one is `OrdinalIgnoreCase`.
-- `ResxMergerService` is an 11-line facade with no `SetKey`, so VMs reach around it.
-- `ResxMerger` has no culture handling at all; `MacroDeckTemplateFactory` never calls it, so
-  factory and merger produce differently formatted resx for the same conceptual file.
-- `BoolToInverseVisibilityConverter` and `InverseBoolToVisibilityConverter` are identical;
-  `BoolToStatusColorConverter` hardcodes theme colours; `ResourceKeyToBrushConverter` degrades
-  a typo to `Brushes.Gray` silently.
-- `LiquidTheme`: 15 of 45 tokens are never used; the gradient's end caps are hardcoded blue and
-  indigo regardless of accent; light mode has no layer/card elevation separation; semantic
-  brushes are identical in light and dark; `NamedColor.ColorBrush` is mutable global state.
-- `StaticResource` for Liquid brushes is used on `HomePage` and `NewProjectPage`, so those
-  pages never re-theme.
-- `LiquidCard` has `CornerRadius=12` but every hand-rolled card uses 10.
-- "Icon Packs" uses the `Mail24` (envelope) glyph.
-- `app.manifest` has no `requestedExecutionLevel`.
-- `DeckForge.App.csproj` references `Microsoft.Extensions.Hosting` unused.
-- `DeckForge.App.csproj` has an explicit `<Resource Include="Assets\app-icon.png" />` that
-  risks `NETSDK1022` against the default glob.
-- `DeckForge.slnx`, `Directory.Build.props` have no `TreatWarningsAsErrors`, no `.editorconfig`,
-  no root `.gitignore` (now added).
-- `tests/DeckForge.Tests` references `DeckForge.CliAdapter` with no test using it.
-- `Assets/generate-icon.ps1` is not wired into MSBuild.
-- `BlockActionPage.xaml` declares an unused `xmlns:blocks` namespace.
-- `TerminalPage` deep-link is `docs::cli/` with a trailing slash, producing a double slash.
-- The Capabilities page "Docs" button opens the external browser while every other page uses
-  the embedded WebView2, orphaning `OpenDocsCommand`.
-- `CapabilityDescriptor.Glyph` — 22 distinct glyphs, none used; the page hardcodes
-  `Grid20`.
-- `CapabilityGalleryViewModel.BuildGroups` derives titles by `Replace("And", " & ")`, so a
-  future `Android` value would render `&roid`.
-- `BlockActionPage` exposes no UI for `IfBlock` or `NavigateBlock` although `ROADMAP.md`
-  claims deck navigation exists.
-
-### Template fidelity (verified good)
-Byte-identical to the official template after token substitution: `Directory.Build.props`,
-`Program.cs`, `PluginIntegration.cs`, `LogMessageAction.cs`, `launchSettings.json`, the test
-csproj, `macrodeck-build.json` (structure and arguments), `NuGet.config` (functional),
-`Strings.resx` (5 seed keys, 4 resheaders), `icon.svg`. The csproj differs only in a comment.
-The generated project builds clean, its tests pass, it packs, `validate --level publication`
-returns `valid=True`, and `macrodeck-plugin test` reports 25 passed / 0 failed / 24 skipped,
-"Conformant: yes".
-
-Remaining fidelity gaps:
-- `LICENSE` — the official ships it and the manifest declares `license`; DeckForge emits none.
-- `local-feed/.gitkeep` — `NuGet.config` declares the source but the directory is never created.
-- `Directory.Packages.props` — the official floats `3.0.0-*` with
-  `CentralPackageFloatingVersionsEnabled`; DeckForge pins exactly. Deliberate, keep it.
-- `.slnx` — the official uses `<Folder>` solution folders; DeckForge emits a bare 2-project list.
-- Tests — the official has 6 tests across 2 fixtures including a `LocalizationTests` fixture
-  and a blank-input negative case; DeckForge has 2 tests, one `Is.Not.Null` assertion, and no
-  `UseLocalization` in the harness.
-- The generated `README.md` documents `macrodeck-plugin build --project …`, which is not a
-  `build` option.
-- `.gitignore` — DeckForge's bespoke 20-line version omits `local-feed/*` and
-  `!local-feed/.gitkeep`.
-- Neither side has an `.editorconfig`, though the generated props set
-  `EnforceCodeStyleInBuild`.
-
-### Docs
-- `README.md` claims "all 22 documented capabilities" — the docs list 23 features across 4
-  tables and 18 wire capability kinds.
-- `ROADMAP.md` claims Block Programmer v2 has a deck-navigation block. It does not exist in
-  the UI.
-- `ROADMAP.md` claims "DeckForge state lives in `.deckforge/`" — only an empty directory is
-  created.
-- `README.md` says `docs buttons on every editor page`; the Capabilities page uses the
-  external browser.
-- `EXTENDING.md` says `AddTransient` for pages; the app uses `AddSingleton`.
-- `EXTENDING.md` says "Parse its JSON output where available" — nothing parses it.
-- `EXTENDING.md` says capability scaffolders are `IProjectContentContributor`s. They are not.
-- `EXTENDING.md` says "DeckForge writes its own state only under `.deckforge/`" — violated by
-  `%LOCALAPPDATA%/DeckForge/settings.json` and the docs snapshot.
-- `EXTENDING.md` says `dotnet build # clean build, 0 warnings` — nothing enforces it.
-
----
-
-## Real SDK surface DeckForge must encode
-
-- **Actions**: `IActionDefinition` (`Id`, `Name`, `Description`, `Parameters`,
-  `Platforms` default interface member, `CreateExecutor`), `IActionExecutor.ExecuteAsync`,
-  `ActionResult` (`Success()`, `Success(expectedStateId)`, `SucceededTask` — a **property**,
-  `Accepted(message)`, `Accepted(message, expectedStateId)`, `Failed(code, message)`),
-  `ActionErrorCodes` (9: `NotConfigured`, `NotConnected`, `PermissionDenied`, `ProviderError`,
-  `ProviderRejected`, `InvalidParameter`, `NotFound`, `Timeout`, `Unavailable`),
-  `ActionParameter` (29 factories / 30 overloads, `ActionParameterType` has 27 values),
-  `OnlyWhen(parameterName, params values)` returns a copy,
-  `IStateProviderActionDefinition` (2 s default poll), `IIconProviderActionDefinition`
-  (5 s), `IDynamicOptionsActionDefinition`, `IUiConfigurableActionDefinition`.
-  `MacroDeckPlatform` lives in `MacroDeck.Sdk`, not `.Actions`. `LocalizedText` has implicit
-  conversions from `string?` and `LocalizedString`.
-  `ActionExecutionContext.Parameters` is `IReadOnlyDictionary<string, object>` — **non-nullable**.
-  `IStateProvider`/`IIconProvider`/`IConfigFlow` take
-  `IReadOnlyDictionary<string, object?>` — **nullable**. The dictionary types are not
-  assignable to each other.
-- **ConfigFlow**: `IConfigFlow.StartAsync` + 4-parameter `SubmitAsync` with a plain-string
-  `stepId`; `IConfigFlowProvider.CreateConfigFlow()`; `ConfigFlowResult.Step/Error/External/Complete`;
-  `ConfigFlowStep` (`StepId` required, `Fields` required `IReadOnlyList<ActionParameter>`,
-  `AdvancedFields` must not be `Required`); `IConfigFlowContext.OAuth`; `IOAuthSession`;
-  `IIntegrationConfig` (`GetEntriesAsync`, `GetStringAsync`, `GetSecretAsync`, `SetStringAsync`,
-  `SetSecretAsync`).
-- **Variables**: `IVariableProvider` — only `Variables` and `ReadAsync` are abstract;
-  `VariableDefinition` has exactly two factories, `Eager(name, type, …)` and
-  `OnDemand(id, type)`, and `Type` + `Materialization` are `required`; `VariableType`
-  is `Text | Numeric | Boolean`; `VariableReading.Of(...)` and `VariableReading.Unavailable`.
-- **Events**: `IEventProvider.EventDefinitions` is the only abstract member; `EventDefinition`
-  has **no builder** — object initializer only; `Id` and `Name` required; `ConfigurationParameters`
-  and `PayloadParameters` are both `IReadOnlyList<ActionParameter>`; `EventDeliveryKind`
-  is `Push | Scheduled`; publish via `context.Events.Publish(eventId, parameters)` (fire-and-forget).
-- **Widget types**: `IWidgetTypeProvider` (`ProviderName` default, `InitializeAsync(context, ct)`,
-  `GetWidgetTypes()` default), `IWidgetTypeProviderContext.RegisterWidgetTypeAsync`,
-  `WidgetTypeDescriptor(Id, Name, Description, DefaultData, DataSchema, HasConfiguration, Metadata)`
-  with `SupportsFlows` and `AppearanceProperties` init properties. **Host rule:
-  `HasConfiguration == true` requires `DataSchema != null`.**
-- **UI**: `IUiProvider` (`IReadOnlyList<UiSurfaceDeclaration> Surfaces`, `CreateSessionAsync`),
-  `IUiSession` (`UiTree BuildTree()`, `IReadOnlyList<UiPatch> DrainPatches()`,
-  `event EventHandler? Changed`, `event EventHandler<UiSessionFaultedEventArgs>? Faulted`,
-  `void Dispatch(UiEvent)`, `IAsyncDisposable` — **disposing the view is mandatory**),
-  `UiNode { Id, Type, RequiredComponentVersion, Properties, Children, Fallback }`,
-  `UiTree { Revision, Surface, Root }`, `UiSurface { Kind, SessionMode, Attributes }`.
-  `UiSurfaceKinds` and `UiSessionModes` are `static class`es of `const string`, **not enums**.
-- **24 node types**: 20 `ui.*` — `ui.stack`, `ui.text`, `ui.image`, `ui.range-bar`,
-  `ui.slider`, `ui.button`, `ui.layer`, `ui.chart`, `ui.text-field`, `ui.list`,
-  `ui.transform`, `ui.shape`, `ui.icon`, `ui.grid`, `ui.gauge`, `ui.toggle`, `ui.segmented`,
-  `ui.dial`, `ui.modifier`, `ui.responsive`; 4 `macrodeck.*` — `macrodeck.dynamic-text`,
-  `macrodeck.clock-dial`, `macrodeck.progress-bar`, `macrodeck.progress-text`.
-  All live in `MacroDeck.Ui.Components` / `MacroDeck.Ui.Components.UiMacroDeckComponents`.
-  `UiText` (`MacroDeck.Ui.Dsl`) has `Of`, `From`, `FromLocalized`, `Optional`, `None`.
-  `UiContainer.Children` and `UiElement.Events` are init-only.
-- **Host APIs on `IIntegrationContext`**: `Variables`, `UserVariables`, `Config`, `Deck`,
-  `Scripts`, `Widgets`, `Events`, `Notifications`, `Messages`, `UiResources` — **all
-  non-nullable**. `IDeckNavigator` is `ChangeFolderAsync`, `ChangeProfileAsync`,
-  `GoToParentAsync`, `GoBackAsync`, `GetFolders`, `GetProfiles`, `GetClients`, `ClientChanged`.
-  `IUserNotifier` is `Notify(UserNotificationRequest)`, `Dismiss(key)`.
-  `IActionInteractions` is `RequestItemPicker`, `RequestDevicePicker`.
-  `IUiInteractions` is `ShowModalAsync`, `ShowModalAsync<T>`.
-- **Reserved routes**: `/_macrodeck/health`, `/ready`, `/info`, `/diagnostics`. Analyzer
-  `MDP2005` rejects any mapped route under that prefix.
-- **Builder chain**: `CreatePlugin(args)` → `UseMacroDeckLogging()` →
-  `UseLocalization(Strings.LocalizationCatalog)` → `RegisterIntegration<T>()` → `Build()` →
-  `RunAsync()`.
-- **Analyzers a generator can trip**: `MDP1001` (manifest identity), `MDP1002` (declared local
-  id — kebab-case, ≤64, no `::`), `MDP1003` (icon extension — `.svg .png .jpg .jpeg .webp`),
-  `MDP1004` (restated identity), `MDP2001` (duplicate capability id — **plugin-wide**, so two
-  integrations may not share an action id), `MDP2002` (unknown capability kind — 18),
-  `MDP2003`/`MDP2004` (DI registration), `MDP2005` (reserved route), `MDP3001`
-  (cancellation forwarding), `MDP3002` (blocking), `MDP3003` (async void), `MDP4001`
-  (singleton capability context), `MDP4002` (listener URL override / `ASPNETCORE_URLS`),
-  `MDP5001`-`MDP5004` (deprecation), `MDLOC001`-`MDLOC008` (localization).
-  `MDLOC008` is "a key is both a member and the group other keys nest under" — the exact rule
-  the Events editor violates.
-- **SDK version policy**: `3.0.0-beta.14` is the newest release line; previews are older than
-  betas. Pin exactly; never float.
+| D-x | "Nav clicks are dead in some sessions" | The harness's `GetCurrentThreadId` P/Invoke named `user32.dll` instead of `kernel32.dll`, so no click ever took the foreground. Fixed in the harness; the symptom went with it |
+| A-x | `crash.log` `ViewRequested` entry | Predates the fix; the defect class now has a test |
+| E-x | The known-flaky transcript test | Not a flake: a real contract that cannot be kept (E1). It passes in full runs and fails 55% in isolation, which is worse than either |
+| — | Keyboard-only editing, palette search, text entry | Unverifiable from the harness — synthesised characters do not arrive. Recorded, not fixed, not guessed at |

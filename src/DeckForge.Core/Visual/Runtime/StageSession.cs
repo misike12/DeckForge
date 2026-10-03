@@ -32,7 +32,15 @@ public sealed class StageSession
     private ScriptInterpreter _interpreter;
     private IDisposable? _timer;
     private string? _selectedScriptId;
-    private double _speed = 8;
+    /// <summary>The steps per second a run starts at, and what the slider starts showing.</summary>
+    /// <remarks>
+    /// Named rather than left as a literal in two places, because the panel's slider and the session's
+    /// timer were two separate numbers that did not have to agree: the slider began at 0 and was clamped
+    /// to 1 while the run advanced at eight, so the stage reported a speed it was not running at.
+    /// </remarks>
+    public const double DefaultSpeed = 8;
+
+    private double _speed = DefaultSpeed;
 
     /// <summary>Builds a session over a document.</summary>
     /// <param name="document">The document to run.</param>
@@ -451,6 +459,15 @@ public sealed class StageSession
             ? null
             : _interpreter.Steps.FirstOrDefault(candidate => candidate.Id == selected.Id);
 
+        // Nothing running yet means the interpreter is about to start *its* first script, which is not
+        // necessarily the one the picker says - the picker is the user's, and a stage that steps a
+        // different script from the one named above its own trace is worse than no picker at all. Reset
+        // into the chosen script first, exactly as Run does.
+        if (script is not null && !_interpreter.IsRunning)
+        {
+            _interpreter.Reset(script);
+        }
+
         var outcome = script is null
             ? RunOutcome.Completed
             : interactive
@@ -462,10 +479,12 @@ public sealed class StageSession
         Mirror();
         PublishOutcome(outcome);
 
-        // Keep going. Stepping pauses after every block, so a pause on its own is not a reason to stop:
-        // if nothing said to stop this run, the next tick is owed. Without this the Run button runs
-        // exactly one block and calls it a transport, which is Step wearing Run's label.
-        if (outcome is RunOutcome.Paused
+        // Keep going - for a run, and for nothing else. Stepping pauses after every block on purpose,
+        // so a pause on its own is not a reason to re-arm: arm it here and one press of Step runs the
+        // whole script at the transport's speed while the outcome still says "Paused", which is the
+        // difference between a debugger and a very slow Run. The Run button re-arms it from Run().
+        if (!interactive
+            && outcome is RunOutcome.Paused
             && _interpreter.PausedAtBreakpoint is null
             && _interpreter.Executed < _interpreter.StepBudget)
         {

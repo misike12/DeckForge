@@ -887,10 +887,10 @@ internal EditProcedure(
     }
 
     /// <summary>The declaration looked like before, or null for an add.</summary>
-    private ProcedureDeclaration? Before { get; }
+    internal ProcedureDeclaration? Before { get; }
 
     /// <summary>What it looks like, or null for a delete.</summary>
-    private ProcedureDeclaration? After { get; }
+    internal ProcedureDeclaration? After { get; }
 
     /// <summary>Where it was, so a delete's inverse puts it back in the same slot.</summary>
     public int Index { get; init; } = -1;
