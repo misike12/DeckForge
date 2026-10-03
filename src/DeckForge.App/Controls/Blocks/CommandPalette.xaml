@@ -1,0 +1,65 @@
+<UserControl x:Class="DeckForge.App.Controls.Blocks.CommandPalette"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:conv="clr-namespace:DeckForge.App.Converters"
+             xmlns:commands="clr-namespace:DeckForge.Core.Visual.Commands;assembly=DeckForge.Core"
+             xmlns:visual="clr-namespace:DeckForge.App.ViewModels.Visual"
+             Background="Transparent"
+             Focusable="False">
+
+    <!--
+        The command palette, over the page.
+
+        Markup does the filtering and the list; the ranking is Core's, so "step into" really does come
+        above "toggle breakpoint" and a keystroke's caps really are ignored. A palette that ranked in the
+        view would be a second implementation of the same rule, and the two would disagree the first time
+        either changed.
+    -->
+    <UserControl.Resources>
+        <conv:BoolToVisibilityConverter x:Key="TrueVisible" />
+
+        <DataTemplate x:Key="CommandRow">
+            <Grid Margin="0,1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Title}" FontSize="12.5" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Text="{Binding Gesture}" FontSize="11"
+                           Margin="12,0,0,0" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Border Background="#66000000" />
+
+        <Border Width="460" MaxHeight="420" VerticalAlignment="Top" Margin="0,80,0,0"
+                CornerRadius="12" Padding="0"
+                Background="{DynamicResource Liquid.ControlElevationBrush}"
+                BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBox x:Name="Search" Grid.Row="0" Margin="12,12,12,8"
+                         FontSize="13" Padding="8,6"
+                         Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                         KeyDown="Search_KeyDown" />
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Results}" ItemTemplate="{StaticResource CommandRow}" />
+                </ScrollViewer>
+
+                <TextBlock Grid.Row="2" Margin="12,8,12,12" TextWrapping="Wrap" FontSize="10.5"
+                           Foreground="{DynamicResource Liquid.TextTertiaryBrush}"
+                           Text="{Binding Footer}" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

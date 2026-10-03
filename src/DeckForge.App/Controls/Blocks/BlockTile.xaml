@@ -153,6 +153,20 @@
             </ItemsControl.ItemsPanel>
         </ItemsControl>
 
+        <!--
+            The comment marker, in the gutter beside the header.
+
+            A marker rather than the comment itself: a block's comment can be a paragraph, and a canvas
+            that printed paragraphs inside blocks would be unreadable. The dot says there is a note, the
+            inspector shows the note, and the tile's tooltip carries it so a user who has not selected the
+            block still learns something from hovering.
+        -->
+        <Ellipse Grid.RowSpan="2" Width="5" Height="5" HorizontalAlignment="Left"
+                 VerticalAlignment="Top" Margin="1,11,0,0" Panel.ZIndex="2"
+                 Fill="{DynamicResource Liquid.AccentBrush}"
+                 Visibility="{Binding HasComment, Converter={StaticResource TrueVisible}}"
+                 ToolTip="{Binding Comment}" />
+
         <ItemsControl Grid.Row="1"
                       ItemsSource="{Binding Bodies}"
                       ItemTemplate="{StaticResource BodyTemplate}"

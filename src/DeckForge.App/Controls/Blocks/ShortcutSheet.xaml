@@ -1,0 +1,64 @@
+<UserControl x:Class="DeckForge.App.Controls.Blocks.ShortcutSheet"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             Background="Transparent"
+             Focusable="False">
+
+    <!--
+        The shortcut sheet.
+
+        Every row is a row from Core's command table, so this cannot claim a shortcut nothing does. The
+        preamble is the scope rule, because that is the one rule a user cannot infer from the rows.
+    -->
+    <Grid>
+        <Border Background="#99000000" />
+
+        <Border Width="620" MaxHeight="560" VerticalAlignment="Center" CornerRadius="12"
+                Background="{DynamicResource Liquid.ControlElevationBrush}"
+                BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="20,18,20,10">
+                    <TextBlock Text="Keyboard shortcuts" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Preamble}" TextWrapping="Wrap" FontSize="11.5" Margin="0,6,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                </StackPanel>
+
+                <ui:Button DockPanel.Dock="Bottom" Content="Close" HorizontalAlignment="Right"
+                           Margin="0,0,20,16" Padding="12,5" Click="Close_Click" />
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20,0,20,0">
+                    <ItemsControl ItemsSource="{Binding Sections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,18">
+                                    <TextBlock Text="{Binding Heading}" FontSize="13" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding Note}" TextWrapping="Wrap" FontSize="10.5"
+                                               Margin="0,2,0,6"
+                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+
+                                    <ItemsControl ItemsSource="{Binding Commands}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,2">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="120" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Title}" FontSize="12" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Gesture}"
+                                                               FontSize="11.5" HorizontalAlignment="Right"
+                                                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

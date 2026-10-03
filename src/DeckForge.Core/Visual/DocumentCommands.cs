@@ -528,6 +528,116 @@ public sealed class ToggleDisable : DocumentCommand
     }
 }
 
+/// <summary>
+/// Sets or clears a block's comment.
+/// </summary>
+/// <remarks>
+/// A command like <see cref="ToggleDisable"/> rather than a property write, because the comment is part of
+/// the document and a property write would put it outside the undo stack — so Ctrl+Z after typing a
+/// comment would undo whatever the user did last instead, which is the single most confusing thing an
+/// editor can do.
+///
+/// It coalesces like the slot editors do, because a comment is typed one character at a time and twenty
+/// undo steps to get back from a typo in a sentence is not undo, it is a chore.
+/// </remarks>
+public sealed class SetComment : DocumentCommand
+{
+    public SetComment(string blockId, string? after)
+    {
+        BlockId = blockId;
+        After = after;
+    }
+
+    /// <summary>The block whose comment this is.</summary>
+    public string BlockId { get; }
+
+    /// <summary>
+    /// The comment after the command, or null when it is being cleared.
+    /// </summary>
+    /// <remarks>
+    /// Settable because merging edits it. The merged entry is one undo step covering every keystroke, so
+    /// its <em>after</em> is the newest text while its <see cref="Before"/> stays the oldest.
+    /// </remarks>
+    public string? After { get; private set; }
+
+    /// <summary>The comment before the command, kept so undo is a write and not a guess.</summary>
+    public string? Before { get; private set; }
+
+    /// <summary>
+    /// Whether <see cref="Before"/> has been read off the document yet.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the value, because null is a real comment — the one a block has when the user has not
+    /// written one — and a flag that could not tell "no comment yet" from "no comment" would lose it. The
+    /// merge below picks the *older* entry's value, which with null means picking nothing at all.
+    /// </remarks>
+    private bool _beforeCaptured;
+
+    public override string Label => "Comment on block";
+
+    /// <summary>
+    /// Typed text coalesces into one undo entry.
+    /// </summary>
+    /// <remarks>
+    /// Same rule as the slot editors, and for the same reason: the window is long enough for a pause but
+    /// short enough that two separate sentences a minute apart are still one edit to the user.
+    /// </remarks>
+    public override string? CoalesceKey => $"comment:{BlockId}";
+
+    public override int CoalesceWindowMs => 800;
+
+    public override void Apply(VisualProject project)
+    {
+        if (DocumentLists.Find(project, BlockId) is not { } block)
+        {
+            return;
+        }
+
+        if (!_beforeCaptured)
+        {
+            Before = block.Comment;
+            _beforeCaptured = true;
+        }
+
+        block.Comment = After;
+    }
+
+    public override void Revert(VisualProject project)
+    {
+        if (DocumentLists.Find(project, BlockId) is { } block)
+        {
+            block.Comment = Before;
+        }
+    }
+
+    /// <summary>
+    /// Two comments in a row on one block are one edit.
+    /// </summary>
+    /// <remarks>
+    /// The earlier one's <see cref="Before"/> is kept, so the merged entry still undoes to the comment
+    /// that was there before the user started typing. Merging the other way round would undo to the
+    /// intermediate state — three characters in — which is the sort of thing that looks like a bug in the
+    /// undo stack and is really a bug here.
+    /// </remarks>
+    public override DocumentCommand? Merge(DocumentCommand newer)
+    {
+        if (newer is not SetComment comment || comment.BlockId != BlockId)
+        {
+            return null;
+        }
+
+        if (!_beforeCaptured)
+        {
+            Before = comment.Before;
+            _beforeCaptured = true;
+        }
+
+        After = comment.After;
+
+        return this;
+    }
+}
+
 /// <summary>Adds a script to a target.</summary>
 public sealed class AddScript : DocumentCommand
 {

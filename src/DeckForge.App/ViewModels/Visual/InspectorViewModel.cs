@@ -29,6 +29,8 @@ namespace DeckForge.App.ViewModels.Visual;
 public sealed partial class InspectorViewModel : ObservableObject
 {
     private readonly VisualEditorViewModel _editor;
+    private string _comment = string.Empty;
+    private BlockNodeViewModel? _selected;
 
     public InspectorViewModel(VisualEditorViewModel editor) => _editor = editor;
 
@@ -49,6 +51,61 @@ public sealed partial class InspectorViewModel : ObservableObject
     /// <summary>The editors for the selected block's slots, in catalogue order.</summary>
     public ObservableCollection<SlotEditor> Slots { get; private set; } = [];
 
+    /// <summary>
+    /// The selected block's comment, edited as text.
+    /// </summary>
+    /// <remarks>
+    /// A property rather than a row object, because a comment is one field for the whole block rather
+    /// than one of several, and a row type with exactly one instance is a row type that will grow a second
+    /// instance for something else later. It writes through <see cref="SetComment"/>, so the comment is on
+    /// the undo stack like every other edit.
+    /// </remarks>
+    public string Comment
+    {
+        get => _comment;
+        set
+        {
+            if (!SetProperty(ref _comment, value))
+            {
+                return;
+            }
+
+            SetComment(value);
+            OnPropertyChanged(nameof(HasComment));
+        }
+    }
+
+    /// <summary>Whether the selected block carries a comment.</summary>
+    public bool HasComment => !string.IsNullOrWhiteSpace(_comment);
+
+    /// <summary>What the comment row says above the box.</summary>
+    public string CommentHelp =>
+        "A note for whoever reads this canvas next, including you. It is saved with the document and is "
+        + "carried into the generated code as a comment.";
+
+    /// <summary>
+    /// Writes the comment through the editor, unless it has not actually changed.
+    /// </summary>
+    /// <remarks>
+    /// The equality check is not a micro-optimisation. <c>Build</c> runs on every edit and every
+    /// selection, and a setter that always wrote would put an undo entry on the stack for looking at a
+    /// block — so Ctrl+Z after clicking around would undo the click.
+    /// </remarks>
+    private void SetComment(string? value)
+    {
+        if (_selected?.Block is not { } block)
+        {
+            return;
+        }
+
+        var after = string.IsNullOrWhiteSpace(value) ? null : value;
+        if (string.Equals(block.Comment, after, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _editor.Editor.Execute(new SetComment(block.Id, after));
+    }
     /// <summary>The editors for the selected block's inline dropdowns.</summary>
     public ObservableCollection<MenuEditor> Menus { get; private set; } = [];
 
@@ -170,6 +227,12 @@ public sealed partial class InspectorViewModel : ObservableObject
     /// </remarks>
     public void Build(BlockNodeViewModel? selected)
     {
+        _selected = selected;
+        _comment = selected?.Comment ?? string.Empty;
+        OnPropertyChanged(nameof(Comment));
+        OnPropertyChanged(nameof(HasComment));
+        OnPropertyChanged(nameof(CommentHelp));
+
         var previous = Slots.Select(slot => slot.Name).ToHashSet(StringComparer.Ordinal);
 
         Slots = new ObservableCollection<SlotEditor>(
@@ -307,6 +370,8 @@ public sealed partial class SlotEditor : ObservableObject
 {
     private readonly InspectorViewModel _panel;
     private readonly VisualEditorViewModel _editor;
+    private string _comment = string.Empty;
+    private BlockNodeViewModel? _selected;
     private string _draft = string.Empty;
 
     internal SlotEditor(InspectorViewModel panel, SlotViewModel slot)

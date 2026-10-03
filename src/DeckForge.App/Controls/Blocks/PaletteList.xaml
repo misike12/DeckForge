@@ -25,7 +25,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:TextBox Grid.Row="0"
+        <ui:TextBox x:Name="SearchBox" Grid.Row="0"
                     PlaceholderText="Search blocks or ids"
                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
                     Padding="8,6" Margin="8,8,8,4"

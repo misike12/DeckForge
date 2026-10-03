@@ -179,6 +179,22 @@
                 <blocks:StagePanel DataContext="{Binding Stage}" />
             </Border>
 
+            <!--
+                The command palette and the shortcut sheet, over everything, and hidden by default.
+
+                They are in the page's own grid rather than a window so they cover the page instead of the
+                desktop: a sheet about this page's keys has to sit on the page it is describing, and a modal
+                window would also be a second thing to close.
+            -->
+            <blocks:CommandPalette x:Name="PaletteOverlay" Grid.RowSpan="4" Grid.ColumnSpan="4"
+                                   Visibility="Collapsed"
+                                   CommandChosen="Palette_CommandChosen"
+                                   Dismissed="Palette_Dismissed" />
+
+            <blocks:ShortcutSheet x:Name="ShortcutOverlay" Grid.RowSpan="4" Grid.ColumnSpan="4"
+                                  Visibility="Collapsed"
+                                  Closed="Shortcut_Closed" />
+
             <Border x:Name="InspectorPanel" CornerRadius="12" Padding="0"
                     Background="{DynamicResource Liquid.AcrylicBrush}"
                     BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
@@ -406,6 +422,26 @@
                             -->
                             <ScrollViewer VerticalScrollBarVisibility="Auto" Grid.Row="0">
                                 <StackPanel>
+                                    <!--
+                                        The comment, above the slot editors.
+
+                                        Above them because a comment is about the block, while every row
+                                        below is about one hole in it - and a note that sits at the bottom
+                                        of a scrolling panel is a note nobody finds. Bound with a
+                                        lost-focus commit rather than per keystroke, because a comment is a
+                                        sentence and the editor coalesces the keystrokes anyway.
+                                    -->
+                                    <StackPanel Margin="0,0,0,12">
+                                        <TextBlock Text="Comment" FontSize="11.5" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Inspector.CommentHelp}" TextWrapping="Wrap"
+                                                   FontSize="9.5" Margin="0,1,0,0"
+                                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                        <TextBox Text="{Binding Inspector.Comment, UpdateSourceTrigger=LostFocus}"
+                                                 FontSize="11.5" Padding="6,4" Margin="0,4,0,0"
+                                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="52"
+                                                 ToolTip="Saved with the canvas, and carried into the generated code as a comment." />
+                                    </StackPanel>
+
                                     <ItemsControl ItemsSource="{Binding Inspector.Slots}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>

@@ -31,6 +31,21 @@ public partial class PaletteList : UserControl
         PreviewMouseLeftButtonDown += OnPreviewMouseDown;
     }
 
+    /// <summary>
+    /// Puts the keyboard in the search box, for Ctrl+F.
+    /// </summary>
+    /// <remarks>
+    /// A method rather than a bound command because the thing being focused is a control: the view model
+    /// holds the search *text*, and only the control knows where the keyboard can go. An empty box is also
+    /// what makes the shortcut useful - Ctrl+F on a filtered palette with no caret in it would leave the
+    /// user typing into nothing.
+    /// </remarks>
+    public void FocusSearch()
+    {
+        SearchBox.Text = string.Empty;
+        SearchBox.Focus();
+        SearchBox.CaretIndex = 0;
+    }
     /// <summary>Raised when a row is pressed, carrying the miniature and where the pointer was.</summary>
     /// <remarks>
     /// A plain CLR event rather than a routed one because the workspace is not an ancestor of the rows —
@@ -74,3 +89,4 @@ public partial class PaletteList : UserControl
         return null;
     }
 }
+

@@ -308,6 +308,31 @@ public partial class BlockWorkspace : UserControl
     /// which of them to draw, so "is anything in hand" is one question with one answer rather than two
     /// adorners that have to be kept in step.
     /// </remarks>
+    /// <summary>
+    /// Puts the keyboard back on the canvas.
+    /// </summary>
+    /// <remarks>
+    /// The selection if there is one, the canvas itself otherwise. A dismissed overlay has to leave focus
+    /// somewhere the arrow keys do something, or "Esc closed the palette and now the canvas is dead" is
+    /// the first thing a keyboard user concludes - and it is true, because the focused element is gone.
+    /// </remarks>
+    public void FocusCanvas()
+    {
+        if (_vm?.Selected is { } selected)
+        {
+            var tile = CanvasHitTest.Tiles(Surface)
+                .FirstOrDefault(candidate => candidate.DataContext is BlockNodeViewModel node
+                    && string.Equals(node.Id, selected.Id, StringComparison.Ordinal));
+
+            if (tile is not null)
+            {
+                tile.TakeFocus();
+                return;
+            }
+        }
+
+        Focus();
+    }
     public void Refresh()
     {
         // Re-focus the selected block, because every edit rebuilds the canvas and the rebuild replaces

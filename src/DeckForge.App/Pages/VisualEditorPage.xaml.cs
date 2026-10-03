@@ -5,6 +5,7 @@ using System.Windows.Input;
 using DeckForge.App.Services;
 using DeckForge.App.ViewModels.Visual;
 using DeckForge.Core.Visual;
+using DeckForge.Core.Visual.Commands;
 
 namespace DeckForge.App.Pages;
 
@@ -50,6 +51,10 @@ AddHandler(
         AddHandler(
             Controls.Blocks.BlockTile.BreakpointRequestedEvent,
             new RoutedEventHandler(Tile_BreakpointRequested));
+
+        // Two events rather than four handlers: a chosen command and a dismissal, whatever raised them.
+        PaletteOverlay.CommandChosen += Palette_CommandChosen;
+        PaletteOverlay.Dismissed += Palette_Dismissed;
 
         Palette.RowPressed += Palette_RowPressed;
         PreviewKeyDown += OnPreviewKeyDown;
@@ -507,7 +512,7 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
     private void Redo_Click(object sender, RoutedEventArgs e) => _vm.RedoCommand.Execute(null);
 
     /// <summary>
-    /// Every keyboard gesture in Part 9.5, on one handler.
+    /// Every keyboard gesture, on one handler.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -516,19 +521,28 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
     /// that is an ancestor of all of them needs exactly one handler.
     /// </para>
     /// <para>
-    /// <c>Preview</c> rather than bubbling, because the arrow keys have to be ours before the palette's
-    /// search box or a scroll viewer sees them — a Ctrl+Down that a <c>ScrollViewer</c> consumed as "page
-    /// down" would move the block and scroll the canvas at once.
-    /// </para>
-    /// <para>
-    /// Every decision is delegated to <see cref="KeyboardMoves"/> in Core, which is where they can be
-    /// tested. This handler's whole job is turning keystrokes into method calls and marking them handled.
+    /// The order is Part 18.3's rules in its order: a modal swallows everything, a focused text field wins
+    /// every single-key shortcut but not a modified one, and Escape cancels the innermost thing first. The
+    /// stage keys are looked up in Core's command table rather than written out again, which is what keeps
+    /// the shortcut sheet honest: F5 is "run" in the sheet because it *is* run here, both read from one row.
     /// </para>
     /// </remarks>
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+        // A modal takes every key, and stops there. Anything below this line belongs to the canvas.
+        if (IsOverlayOpen)
+        {
+            if (e.Key == Key.Escape)
+            {
+                CloseOverlays();
+                e.Handled = true;
+            }
+
+            return;
+        }
 
         if (e.Key == Key.Escape)
         {
@@ -542,13 +556,40 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
             return;
         }
 
+        // The palette and the sheet, before the field rule: both are modified keys, and documentation a
+        // user cannot reach while a text field has focus is documentation only mouse users read.
+        if (ctrl && e.Key == Key.K)
+        {
+            OpenPalette();
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Key.OemQuestion)
+        {
+            OpenShortcuts();
+            e.Handled = true;
+            return;
+        }
+
+        // A focused text field wins over every single-key shortcut. Ctrl chords and function keys still
+        // fire, which is why this sits below the Ctrl checks and above the plain-key switch.
+        var editing = Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase;
+
+        if (StageGesture(e.Key, shift) is { } stage)
+        {
+            RunStageCommand(stage);
+            e.Handled = true;
+            return;
+        }
+
         // Undo and redo come before the carrying check, and they work whether or not a block is in hand.
         //
         // The carrying check is the reason this is not simply further down the list: a user who picks a
         // block up, moves the cursor a few zones, and then realises they wanted to undo the edit they made
         // before picking it up has no way to ask, because the carry swallows every key. Being able to undo
-        // while holding something is what makes the carry mode safe to explore in — you can always get
-        // back to where you were.
+        // while holding something is what makes the carry mode safe to explore in - you can always get back
+        // to where you were.
         if (ctrl && e.Key == Key.Z)
         {
             if (shift)
@@ -571,6 +612,20 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
             return;
         }
 
+        if (ctrl && e.Key == Key.S)
+        {
+            _vm.SaveCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Key.D && !editing)
+        {
+            _vm.DuplicateSelected();
+            e.Handled = true;
+            return;
+        }
+
         if (_vm.IsCarrying)
         {
             if (HandleCarryingKey(e))
@@ -581,10 +636,8 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
             return;
         }
 
-        if (ctrl && e.Key == Key.D)
+        if (ctrl)
         {
-            _vm.DuplicateSelected();
-            e.Handled = true;
             return;
         }
 
@@ -612,15 +665,26 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
 
             case Key.Delete:
             case Key.Back:
-                _vm.DeleteSelected();
-                e.Handled = true;
+                // Refused while a field has focus, so Backspace in a text box deletes a character rather
+                // than the block whose slot is being edited. Before this, typing a single character into a
+                // slot and pressing Backspace deleted the block instead.
+                if (!editing)
+                {
+                    _vm.DeleteSelected();
+                    e.Handled = true;
+                }
+
                 break;
 
             case Key.Space:
-                // Pick up. The only key that needs something to be selected first, so it declines
-                // silently rather than doing nothing with an error.
-                _vm.PickUpSelected();
-                e.Handled = true;
+                if (!editing)
+                {
+                    // Pick up. The only key that needs something to be selected first, so it declines
+                    // silently rather than doing nothing with an error.
+                    _vm.PickUpSelected();
+                    e.Handled = true;
+                }
+
                 break;
 
             default:
@@ -628,6 +692,207 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
         }
     }
 
+    /// <summary>
+    /// The stage command a key names, or null.
+    /// </summary>
+    /// <remarks>
+    /// Looked up rather than switched on, which is what keeps the sheet from lying: written out twice, the
+    /// handler and the sheet would agree until somebody added a key to one of them.
+    /// </remarks>
+    private static string? StageGesture(Key key, bool shift)
+    {
+        var name = key switch
+        {
+            Key.F5 => "F5",
+            Key.F9 => "F9",
+            Key.F10 => "F10",
+            Key.F11 => "F11",
+            _ => null,
+        };
+
+        if (name is null)
+        {
+            return null;
+        }
+
+        return VisualCommands.ForGesture(shift ? "Shift+" + name : name, CommandScope.Stage)?.Id;
+    }
+
+    /// <summary>Runs one stage command.</summary>
+    private void RunStageCommand(string id)
+    {
+        switch (id)
+        {
+            case VisualCommands.StageRun:
+                _vm.Stage.RunCommand.Execute(null);
+                break;
+
+            case VisualCommands.StageStep:
+                _vm.Stage.StepCommand.Execute(null);
+                break;
+
+            case VisualCommands.StageStepInto:
+                _vm.Stage.StepIntoCommand.Execute(null);
+                break;
+
+            case VisualCommands.StageStop:
+                _vm.Stage.StopCommand.Execute(null);
+                break;
+
+            case VisualCommands.StageReset:
+                _vm.Stage.ResetCommand.Execute(null);
+                break;
+
+            case VisualCommands.ToggleBreakpoint:
+                // Only with a block selected, and silently otherwise: F9 is pressed while looking at the
+                // canvas, and focus is not always where the eye is.
+                if (_vm.Selected is { } selected)
+                {
+                    _vm.Stage.ToggleBreakpoint(selected.Block.Id);
+                }
+
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    /// <summary>Whether either overlay is up.</summary>
+    private bool IsOverlayOpen =>
+        PaletteOverlay.Visibility == Visibility.Visible || ShortcutOverlay.Visibility == Visibility.Visible;
+
+    /// <summary>Opens the command palette.</summary>
+    private void OpenPalette()
+    {
+        CloseOverlays();
+        PaletteOverlay.Visibility = Visibility.Visible;
+        PaletteOverlay.Open();
+    }
+
+    /// <summary>Opens the shortcut sheet.</summary>
+    private void OpenShortcuts()
+    {
+        CloseOverlays();
+        ShortcutOverlay.Visibility = Visibility.Visible;
+        ShortcutOverlay.Focus();
+    }
+
+    /// <summary>Hides both overlays and gives the keyboard back to the canvas.</summary>
+    private void CloseOverlays()
+    {
+        PaletteOverlay.Visibility = Visibility.Collapsed;
+        ShortcutOverlay.Visibility = Visibility.Collapsed;
+
+        // The keyboard back on the canvas, or a dismissed palette leaves focus on a collapsed element and
+        // the arrow keys go nowhere - which reads as "the canvas stopped working".
+        Workspace.Refresh();
+        Workspace.FocusCanvas();
+    }
+
+    /// <summary>Runs the command the palette returned.</summary>
+    private void Palette_CommandChosen(object sender, RoutedEventArgs e)
+    {
+        CloseOverlays();
+
+        if (e is Controls.Blocks.CommandChosenEventArgs chosen)
+        {
+            Dispatch(chosen.Command.Id);
+        }
+    }
+
+    /// <summary>Closes the palette without running anything.</summary>
+    private void Palette_Dismissed(object sender, RoutedEventArgs e) => CloseOverlays();
+
+    /// <summary>Closes the shortcut sheet.</summary>
+    private void Shortcut_Closed(object sender, RoutedEventArgs e) => CloseOverlays();
+
+    /// <summary>
+    /// Runs one command by id, whichever way it was chosen.
+    /// </summary>
+    /// <remarks>
+    /// One dispatcher for the keys and the palette, so a command reachable only from the palette is a
+    /// different bug from one reachable only from the keyboard - and there is only one of either.
+    /// </remarks>
+    private void Dispatch(string id)
+    {
+        switch (id)
+        {
+            case VisualCommands.OpenPalette:
+                OpenPalette();
+                break;
+
+            case VisualCommands.AddBlock:
+                // The same overlay, opened with a query already in it: "add block" and the palette are one
+                // thing, and a second dialog for it would be a second thing to learn.
+                OpenPalette();
+                break;
+
+            case VisualCommands.ShowShortcuts:
+                OpenShortcuts();
+                break;
+
+            case VisualCommands.Undo:
+                _vm.UndoCommand.Execute(null);
+                break;
+
+            case VisualCommands.Redo:
+                _vm.RedoCommand.Execute(null);
+                break;
+
+            case VisualCommands.Duplicate:
+                _vm.DuplicateSelected();
+                break;
+
+            case VisualCommands.Delete:
+                _vm.DeleteSelected();
+                break;
+
+            case VisualCommands.PickUpOrDrop:
+                if (_vm.IsCarrying)
+                {
+                    _vm.DropCarried();
+                }
+                else
+                {
+                    _vm.PickUpSelected();
+                }
+
+                break;
+
+            case VisualCommands.Cancel:
+                _vm.CancelKeyboardDrag();
+                break;
+
+            case VisualCommands.Save:
+                _vm.SaveCommand.Execute(null);
+                break;
+
+            case VisualCommands.OpenDocs:
+                ShellMessenger.NavigateTo("docs::features/actions");
+                break;
+
+            case VisualCommands.FocusPaletteSearch:
+                CloseOverlays();
+                Palette.FocusSearch();
+                break;
+
+            case VisualCommands.StageRun:
+            case VisualCommands.StageStep:
+            case VisualCommands.StageStepInto:
+            case VisualCommands.StageStop:
+            case VisualCommands.StageReset:
+            case VisualCommands.ToggleBreakpoint:
+                RunStageCommand(id);
+                break;
+
+            default:
+                // A command in the table that nothing dispatches is a shortcut-sheet row that lies, so it
+                // says so rather than pressing a key that does nothing.
+                _vm.Report($"'{id}' is in the shortcut sheet but nothing runs it yet.");
+                break;
+        }
+    }
     /// <summary>The keys that mean something while a block is in hand.</summary>
     /// <returns>Whether the key was a gesture and should be marked handled.</returns>
     private bool HandleCarryingKey(KeyEventArgs e)
