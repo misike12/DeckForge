@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DeckForge.Core.Visual;
 using NUnit.Framework;
 
@@ -502,17 +503,40 @@ public sealed class VisualValidatorTests
     }
 
     [Test]
+    public void A_block_that_needs_a_capability_the_plugin_lacks_is_a_warning()
+    {
+        // The capability id was on every row and read by nothing; two tests guarded it against a warning
+        // that was never emitted. Now it is emitted, and this is the case that was always intended: a
+        // canvas carrying a deck block saved against a plugin with no deck capability would produce C# that
+        // cannot compile, and the user met it as a build error instead of as a sentence.
+        var script = Script(
+            Hat(),
+            Stack("deck.current-folder"));
+
+        var withDeck = Validate(script, VisualValidationContext.Missing("deck"));
+        var withoutDeck = Validate(script, VisualValidationContext.Missing("somethingElse"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(withDeck.Any(d => d.Code == "vis-capability-missing" && d.BlockId is not null), Is.True,
+                "a block that drives a gated surface says so while the canvas is still open");
+            Assert.That(withoutDeck.Any(d => d.Code == "vis-capability-missing"), Is.False,
+                "a capability the plugin does have is nobody's business");
+            Assert.That(Validate(script).Any(d => d.Code == "vis-capability-missing"), Is.False,
+                "and a plugin with an integration is not told about every block that touches the host");
+        });
+    }
+
+    [Test]
     public void Every_code_this_validator_uses_is_one_appendix_f_declares()
     {
         // The catalogue is the promise. A new finding invented on the spot is either added to the
         // catalogue or renamed to one it already makes.
-        var declared = new[]
-        {
-            "vis-shape-mismatch", "vis-type-mismatch", "vis-unbound-slot", "vis-menu-key-unknown",
-            "vis-name-duplicate", "vis-name-unknown", "vis-local-collision", "vis-param-unknown", "vis-host-var-unknown",
-            "vis-loop-control-outside-loop", "vis-return-outside-procedure", "vis-forever-no-wait",
-            "vis-cap-unreachable", "vis-procedure-missing", "vis-unverified-block",
-        };
+        // Read out of `visual.md` Appendix F rather than restated here. It was a hand-copied list, and it had
+        // drifted in both directions for months: fourteen codes, of which six the sample document never
+        // produced, and fourteen more the product reports that the list did not contain. A catalogue that is
+        // a copy is a copy that goes stale.
+        var declared = AppendixF.Codes();
 
         var busy = Script(
             Hat(),
@@ -537,6 +561,57 @@ public sealed class VisualValidatorTests
 
         Assert.That(codes, Is.SubsetOf(declared),
             "a code outside the catalogue: add it to Appendix F or use the code the catalogue declares");
+    }
+
+    [Test]
+    public void Every_code_the_validator_and_the_editor_emit_is_in_the_appendix_f_table()
+    {
+        // The other direction, and the one that had rotted. Appendix F's table listed ten codes nothing
+        // emits while fourteen the product reports were absent from it, so a maintainer adding a diagnostic
+        // could not find their own code and could not tell which rows were real. Read from the document's
+        // source rather than from its prose, because "the table says so" and "the table of codes says so" are
+        // different claims.
+        var declared = AppendixF.Codes();
+
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var path in SourceFiles("DeckForge.Core"))
+        {
+            foreach (Match match in Regex.Matches(File.ReadAllText(path), @"""(vis-[a-z0-9-]+)"""))
+            {
+                emitted.Add(match.Groups[1].Value);
+            }
+        }
+
+        Assert.That(emitted, Is.Not.Empty, "no vis- literal was found, so the scan found the wrong tree");
+        Assert.That(emitted.Where(code => !declared.Contains(code)), Is.Empty,
+            "a code the product reports that Appendix F does not declare");
+    }
+
+    private static IEnumerable<string> SourceFiles(string project)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "src", project);
+            if (Directory.Exists(candidate))
+            {
+                foreach (var file in Directory.EnumerateFiles(candidate, "*.cs", SearchOption.AllDirectories))
+                {
+                    if (!file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                    {
+                        yield return file;
+                    }
+                }
+
+                yield break;
+            }
+
+            directory = directory.Parent;
+        }
+
+        Assert.Fail($"the {project} source tree was not found above the test output.");
     }
 
     // ---- helpers ------------------------------------------------------------------------------------

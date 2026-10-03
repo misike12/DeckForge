@@ -64,7 +64,14 @@ public partial class ScriptStrip : UserControl
 
         editor.RenameScript(script, box.Text);
         e.Handled = true;
-        Keyboard.Focus(box);
+
+        // Deliberately not `Keyboard.Focus(box)`. The rename rebuilds the canvas and the strip, which
+        // replaces this row's template - so `box` is no longer in the visual tree, focusing it returns
+        // null, and the arrow keys and any further typing go nowhere until the user clicks something else.
+        // The row comes back with a new box; the keyboard goes back to the strip's own list, which is where
+        // the next keystroke belongs after a rename - a box that no longer exists cannot hold focus, and
+        // sending it nowhere meant the arrow keys stopped working until the user clicked something.
+        Focus();
     }
 
     /// <summary>

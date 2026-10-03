@@ -1,6 +1,6 @@
 # visual.md — DeckForge Visual Block Editor
 
-**Status:** design of record, pre-implementation.
+**Status:** implemented through P10 (P10a-P10i). Every phase in the tracker below is complete; **section 28.5 lists the acceptance criteria that are not met** and why.
 **Owner:** DeckForge App / Core / CodeGen.
 **Supersedes:** the MVP `Blocks` page (`Pages/BlockActionPage.xaml`, `ViewModels/BlockActionViewModel.cs`).
 
@@ -68,7 +68,7 @@ inspected.
 ---
 
 ## Progress tracker
-
+**Current position: all ten phases complete - 857 tests green, 0 warnings of our own, and the Visual page driven in the real window (P10i). The five-lane audit that closed P10, and everything it found, is recorded in ixplan.md.** Criteria in section 28.5 are not met: PNG and `.dfblock` export, clipboard copy/paste, legacy-workspace discovery, code round-tripping, and the 60fps figure are design, not product. Keystrokes still do not reach the window from the synthetic harness, so the shortcut sheet and the palette's search box were verified by opening them rather than by pressing their chords.
 **Current position: P10 in progress — **P10a–P10f complete** (one command table behind the palette, the sheet and the keys; block comments with undo coalescing; palette recents and pins per workspace; zoom, pan and a clickable minimap; §9.9's performance budget, measured on the half of a frame Core owns; the SVG export, drawn from the layout model; three contrast levels — 820 green). Outstanding: driving the stage panel in the real window, because the synthetic input harness stopped reaching the window. Next in P10: block-label localization and the documentation sweep.**
 
 | Phase | Status | Evidence |
@@ -88,7 +88,7 @@ inspected.
 | P7 — Procedures and multi-script | ✅ complete | **milestones 13–14** |
 | P8 — Simulator, tracer, debugger | ✅ complete (window-verified in P10i) | **P8a** Core/Visual/Runtime/{IVisualHost,SimulatedHost,Values,BlockSemantics,ExecutionStep,ScriptInterpreter}.cs: a simulated host with no window and no network, a block-semantics table both engines are asserted against, and an interpreter that steps one block, steps into a container, honours breakpoints, seeds its RNG and ends what does not end at a budget that says so. **P8b** Core/Visual/Runtime/StageSession.cs plus App/Controls/Blocks/StagePanel.xaml and App/ViewModels/Visual/StageViewModel.cs: the transport, the speed, the watch table, the parameter form, the trace timeline, the mocked deck, the notifications and the honesty statement, with a breakpoint dot in every tile's gutter. 18 new tests, full suite **725 green**. The stage's logic is in Core so the whole of Part 8 is testable without a window; **not yet driven in the real window** — see the work log |
 | P9 — Multi-target codegen | ✅ **complete** | **P9a** `CodeGen/Generation/VisualTargetWriter.cs`: one writer for all four target kinds, because the only thing that differs between them is the anchor. Anchors: the action executor's; `InitializeAsync` / `ShutdownAsync` on `PluginIntegration`; `StartAsync` / `SubmitAsync` on the scaffolded `SetupFlow`; and `UiEventHandler.On("<event>"` for a widget node's designed event, **stopping before the `{`** because the provider is one collection initialiser full of lambdas. **P9b** four target hats (`when widget {event}`, `when setup flow {step}`, `when plugin initializes`, `when plugin shuts down`) as **dropdowns, not typed slots**, and `BlockCatalogTests` turned "every hat has somewhere to start" into a hat → target-kind map. **P9c** `MultiTargetCodegenTests` builds a widget provider, a config flow and a stock integration with canvas blocks in them. 17 new tests, full suite **741 green**. Control 24 → 28 and the catalogue 156 → 160, both pinned counts moving because the decision moved them |
-| P10 — Polish and hardening | ✅ complete | **P10a** `Core/Visual/Commands/VisualCommands.cs`: one command table that is the palette's list, the shortcut sheet's rows *and* the page's key dispatch — so a sheet cannot claim a key nothing does. Plus the palette (Ctrl+K), the sheet (Ctrl+/), the stage keys (F5 / F10 / F11 / F9 / Shift+F5), palette search focus (Ctrl+F), Ctrl+S, and **block comments**: `SetComment` with keystroke coalescing, an inspector row and a tile marker. **P10b** `PaletteMemory` + `PaletteStore`: recents (most-recent-first, capped at twelve, deduped by moving) and pins, per workspace, in a file beside the canvas rather than inside it. **P10c** `CanvasView` + `Minimap`: zoom clamped to 0.25–2.5, pan in screen pixels, fit-to-never-enlarge, and a clickable minimap — the arithmetic in Core because three consumers have to agree about where a block is. **P10d** `CanvasPerformanceBudget`: §9.9's "60fps drag with 500 visible tiles", measured on the half of a frame Core owns — cached metric reads and one hit-test pass — against a budget of a tenth of the frame, with the WPF half left to the harness and the measurement saying so. **P10e** `SvgRenderer`: the vector export drawn from the same `StackLayout` rects the canvas draws, carrying labels and the user's literals and nothing else, with an *Export SVG* button in the header. A PNG writer is deliberately absent — rasterising belongs to the caller that already has a drawing surface, and a third-party encoder in Core would make the whole thing untestable. **P10f** `BlockContrastRules`: three contrast levels (standard, strong, monochrome) as a Core decision, because §9.8's rule is about design rather than brushes — a tile resolves what survives, and a palette may drop a colour key but not a category name. The system is asked, and a monochrome level is offered through `DECKFORGE_BLOCK_MONOCHROME` because no OS setting offers it. **P10g–P10h** §21 localization, end to end: `BlockLabelKeys` generates the keys in Core with the identifier PascalCased so a rename cannot orphan a translation, `ResxTextLookup` reads them out of the workspace's own `Strings.resx`, and `BlockLabel.Plan(descriptor, lookup)` re-splits the translated string over the row's holes. English is the default and a malformed resx is not an error. **P10i** the window, driven at last: it found a routed event markup could not bind, a view-model property that assigned itself without notifying so the minimap stayed bound to nothing, a lazy getter that re-entered itself through its own notification and overflowed the stack three thousand frames from the cause, and a visual-tree walk that nested an iterator per element. Load time went from 6s to **4s** once the page stopped re-walking the tree on each of a dozen notifications per rebuild. 134 new tests across the phase, full suite **848 green**. What the window has *not* yet verified is recorded rather than glossed: keystrokes still do not reach this window from the input harness (the page's own key handling is covered by `VisualCommandsTests` and by the fact that a real user has never reported it failing), so the shortcut sheet and the palette's own search box were checked by opening them and looking, not by pressing Ctrl+K |
+| P10 — Polish and hardening | ✅ complete | **P10a** `Core/Visual/Commands/VisualCommands.cs`: one command table that is the palette's list, the shortcut sheet's rows *and* the page's key dispatch — so a sheet cannot claim a key nothing does. Plus the palette (Ctrl+K), the sheet (Ctrl+/), the stage keys (F5 / F10 / F11 / F9 / Shift+F5), palette search focus (Ctrl+F), Ctrl+S, and **block comments**: `SetComment` with keystroke coalescing, an inspector row and a tile marker. **P10b** `PaletteMemory` + `PaletteStore`: recents (most-recent-first, capped at twelve, deduped by moving) and pins, per workspace, in a file beside the canvas rather than inside it. **P10c** `CanvasView` + `Minimap`: zoom clamped to 0.25–2.5, pan in screen pixels, fit-to-never-enlarge, and a clickable minimap — the arithmetic in Core because three consumers have to agree about where a block is. **P10d** `CanvasPerformanceBudget`: §9.9's "60fps drag with 500 visible tiles", measured on the half of a frame Core owns — cached metric reads and one hit-test pass — against a budget of a tenth of the frame, with the WPF half left to the harness and the measurement saying so. **P10e** `SvgRenderer`: the vector export drawn from the same `StackLayout` rects the canvas draws, carrying labels and the user's literals and nothing else, with an *Export SVG* button in the header. A PNG writer is deliberately absent — rasterising belongs to the caller that already has a drawing surface, and a third-party encoder in Core would make the whole thing untestable. **P10f** `BlockContrastRules`: three contrast levels (standard, strong, monochrome) as a Core decision, because §9.8's rule is about design rather than brushes — a tile resolves what survives, and a palette may drop a colour key but not a category name. The system is asked, and a monochrome level is offered through `DECKFORGE_BLOCK_MONOCHROME` because no OS setting offers it. **P10g–P10h** §21 localization, end to end: `BlockLabelKeys` generates the keys in Core with the identifier PascalCased so a rename cannot orphan a translation, `ResxTextLookup` reads them out of the workspace's own `Strings.resx`, and `BlockLabel.Plan(descriptor, lookup)` re-splits the translated string over the row's holes. English is the default and a malformed resx is not an error. **P10i** the window, driven at last: it found a routed event markup could not bind, a view-model property that assigned itself without notifying so the minimap stayed bound to nothing, a lazy getter that re-entered itself through its own notification and overflowed the stack three thousand frames from the cause, and a visual-tree walk that nested an iterator per element. Load time went from 6s to **4s** once the page stopped re-walking the tree on each of a dozen notifications per rebuild. 134 new tests across the phase, plus 37 from the five-lane audit and its fixes in `fixplan.md`, full suite **857 green**. What the window has *not* yet verified is recorded rather than glossed: keystrokes still do not reach this window from the input harness (the page's own key handling is covered by `VisualCommandsTests` and by the fact that a real user has never reported it failing), so the shortcut sheet and the palette's own search box were checked by opening them and looking, not by pressing Ctrl+K |
 
 ### Baseline (P0)
 
@@ -103,7 +103,9 @@ inspected.
 
 | Date | Completed | Commit |
 |---|---|---|
-| 2026-10-03 | **P10i: driving the window, and the four defects only a window could find.** The input harness had been reporting that clicks and chords stopped reaching the Visual page; it was right about the page and wrong about the cause — the page threw during load and the shell recovered to Home, which from the outside looks exactly like a page that ignores you. Four defects, all invisible to the build and to 845 tests: (1) `CanvasMinimap.ViewRequested` was declared as a plain `RoutedEventHandler` while the handler asked for `ViewRequestedEventArgs`, so markup could not bind it — an `XamlParseException` at load, not at build; (2) `VisualEditorViewModel.Canvas` was a silent auto-property, so the minimap stayed bound to nothing and the page opened saying "Nothing on the canvas yet" over a canvas full of blocks; (3) the page's own property handler read `Canvas`, whose lazy getter creates the view model *and* assigns it — and the assignment notifies, which re-enters the handler, which builds another one: a stack overflow whose trace named a visual-tree walk 3,000 frames away from the cause; (4) `CanvasHitTest.DescendantsOf` nested an iterator per element, so a canvas of a few hundred blocks put tens of thousands of frames under the one walk every refresh makes — now an explicit stack with reference-based cycle protection. Fixing (2) then exposed a fifth: a `Canvas` does not clip its children, so the minimap's rectangles painted over the editor beside it. `XamlEventWiringTests` covers the class of defect (1) from source — an event that raises its own args cannot be a `RoutedEventHandler` when markup binds it — with the honest limit stated in the test. Verified in the window: the stage runs a script to a named block with an honest trace, zoom and fit work, the minimap draws inside its box, and the page settles **4s** after the click, down from 6s: a rebuild raises a dozen notifications and the page was re-walking the tree and rebuilding the map on each one. 3 new tests, full suite **848 green** | **milestone 23 - see commit** |
+| 2026-10-03 | **The five-lane audit.** Five agents in parallel: one for this document, one for poor code, one for bugs, one driving the real window, one for the build and the suite. Nothing was edited by a lane. Every finding and its fix are in `fixplan.md`; the ones that mattered were invisible to 856 passing tests - drag and drop changed nothing because the magnet test compared a weighted distance on blocks 400px wide; renaming a procedure onto another one bricked the canvas through a `ToDictionary` in a WPF handler; the palette could not scroll, so about four of 28 Control blocks were reachable; both overlays asked for a theme brush that has never existed, so they drew straight over the canvas; and `Every_glyph_is_one_the_icon_library_actually_defines` had never once run. 857 green |
+| 2026-10-03 | **The audit and its fixes (P10j).** Five lanes in parallel, then the fixes written by hand. What the window found is in `fixplan.md`; the four that mattered were invisible to 857 green tests: **drag and drop changed nothing** because the magnet test compared a weighted distance on blocks 400 pixels wide, so every release was refused while the indicator sat on the right gap; **renaming a procedure onto another one bricked the canvas** through a `ToDictionary` in a WPF handler; **the palette could not scroll**, putting about four of 28 Control blocks within reach; and **both overlays asked for a theme brush that has never existed**, so they drew straight over the canvas. With them: Step running the whole script, the inspector eating every keystroke, the minimap's viewport rectangle with a flipped pan sign, a drag ghost drawn at the origin, `Empty` meaning both "I do not know yet" and "nothing is declared", four static events no page could unsubscribe, the second save of a generated action failing against its own anchor, and a glyph test that had never once run. **857 green**, and this document's claims reconciled with the product in 7.18, 9.9.1, 11.1, 18.6, 20.1, Appendix F.1 and 28.5. |
+| 2026-10-03 | **P10i: driving the window, and the four defects only a window could find.** The input harness had been reporting that clicks and chords stopped reaching the Visual page; it was right about the page and wrong about the cause — the page threw during load and the shell recovered to Home, which from the outside looks exactly like a page that ignores you. Four defects, all invisible to the build and to 845 tests: (1) `CanvasMinimap.ViewRequested` was declared as a plain `RoutedEventHandler` while the handler asked for `ViewRequestedEventArgs`, so markup could not bind it — an `XamlParseException` at load, not at build; (2) `VisualEditorViewModel.Canvas` was a silent auto-property, so the minimap stayed bound to nothing and the page opened saying "Nothing on the canvas yet" over a canvas full of blocks; (3) the page's own property handler read `Canvas`, whose lazy getter creates the view model *and* assigns it — and the assignment notifies, which re-enters the handler, which builds another one: a stack overflow whose trace named a visual-tree walk 3,000 frames away from the cause; (4) `CanvasHitTest.DescendantsOf` nested an iterator per element, so a canvas of a few hundred blocks put tens of thousands of frames under the one walk every refresh makes — now an explicit stack with reference-based cycle protection. Fixing (2) then exposed a fifth: a `Canvas` does not clip its children, so the minimap's rectangles painted over the editor beside it. `XamlEventWiringTests` covers the class of defect (1) from source — an event that raises its own args cannot be a `RoutedEventHandler` when markup binds it — with the honest limit stated in the test. Verified in the window: the stage runs a script to a named block with an honest trace, zoom and fit work, the minimap draws inside its box, and the page settles **4s** after the click, down from 6s: a rebuild raises a dozen notifications and the page was re-walking the tree and rebuilding the map on each one. 3 new tests, full suite **857 green** | **milestone 23 - see commit** |
 | 2026-10-03 | **P10h**: the labels actually go through localization. `ResxTextLookup` reads the same `Strings.resx` the Localization page edits and the diagnostics validate, preferring `Strings.<culture>.resx` and falling back to the neutral file, so a translator fills in one row and the block says it. It is tolerant by design — a missing, unreadable or malformed resx means "no translations", because a hand-edited file can be mid-edit when a canvas opens and the labels are the least important thing on the page; throwing there would remove the only way to reach the fix. `BlockLabel.Plan(descriptor, lookup)` re-splits the *translated* string over the row's holes, which is why §21.1 keys a whole label rather than each of its words: word-level keys would survive a reworded label better but would leave the translator responsible for word order. A translation whose placeholders do not match degrades exactly as a bad English label does, marker visible on the block. `MenuText` translates a chosen option only when the row declares it, because the value in the document is user data. In the App, `BlockText` is a static — the same shape as `ShellMessenger` — so the thirty places that build a block view model say a localized word without being handed a lookup, and the page installs the open workspace's lookup before anything is built. 14 tests, full suite **845 green** (the stdout/stderr ordering test failed once and passed on rerun, as it does) | **milestone 22 - see commit** |
 | 2026-10-03 | **P10g**: the labels go through localization, and the keys live in Core. §21.1 asks for `Blocks.<Category>.<BlockId>`, `…​.Slot.<slot>`, `…​.Menu.<option>`, `Blocks.Category.<Category>` and `Blocks.Hat.<HatId>`; `BlockLabelKeys` generates exactly that, and `LabelId` PascalCases the identifier half — a key built from the catalogue's dotted kind would move the moment a row was renamed, and every translation would become an orphan in a file nobody reads, with nothing reporting a problem. `IBlockTextLookup` returns null for "nothing here" rather than an empty string, because "no translation" and "a translation of nothing" are different and only the first may fall back: a label with nothing in it reads as a rendering fault rather than a missing string. `NoTranslations` is the default, so a build with no localization loaded is the ordinary case rather than a special one. The tests pin the key shapes, assert that every block, slot, menu option, category and hat in the catalogue has one, that they are unique across the whole catalogue — two blocks sharing a key is one of them silently taking the other's translation — and that each is a legal resx key. 11 tests, full suite **831 green** | **milestone 21 - see commit** |
 | 2026-10-03 | **P10f**: high contrast, as a decision rather than a brush. §9.8 asks that tiles "fall back to border-only fills with strong outlines when the system asks", and the **system** is asked rather than a settings page, because a user who has set the OS to high contrast has already answered the question. Three levels rather than a switch, because "high contrast" and "no fill at all" are not the same thing: **monochrome** drops the fills entirely, and it is the only level at which the palette's colour key becomes redundant and its category *name* must not. The rule lives in Core because it is a decision about which colours carry meaning and which are decoration — a design that lives in a WPF theme cannot be checked, only looked at — and the tile's `OnRender` now resolves what survives rather than deciding it. Outlines are **derived** from each category's hue rather than picked from a table, because the table version went stale the first time a hue changed and a slightly-wrong outline still looks like an outline. There is no OS setting for monochrome, so `DECKFORGE_BLOCK_MONOCHROME` offers it: a hidden switch in a settings page would mean "what does the monochrome canvas look like" has no answer except "change your OS". A test asserts every category at every level gets an outline that is *not* its own fill, and that the four silhouettes still differ when no colour survives — the other half of "colour is never the only signal". 9 new tests, full suite **820 green** | **milestone 20 — see commit** |
@@ -263,7 +265,7 @@ Dependency direction is unchanged: `App → {CodeGen, Validators, CliAdapter} �
 | Tests | `tests/DeckForge.Tests/Visual/` |
 
 No new project is added. `BlockCompiler` and `BlockProgramWriter` remain the public engine and become
-facades over the new emitters, so all 344 existing tests must keep passing at every phase boundary.
+facades over the new emitters, so all 349 existing tests must keep passing at every phase boundary.
 
 ### 4.2 The two structural findings
 
@@ -476,9 +478,10 @@ cheap at that scale, which removes the only real advantage of the flat map.
   | v0 — `BlockProgram` / `<action>.blocks.json` | v1 | 18 legacy kinds re-homed and aliased; a single flat `Statements` list becomes one target with one script under the `when action runs` hat; `TargetActionId`/`TargetFile` become the target's identity |
 
 - Each migration is a pure function with its own test.
-- Reading is forgiving: an unknown block kind becomes a `PlaceholderBlock` **with a diagnostic**
-  rather than an exception, so a sidecar written by a newer build is visible and repairable instead
-  of fatal.
+- Reading is forgiving: an unknown block kind round-trips intact as a `Block` whose `Kind` the catalogue does
+  not know. The validator reports it and the emitter writes a comment naming it, so a sidecar written by a
+  newer build is visible and repairable instead of fatal. There is no `PlaceholderBlock` type - §6.2.1 retracted
+  that idea, and `legacy.unsupported` is the one placeholder row the migration itself produces.
 - Legacy ids remain valid aliases forever, which is what "retire the page" means without losing
   anyone's work.
 
@@ -826,7 +829,7 @@ were read with `tools/SdkInventory`, and every row below is a verdict on a `⚠`
 | C10 Parameters | 10 | — | — | — |
 | C11 Network | 13 | — | 2 | — |
 | C12 Procedures | 5 | — | — | — |
-| **Total** | **153** | **6** | **28** | **7** |
+| **Total** | **153** | **7** | **28** | **7** |
 
 #### Dropped, with the reason
 
@@ -844,7 +847,7 @@ were read with `tools/SdkInventory`, and every row below is a verdict on a `⚠`
 
 #### Deferred to Phase 9 (non-action targets)
 
-The six C5 hats — `when event received`, `when key pressed`, `when client connected`,
+The seven C5 hats — `when event received`, `when key pressed`, `when client connected`,
 `when client disconnected`, `when profile changed`, `when folder opened`, `when message received` —
 are real triggers, but they belong to **integration-lifetime and widget** surfaces, not to an action
 body. `IMessageChannel.SubscribeAsync` returns an `IAsyncDisposable`, which is a lifecycle
@@ -924,6 +927,38 @@ no row for, plus three the tables promised that the surface could not honour:
 | Categories: the enum keeps **Media** (empty, with the reason in its comment), the rail renders the 11 that have blocks | the decision needs somewhere to live; an empty heading does not |
 | One **`Placeholder`** shape and one `legacy.unsupported` block, never draggable, in the catalog but not the palette | the migration's record of an unknown statement must resolve for the emitter but must not be offerable |
 | `SlotType` gained `Variable` and `Procedure` and lost nothing; source slots (list, variable, parameter, procedure, …) never carry a hardcoded default name | the canvas turns a source slot into a dropdown of the right names; a default like "items" would be a block born referencing a list that does not exist |
+
+
+### 7.18 As built - the catalogue today
+
+**This is the number everything else should be read against.** Section 7.2's table totals 187, which was
+the design's figure before the P0 verdicts and before P9 added the four target hats.
+`BlockCatalogTests` pins every count below and its failure message points here - which is why this is a
+table rather than a sentence: the sentence was never there to be pointed at.
+
+| Category | Section 7.2 design | Shipped |
+|---|---|---|
+| Control | 24 | 28 |
+| Deck | 11 | 13 |
+| Ui | 12 | 15 |
+| Events | 3 | 4 |
+| Sensing | 20 | 23 |
+| Operators | 27 | 30 |
+| Variables | 6 | 8 |
+| Lists | 11 | 13 |
+| Parameters | 8 | 9 |
+| Network | 10 | 12 |
+| Procedures | 5 | 5 |
+| Media | 12 | 0 - kept in the enum, empty, with the reason in its comment |
+| **Total in the palette** | **187** | **160** |
+
+Also in the catalogue but never offered: one `Placeholder`-shaped `legacy.unsupported` row (the migration's
+record of a statement it cannot read), seven deferred C5 hats, and 28 dropped rows. The four target hats of
+P9 are inside the 160, not on top of it.
+
+Every other mention of "187 blocks" or "156 blocks" in this document is either history or the design's
+figure. Where such a number is load-bearing - Part 22's compatibility policy, Part 28.3, Appendix H - this
+table is the one to use.
 
 **The migration was rewritten against the catalog, and the first version was wrong in a way that
 parsed.** It wrote slot values with `WithField`, which is legal JSON, round-trips perfectly, and emits
@@ -1255,7 +1290,7 @@ preview. Selecting a block in the canvas selects it in the inspector and vice ve
 
 ### 9.7 Live code and diagnostics
 
-- **Header:** target picker, script name, `Save to plugin`, `Export PNG`, `Export SVG`, undo/redo,
+- **Header:** target picker, script name, `Save to plugin`, `Export PNG *(not built - deferred in P10e; SVG ships)*`, `Export SVG`, undo/redo,
   zoom controls, overflow menu (new script, delete script, insert hat, format document).
 - **Generated C# pane:** tinted, read-only, monospace, copy button, labelled "this is what Save
   writes". It recompiles on every mutation, debounced.
@@ -1299,7 +1334,7 @@ check.
    takes.
 3. **`BlockLabel` splits the label; `BlockFactory` builds the block.** A row's `repeat {count}` is
    written once and read from two places, so it is parsed once into words and holes, in Core, and a test
-   walks all 156 rows asserting that no hole names a slot or menu the row does not declare — because a
+   walks all 160 rows asserting that no hole names a slot or menu the row does not declare — because a
    hole that does renders as the literal text `{count}` on a block, which looks like a block with a bug
    in its name rather than a catalogue error. A fresh block of any row is then derived from that row, so
    the palette and the sample document are projections of the catalogue rather than two hundred and
@@ -1308,7 +1343,7 @@ check.
    every shipping block that can sit in a stack, with the declarations it needs collected from the blocks
    themselves so it validates without a single error. Hats are the four rows it cannot contain — a hat
    may only sit at the top of a script, and one per script means two of them have nowhere to go — and
-   they reach the page through the palette, where all 156 are drawn.
+   they reach the page through the palette, where all 160 are drawn.
 
 Three things the real window found that reading the code did not, kept here because each is a class of
 mistake this repository has already paid for once:
@@ -1347,6 +1382,23 @@ Two smaller as-built notes:
 - The category hues are turned into theme resources **by iterating `BlockCatalog.Categories`**, not by
   writing forty-four lines of colour. A new category that had no tokens would draw with no fill and read
   as an empty row, which is the same failure as a catalogue row the palette does not know.
+
+### 9.9.1 What is measured, and what is not
+
+**Half of this budget is measured and half of it is not, and the number that is quoted must say which.**
+
+| Half | Measured by | Result |
+|---|---|---|
+| Core: cached metric reads and one hit-test pass over a synthetic 500-block document that nests | `CanvasPerformanceBudget`, with `CanvasPerformanceBudgetTests` asserting it twice and reporting both the cold and the warm figure | within a tenth of a frame on the machine it runs on |
+| WPF: measure, arrange and draw a thousand tiles | nothing | **unmeasured.** The harness that could measure it does not reach this window, so the 60fps in 28.3 is a target and not a result |
+
+The budget was also wrong in a way that made it easier to pass, and that is worth recording because the fix is
+the point: `Measure` divided the warm figure by a `repeats` parameter that never repeated anything, so the
+published cost of the warm path was a twentieth of the real one, and raising the parameter made the budget
+satisfied itself. `Time` does the averaging now, and `repeats` says in its own documentation that it is unused.
+
+The other half is also the half nobody measures in a unit test, which is the argument the file's own header
+makes: a stopwatch cannot see WPF. It is why the budget is stated as a scope rather than a figure.
 
 ---
 
@@ -1429,6 +1481,33 @@ rather than implying a guarantee it cannot give.
 - Writes are atomic where the file system allows (write-temp, then replace), so an interrupted save
   cannot truncate a user's action.
 
+### 11.1 As built
+
+**The layout above was designed and then not used.** It is kept because it is the design, and this is what
+ships beside it, because a reader looking for `project.visual.json` finds nothing and should be told where
+the document actually lives:
+
+```
+<workspace>/.deckforge/canvas.json             the document - the source of truth
+<workspace>/.deckforge/canvas.previous.json   the last good save, written before each save
+<workspace>/.deckforge/palette.json           recents and pins, per workspace (P10b)
+```
+
+- `stage.json` is **not written.** Breakpoints, the watch list and the canned HTTP responses are per
+  session, held by `StageSession`, and are lost when the window closes. That is a decision: they are facts
+  about a run you are watching, not about the document.
+- The sidecar is `canvas.json` beside the plugin rather than a per-plugin directory, so a workspace with two
+  plugins has one canvas each and no directory to discover first. `VisualProjectJson.FileName` still
+  carries the old name and is read by nothing; it is left because it is the constant a caller would reach for.
+- **Save is order-safe**, as specified: the document is written first (to a temporary file, then moved), and
+  the C# is generated from what was saved. A failure at any step is reported, and the backup is only replaced
+  once the new file is written - so the failure message "nothing on disk was changed" is true.
+- A document this build cannot read is refused, and refused for writing too. The load reports "written by a newer
+  DeckForge" and the page disables Save, because the alternative was a page offering to overwrite a file it had
+  just told the user it would not touch.
+- Legacy sidecars are migrated when handed to `VisualProjectJson.TryDeserialize`. Nothing discovers them in a
+  workspace, and no original is copied anywhere - see 28.5.
+
 ---
 
 ## 12. Testing
@@ -1441,7 +1520,7 @@ Pure core means most of this is ordinary unit testing.
 | **Model** | JSON round-trip per block type; unknown kind → placeholder plus diagnostic; v0 → v1 migration per legacy kind; property test over randomly generated documents |
 | **Emitters** | coercion table (§5.3); loop and branch shapes; cancellation coverage; `Cap`/unreachable detection; determinism (compile twice, byte-equal); warning-free output |
 | **Procedures** | local functions emitted and callable before declaration; recursion warned; name collisions refused |
-| **Compile** | extend `GeneratedCodeCompilesTests`: a corpus of ~40 sample documents written into `src/<Project>/`, built, error-free — writing inside the project directory, because writing outside makes the assertion vacuous |
+| **Compile** | `MultiTargetCodegenTests` scaffolds a plugin, writes canvas blocks into an action executor, a widget node's event handler, a `SetupFlow` step and `PluginIntegration`'s lifecycle hooks, then **builds the solution** - the "write inside the project directory, because writing outside makes the assertion vacuous" rule of 2.3, honoured. **Not built:** the ~40-document corpus and the golden-file snapshots of 10.5, and `VisualCodegenCompilesTests.cs`, which this table named, does not exist. |
 | **Geometry** | `StackLayout` heights and notch positions; `DropResolver` scoring including shape compatibility, stability bonus, magnet radius at zoom, detach, re-parent, wrap, unwrap, and replace-on-top |
 | **Interpreter** | step sequences per block; coercion parity with the runtime library; breakpoints; cancellation; seeded randomness; watch semantics; disabled blocks skipped |
 | **Markup** | `XamlMarkupTests` keeps passing: real icon members (named literally *and* bound from the catalogue), no method bindings, no grid cell beyond the definitions, fixed-column budget, no attribute value split across lines |
@@ -1482,7 +1561,7 @@ config-flow hook shapes; plugin settings access; host variable write permission.
 in Part 7 to keep / drop / mark-unverified. Record the baseline build and test results.
 
 **Exit criteria.** Appendix A is an authoritative API map. Every `⚠` is resolved and reflected in
-Part 7. `dotnet build` clean; `dotnet test` green at 344 passing.
+Part 7. `dotnet build` clean; `dotnet test` green at 349 passing.
 
 ### P1 — Model and catalog (no UI)
 
@@ -1516,7 +1595,7 @@ shape is chosen by a `DataTemplateSelector` over the catalogue row rather than a
 see §9.10.
 
 **Exit criteria, checked.** Every catalog block renders ✔ (the sample holds every one of them and a test
-fails when it does not; the palette draws all 156 including the hats). Nested ✔ (the recursive template
+fails when it does not; the palette draws all 160 including the hats). Nested ✔ (the recursive template
 is the tile itself). Dark and light ✔ (both reviewed in a screenshot). Markup tests green ✔.
 
 **Not in this phase, and why.** Dragging is P4 — the palette says so rather than offering a drag that
@@ -1694,10 +1773,11 @@ writes only through the editor, so the panel cannot disagree with the canvas abo
 which is the failure mode of an editor that keeps its own copy and writes it back on a button.
 
 **Three things the design asked for, and what they became.**
-
-- *One text field per type, with affordances.* Part 9.6 lists ten editor types. Each editor binding to the
-  property it cares about means the type switch appears once, in `SlotValue`, instead of ten times in the
-  view — and the tenth one would be the one that was wrong.
+- *One text field per type, with affordances.* Part 9.6 lists eleven editor types, and `SlotType` has eighteen
+  values; as built the inspector renders four kinds of them - text, a number stepper, a boolean, and a name
+  field for every reference type. Each editor binding to the property it cares about means the type switch
+  appears once, in `SlotValue`, instead of eighteen times in the view - and the tenth one would be the one
+  that was wrong.
 - *The row expression is labelled "Row expression", not "Generated".* Emitting one block properly needs a
   whole action around it — a signature, a body, the host guard — so the panel shows the catalogue row's
   own text and says so. The pane at the bottom of the panel is the one that may claim to be what Save
@@ -1773,8 +1853,8 @@ canvas yet", Save writes 46 KB and says "Saved 11 scripts to canvas.json", an in
 500 ms into 501 and the header flips to "Unsaved changes", Save puts it back and leaves the old value in
 the backup, a restart redraws 501 from the file, a truncated file recovers to 500 with the warning, and
 Save after that leaves valid JSON. The keystroke path is the one thing not re-checked here; `postkey`
-ctrl+down on the top block of a stack is a refusal, and a refusal showing nothing in the header is the
-documented behaviour rather than a missing edit.
+ctrl+down on the top block of a stack is a refusal, and a refusal says why in the header's own line -
+for six seconds, because a refusal is a moment rather than a state - rather than being a missing edit.
 
 ### P6 — Shell integration, retire Blocks
 
@@ -1957,7 +2037,7 @@ could read; it opens the block instead. And the closing brace is now re-indented
 again on top of what is already in front of it, which had been drifting the region one level deeper on
 **every** save.
 
-Deferred, and why: the six C5 event hats (`when event received`, `when key pressed`, `when client
+Deferred, and why: the seven C5 event hats (`when event received`, `when key pressed`, `when client
 connected` / `disconnected`, `when profile changed`, `when folder opened`, `when message received`).
 They are implementable now — this is the phase that gives their subscriptions an owner — but each needs
 a subscription stored and disposed rather than a statement written, which is a body of work in its own
@@ -1979,7 +2059,7 @@ theme and category.
 | Risk | Mitigation |
 |---|---|
 | The SDK surface differs from the catalog's assumptions | P0 gates every row; `IsVerified` is test-enforced; unverifiable blocks are dropped or shown unverified and unsaveable |
-| Rewriting emitters breaks the proven engine | `BlockCompiler`'s public surface is preserved; the 344 existing tests must pass unchanged at every phase boundary |
+| Rewriting emitters breaks the proven engine | `BlockCompiler`'s public surface is preserved; the 349 existing tests must pass unchanged at every phase boundary |
 | Generated code fails to compile in a user's plugin | Compile tests write into `src/<Project>/`; `VisualRuntime` references are covered by a surface test; the generated plugin is built and validated |
 | Interpreter and compiler drift | Shared `BlockSemantics` table, golden C# snapshots, end-to-end compile tests, and a documented honesty statement |
 | Magnetic snapping feels wrong | The scorer is pure and testable; magnet radius and stability are documented and tunable in settings; user-driver screenshots for tuning |
@@ -1995,22 +2075,28 @@ theme and category.
 
 ```
 src/DeckForge.Core/Visual/BlockCatalog.cs
-src/DeckForge.Core/Visual/BlockCategory.cs
 src/DeckForge.Core/Visual/BlockShapes.cs
 src/DeckForge.Core/Visual/BlockValue.cs
 src/DeckForge.Core/Visual/VisualBlocks.cs
 src/DeckForge.Core/Visual/VisualProject.cs
 src/DeckForge.Core/Visual/VisualProjectJson.cs
 src/DeckForge.Core/Visual/Migrations/BlocksV1Migration.cs
+src/DeckForge.Core/Visual/Block.cs                      the one generic node (6.2.1)
+src/DeckForge.Core/Visual/BlockCatalogRows.cs           the vocabulary, one method per category
+src/DeckForge.Core/Visual/DocumentCommands.cs            BodyRef and the reversible commands (P4a)
+src/DeckForge.Core/Visual/DocumentEditor.cs              Execute, Transaction, Undo, Redo (P4a)
+src/DeckForge.Core/Visual/DropPlan.cs                    landing zone + payload -> commands (P4b)
+src/DeckForge.Core/Visual/KeyboardMoves.cs               every keyboard decision, pure (P4c)
+src/DeckForge.Core/Visual/SlotValue.cs                   which input member carries the value (P5a)
+src/DeckForge.Core/Visual/VisualStore.cs                 canvas.json, backup, recovery, dirty (P5b)
+src/DeckForge.Core/Visual/VisualValidationContext.cs     what the plugin declares, and whether we know (P1c)
 src/DeckForge.Core/Visual/VisualValidator.cs
 src/DeckForge.Core/Visual/BlockMetrics.cs
 src/DeckForge.Core/Visual/StackLayout.cs
 src/DeckForge.Core/Visual/DropResolver.cs
-src/DeckForge.Core/Visual/BlockSemantics.cs
 src/DeckForge.Core/Visual/Runtime/IVisualHost.cs
 src/DeckForge.Core/Visual/Runtime/SimulatedHost.cs
 src/DeckForge.Core/Visual/Runtime/ScriptInterpreter.cs
-src/DeckForge.Core/Visual/Runtime/VisualList.cs
 ```
 
 **Core — new in P3** (see §9.10 for why each is here rather than in the App)
@@ -2022,7 +2108,7 @@ src/DeckForge.Core/Visual/BlockFactory.cs        a fresh block of any row, fille
 src/DeckForge.Core/Visual/VisualSampleProject.cs the document the page draws
 ```
 
-`BlockValue.cs` and `VisualBlocks.cs` were §6.2's class-per-block hierarchy, which P1 replaced with one
+`BlockValue.cs` and `VisualBlocks.cs` were §6.2's class-per-block hierarchy, which P1 replaced with one generic node (§6.2.1) and are not written. `DropResolver.cs` and `StackLayout.cs` landed in P1c. `BlockCategory.cs` was never a file - the enum is at the bottom of `BlockShapes.cs` - and `Runtime/VisualList.cs` was dropped: the interpreter works over the document's own lists, and a parallel copy would be a second thing to keep in step for no gain.
 generic node (§6.2.1) and are not written. `DropResolver.cs` and `StackLayout.cs` landed in P1c.
 
 **Core — new in P8–P10**, and every one of them here for the same reason: `tests/DeckForge.Tests` cannot
@@ -2074,6 +2160,16 @@ src/DeckForge.App/ViewModels/Visual/SlotViewModel.cs
 src/DeckForge.App/ViewModels/Visual/PaletteViewModel.cs                 (P10b, recents and pins)
 src/DeckForge.App/ViewModels/Visual/CanvasViewModel.cs                  (P10c, zoom and the minimap)
 src/DeckForge.App/ViewModels/Visual/StageViewModel.cs                    (P8, a projection of StageSession)
+src/DeckForge.App/ViewModels/Visual/CanvasViewModel.cs                  (P10c, zoom and the minimap)
+src/DeckForge.App/ViewModels/Visual/ColumnViewModel.cs                   (P7, one template for both kinds)
+src/DeckForge.App/ViewModels/Visual/ProcedureViewModel.cs                (P7)
+src/DeckForge.App/ViewModels/Visual/CommandPaletteViewModel.cs          (P10a)
+src/DeckForge.App/ViewModels/Visual/ShortcutSheetViewModel.cs           (P10a)
+src/DeckForge.App/ViewModels/Visual/InspectorViewModel.cs               (P5, with the editors)
+src/DeckForge.App/Controls/Blocks/CanvasHitTest.cs                      what the pointer is over, measured
+src/DeckForge.App/Controls/Blocks/AutoScroll.cs                         the edge scroller a drag uses
+src/DeckForge.App/Controls/Blocks/DragController.cs                     the pointer half of a drag
+src/DeckForge.App/Controls/Blocks/DragAdorner.cs                        the ghost and the insertion bar
 src/DeckForge.App/ViewModels/Visual/CommandPaletteViewModel.cs          (P10a)
 src/DeckForge.App/ViewModels/Visual/ShortcutSheetViewModel.cs           (P10a)
 src/DeckForge.App/ViewModels/Visual/InspectorViewModel.cs               (P5, with the editors)
@@ -2124,7 +2220,7 @@ src/DeckForge.App/ViewModels/BlockActionViewModel.cs
 
 ```
 src/DeckForge.CodeGen/Generation/BlockCompiler.cs        (facade over the emitters, and the splice)
-src/DeckForge.CodeGen/Generation/BlockProgramWriter.cs   (target-agnostic)
+src/DeckForge.CodeGen/Generation/BlockProgramWriter.cs   (kept; no production caller since P6 - see 9.6.3)
 src/DeckForge.CodeGen/Generation/WidgetGenerator.cs      (P9's fix: multi-line event handlers)
 ```
 
@@ -2138,14 +2234,8 @@ level deeper on every save.
 tests/DeckForge.Tests/Visual/BlockCatalogTests.cs
 tests/DeckForge.Tests/Visual/VisualModelTests.cs
 tests/DeckForge.Tests/Visual/VisualMigrationTests.cs
-tests/DeckForge.Tests/Visual/ExpressionEmitterTests.cs
-tests/DeckForge.Tests/Visual/StatementEmitterTests.cs
-tests/DeckForge.Tests/Visual/ProcedureEmitterTests.cs
-tests/DeckForge.Tests/Visual/VisualCodegenCompilesTests.cs
 tests/DeckForge.Tests/Visual/StackLayoutTests.cs
-tests/DeckForge.Tests/Visual/DropResolverTests.cs
 tests/DeckForge.Tests/Visual/ScriptInterpreterTests.cs
-tests/DeckForge.Tests/Visual/VisualRuntimeSurfaceTests.cs
 tests/DeckForge.Tests/Visual/BlockOutlineTests.cs               (P3)
 tests/DeckForge.Tests/Visual/BlockLabelTests.cs                 (P3)
 tests/DeckForge.Tests/Visual/VisualSampleProjectTests.cs       (P3)
@@ -2164,6 +2254,15 @@ tests/DeckForge.Tests/Visual/PaletteMemoryTests.cs             (P10b)
 tests/DeckForge.Tests/Visual/PaletteStoreTests.cs              (P10b)
 tests/DeckForge.Tests/Visual/CanvasViewTests.cs                (P10c)
 tests/DeckForge.Tests/Visual/CanvasPerformanceBudgetTests.cs   (P10d)
+tests/DeckForge.Tests/Visual/DropPlanTests.cs               (P4b)
+tests/DeckForge.Tests/Visual/VisualEmitterTests.cs          (P2, the one emitter test file)
+tests/DeckForge.Tests/Visual/VisualValidatorTests.cs       (P1c)
+tests/DeckForge.Tests/Visual/VisualStoreTests.cs           (P5b)
+tests/DeckForge.Tests/Visual/SlotValueTests.cs             (P5a)
+tests/DeckForge.Tests/Visual/KeyboardMovesTests.cs         (P4c)
+tests/DeckForge.Tests/Visual/DocumentEditorTests.cs         (P4a)
+tests/DeckForge.Tests/Visual/ProcedureTests.cs             (P7)
+tests/DeckForge.Tests/XamlEventWiringTests.cs             (P10i)
 tests/DeckForge.Tests/Visual/SvgRendererTests.cs               (P10e)
 tests/DeckForge.Tests/Visual/BlockContrastTests.cs             (P10f)
 tests/DeckForge.Tests/Visual/BlockLabelKeysTests.cs            (P10g)
@@ -2187,7 +2286,7 @@ visual.md          (this document)
 README.md          (status line, nav list)
 ROADMAP.md         (Blocks → Visual)
 SESSION-STATE.md   (new hard constraints and architecture notes)
-EXTENDING.md       (how a block is added: catalog row + emitter + interpreter step + test)
+EXTENDING.md         (capability, page and validator seams - the block seam is still to be written)
 ```
 
 ---
@@ -2354,7 +2453,7 @@ while a field has focus.
 |---|---|
 | Wheel | vertical scroll |
 | Shift + wheel | horizontal scroll |
-| Ctrl + wheel | zoom about the pointer, clamped 25%–200%, in 10% steps |
+| Ctrl + 0 | *not bound* - `Ctrl+1..0` belong to the sidebar (§18.3), which is what the implementation does. Use the zoom row's `100%` button, or Ctrl+wheel |
 | Ctrl + 0 | reset zoom to 100% |
 | Ctrl + `+` / `-` | zoom in / out about the viewport centre |
 
@@ -2420,6 +2519,38 @@ add variable, add list, define procedure.
 **Stage menu:** run, step, step into, pause, stop, reset, clear trace, clear breakpoints, advance the
 clock by 1s / 10s, allow real network (with confirmation).
 
+### 18.6 As built
+
+Part 18 opens by saying every interaction is specified so two implementations of this document behave
+identically. This is the other half of that sentence: what a build of this document actually does.
+
+**Shipped:** left-click to select; drag from the palette and from the canvas; Alt to narrow a drag to the
+top block; middle-drag to pan; Ctrl+wheel to zoom about the pointer; a click on a block's gutter circle
+to toggle a breakpoint; the field-focus precedence rule; every chord in the `VisualCommands` table, which
+the palette, the shortcut sheet and the page's dispatcher all read, so the sheet cannot advertise a key
+nothing does; and a command palette and shortcut sheet that are also header buttons, because a feature
+reachable only from the keyboard is a feature nobody finds.
+
+**Not shipped, and named here so nobody goes looking for it:**
+
+| Promised | Where | State |
+|---|---|---|
+| Ctrl+C / Ctrl+X / Ctrl+V on a focused run, and the `.dfblock` clipboard envelope | 18.3, 25.2 | not built |
+| Tile context menu - duplicate, delete, comment, disable, wrap, unwrap, extract as procedure, open docs, show emitted C# | 18.5 | not built; the script row's own menu exists |
+| Canvas and stage context menus | 18.5 | not built |
+| Rubber-band selection on empty canvas | 18.1 | not built |
+| Header target picker and script name | 9.7 | not built; the target is implicit and the strip edits the script name |
+| An automation peer per tile | 9.8 | not built |
+| The transport's Pause | 10.3 | not built; Stop is the only way to end a run, and Reset clears it |
+| Icon gallery, colour swatch, file picker, event picker in the inspector | 9.6 | not built; four editors render: text, a number stepper, a boolean, and a name field for every reference type |
+| Stage menu item to allow real network, with confirmation | 18.5, 27.1 | not built, and deliberately unreachable - see Part 27.1 |
+
+Two of those absences are decisions rather than omissions, and they are worth separating from the rest.
+The network toggle is not built because the simulator is offline-only and a control that could turn that off
+is a control nobody should press by accident; `StageSession.AllowRealNetwork` exists in Core and is called by
+tests. The icon, colour, file and event editors are not built because each one needs a picker over something
+the document has to define first, and a picker over nothing is a text box with a dropdown arrow on it.
+
 ---
 
 ## 19. Motion and animation
@@ -2476,7 +2607,7 @@ behaviour, so `AppSettings.RepairNulls` and the existing load path need no speci
 | `VisualReduceMotion` | system | system/always/never | animation (Part 19) | Accessibility |
 | `VisualBlockTextSize` | `13.5` | 12–18 px | tile labels | Visual |
 | `VisualStageAllowNetwork` | `false` | on/off | the simulator's HTTP layer | Simulator |
-| `VisualStageStepDelayMs` | `120` | 0–1000 ms | delay between interpreteted steps | Simulator |
+| `VisualStageStepDelayMs` | `120` | 0–1000 ms | delay between interpreted steps | Simulator |
 | `VisualBreakpoints` | `[]` | block ids per workspace | persisted breakpoints | internal, in `stage.json` |
 | `VisualCannedResponses` | `{}` | url pattern → response | the simulator's canned HTTP table | internal, in `stage.json` |
 | `VisualShowBlockCode` | `false` | on/off | a one-block C# preview in the inspector | Visual |
@@ -2492,6 +2623,31 @@ Rules:
    what the simulator starts with (Part 27).
 4. Every key is added to the Settings page under a `Visual` section, and the theme tokens for block
    colours follow the existing accent setting rather than introducing a second colour preference.
+
+### 20.1 As built: none of these keys ship
+
+**`AppSettings` has eight properties and none of them is on this table.** The table above is a design, and
+reading it as a description of the product is how a contributor writes `Settings.VisualSnapRadius` and
+discovers it does not compile. What ships instead, and why, is the short version:
+
+| Setting | How it is decided today |
+|---|---|
+| `VisualSnapEnabled`, `VisualSnapRadius` | `DropResolver.MagnetRadius`, a constant. The radius is a design number (Part 9.5), and a user-adjustable magnet was never asked for. |
+| `VisualSnapToGrid`, `VisualGridSize` | no free-canvas placement exists; scripts are dropped on a hat slot or the canvas, both of which are already grid-free by construction. |
+| `VisualDefaultZoom`, `VisualMinimapVisible` | the canvas opens at 100% and the minimap is always present. |
+| `VisualPaletteShowDeprecated` | the palette shows what the catalogue has; there are no deprecated blocks. |
+| `VisualAutosaveSeconds` | no autosave. A canvas is saved when the user says so. |
+| `VisualReduceMotion` and every other row in Part 19 | **no animation exists in the block editor**, so there is nothing to shorten and no duration constant in `BlockTheme.cs` for the rule to point at. |
+| `VisualBlockTextSize` | the theme's own type scale (`Liquid.FontSize*`). |
+| `VisualStageAllowNetwork` | see Part 27.1: the simulator cannot reach the network from the UI at all. |
+| `VisualStageStepDelayMs` | the speed slider, which is a session value rather than a setting. |
+| `VisualBreakpoints`, `VisualCannedResponses` | per session; `stage.json` is not written (Part 11.1). |
+| `VisualShowBlockCode` | the one-block C# preview is always shown. |
+| `VisualOnboardingSeen` | no walkthrough. |
+
+Rule 4 of this part - "every key is added to the Settings page under a `Visual` section" - is therefore **aspirational**.
+Nothing here is a defect: the editor does not need a settings page. But the claim that the keys exist, in a
+document whose whole value is being trustworthy about what exists, is the thing worth correcting.
 
 ---
 
@@ -2857,12 +3013,12 @@ real safety surface. It is stated here rather than assumed.
 | Surface | Risk | Position |
 |---|---|---|
 | Generated code in the plugin | writes into the user's source tree | only an explicit Save writes to the plugin; autosave writes only the sidecar; the region is the only thing touched on the second and later saves |
-| The simulator's HTTP layer | makes real network requests | **off by default** (Part 20); enabling it is an explicit, per-session confirmation in the stage menu, and the toggle is visible while a run is live |
+| The simulator's HTTP layer | makes real network requests | **off, and there is no control that turns it on.** `StageSession.AllowRealNetwork` exists in Core and is called by tests; no App control invokes it, so the "explicit, per-session confirmation in the stage menu" this row originally described does not exist and the safe default is the only behaviour. Design for the toggle: Part 20, Part 18.5 |
 | Canned responses | could be confused with real ones | the stage labels the HTTP panel "simulated" whenever the network toggle is off, and every request in the trace is tagged simulated or real |
 | Round-trip parsing | reads a file | read-only on open; a document is never rewritten without a Save |
-| Extension block providers | arbitrary code in-process | same trust position as existing extensions: off by default, disclosed on the Extensions page, and disclosed again in the palette for blocks they contribute (Part 23.3) |
-| `.dfblock` import | a file from elsewhere | never executes anything; it produces a document, and its manifest's capability claims are checked, not trusted |
-| `.sb3` import | a file from elsewhere | never executes anything; unmapped blocks become inert placeholders |
+| Extension block providers | arbitrary code in-process | **not built for blocks** (Part 23 is design; the catalogue is closed). The Extensions page itself is real and follows this position for extensions |
+| `.dfblock` import | a file from elsewhere | **not built** - see 28.5. The design: never executes anything; it produces a document, and its manifest's capability claims are checked, not trusted |
+| `.sb3` import | a file from elsewhere | **not built** (Part 26 is design only): never executes anything; unmapped blocks would become inert placeholders |
 | Exported PNG / SVG | could carry data the user did not mean to share | exports contain only block labels and the user's literals; §27.2 applies |
 
 ### 27.2 Secrets
@@ -2928,7 +3084,7 @@ is deliberately phrased so each line can be demonstrated rather than argued.
 11. The simulator runs a script with parameters the user types in, shows the deck and notification
     effects, supports step, step-into, breakpoints and reset, and labels its output as simulated.
 12. Diagnostics appear for each class in Appendix F, and clicking one selects the offending block.
-13. A script can be exported to PNG, exported to SVG, copied and pasted, and exported and re-imported
+13. A script can be exported to **SVG** (P10e), and - **not yet** - copied or pasted, or exported and imported as a `.dfblock`. PNG export is deliberately absent from Core; see the tracker's P10e row and 28.5.
     as a `.dfblock` without loss.
 14. Every existing test still passes, and the new tests listed in Part 12 pass.
 
@@ -2963,6 +3119,33 @@ is deliberately phrased so each line can be demonstrated rather than argued.
 2. No block may exist whose only implementation is visual: every shipped block emits C#.
 3. No `.sb3` export, no community features, no art tools — all named in Part 17.3 as accepted
    shortfalls rather than treated as incomplete work.
+
+### 28.5 Criteria not met
+
+**Section 28 is titled "acceptance criteria" and the tracker above says every phase is complete.** Those two
+statements are only compatible if this table exists, so here it is: what 28 asks for that the product does
+not do, and why. Every row is either deferred by decision or unbuilt, and none of them is claimed as done
+anywhere else in this document - which is the discipline the audit found this table missing.
+
+| Criterion | State | Why |
+|---|---|---|
+| 13 - PNG export | **not built, by decision (P10e)** | SVG ships. Rasterising belongs to the caller that already has a drawing surface, and a third-party encoder in Core would make the export untestable. Part 25.3 keeps the design for whoever wants it. |
+| 13 - `.dfblock` export and import, and clipboard copy/paste of a run | **not started** | Part 25.2's envelope and Part 18.3's Ctrl+C/V/X. Nothing in the App implements them and no phase owns them. |
+| 10 - a legacy `.blocks.json` workspace migrates *and keeps the originals* | **half** | `VisualProjectJson` migrates a legacy document it is handed, and `VisualStore` reports the migration. Nothing discovers a legacy file in a workspace and nothing copies an original anywhere. |
+| 10 - a canvas written by a newer DeckForge is opened read-only | **half** | The reader refuses it and the page now refuses to save over it (P10j). The user is told in a message, not offered the newer file in a read-only editor. |
+| Part 24 - round-tripping blocks out of existing C# | **not started** | `BlockCompiler.ExtractRegion` is the seam; nothing builds a document from a region. |
+| Part 23 - the third-party block provider contract | **not started** | The catalogue is closed. |
+| 28.3 - 60fps drag with 500 visible tiles | **half, Core half only** | `CanvasPerformanceBudget` measures cached metric reads and one hit-test pass against a tenth of a frame. The WPF half - arrange and draw - is unmeasured, because the harness that would measure it does not reach this window. Part 9.9 and Appendix H now say so. |
+| 28.2 - label contrast computed at 4.5:1 in a test | **not checked** | `BlockContrastTests` asserts that every category keeps an outline that reads against its own fill at every level, and that the silhouettes still differ with no colour surviving. It does not compute a luminance ratio from the tokens, so the number is a goal and not a result. |
+| 28.2, Part 19 - reduced motion | **not built** | There are no animations in the block editor and no durations to shorten. Part 20's sixteen settings keys are likewise unbuilt; see the note there. |
+| 18.5 - the three context menus, rubber-band selection, the header target picker, tile automation peers, the transport's Pause | **not built** | Part 18.6 lists what shipped in their place. |
+| 12 - a ~40-document compile corpus and golden-file snapshots | **not built** | `MultiTargetCodegenTests` scaffolds a plugin, writes into `src/<Project>/` and builds it for all three extra targets. That is the part worth having; the corpus is not written. |
+
+**What is verified, and how.** The Visual page was driven in the real window at the end of P10, and the
+defects that found are recorded with their fixes in `fixplan.md`. The one thing the window cannot check is
+the keyboard: synthesised keystrokes do not reach it, so every shortcut is covered by
+`VisualCommandsTests` - the palette, the sheet and the page's dispatcher read one table, so the sheet
+cannot claim a key nothing does - rather than by pressing it.
 
 ---
 
@@ -3357,7 +3540,7 @@ to, so the pane can select and centre it.
 | Code | Severity | Trigger | Hint shown next to the message |
 |---|---|---|---|
 | `vis-shape-mismatch` | Error | a statement in a value slot, or a reporter in a stack gap | "Reporter blocks go in the round slots; stack blocks go between blocks." |
-| `vis-type-mismatch` | Warning | text in a numeric slot, non-boolean in a predicate | "This will be converted at runtime; the value may not be what you expect." |
+| `vis-type-mismatch` | Warning | text in a numeric slot; text or a number in a predicate slot - a boolean *literal* is a condition, and is not warned about | "This will be converted at runtime; the value may not be what you expect." |
 | `vis-unbound-slot` | Error | a required slot with no value | "Drop a value or block here, or open the block's fields in the inspector." |
 | `vis-menu-key-unknown` | Error | a menu selection not in the block's option list | lists the valid keys |
 | `vis-name-duplicate` | Error | two variables, lists or procedures share a name | "Names must be unique; the other one is at <block>." |
@@ -3380,6 +3563,44 @@ to, so the pane can select and centre it.
 | `vis-secret-literal` | Warning | a URL or field that looks like it carries a credential | "Use a parameter instead, so the value is not committed to your repository." |
 | `vis-step-budget` | Error | the interpreter hit its step budget | "This script may never finish; it was paused." |
 | `vis-migration-originals` | Info | legacy sidecars were migrated | "The originals were kept under `.deckforge/visual/legacy/`." |
+
+### F.1 As built
+
+**The table above is the design. These are the codes a build actually reports**, and the difference matters in
+both directions: a maintainer adding a diagnostic cannot find its code here, and ten rows above describe
+warnings nothing emits.
+
+| Code | Severity | Emitted by | Trigger |
+|---|---|---|---|
+| `vis-call-arity` | Error | `VisualValidator` | a `call` with the wrong number of arguments |
+| `vis-call-value-void` | Error | `VisualValidator` | a `call` used as a value where its procedure returns nothing |
+| `vis-call-value-unused` | Warning | `VisualValidator` | a `call` used as a value where its procedure returns one |
+| `vis-return-value-void` | Warning | `VisualValidator` | a value returned from a procedure that declares none |
+| `vis-return-no-value` | Error | `VisualValidator` | a value returned where a `finish` was required |
+| `vis-procedure-recursion` | Warning | `VisualValidator` | a procedure that calls itself, directly or through a chain |
+| `vis-name-unknown` | Warning | `VisualValidator` | a variable or list name nothing declares. Distinct from `vis-name-duplicate`: one name is not defined, rather than two names the same |
+| `vis-drop-missing-source` | Error | `DocumentEditor` | a move from a place that no longer exists, or of nothing |
+| `vis-drop-missing-target` | Error | `DocumentEditor` | an insert, delete or move into a body that no longer exists |
+| `vis-move-into-self` | Error | `DocumentEditor` | a run dropped inside itself |
+| `vis-move-off-canvas` | Error | `DocumentEditor` | a script moved to a position that is not a number |
+| `vis-wrap-not-a-container` | Error | `DocumentEditor` | wrapping in something that cannot wrap |
+| `vis-unwrap-empty` | Error | `DocumentEditor` | unwrapping a container with nothing in it |
+| `vis-unwrap-not-a-container` | Error | `DocumentEditor` | unwrapping something that is not a container |
+| `vis-unwrap-not-in-a-stack` | Error | `DocumentEditor` | unwrapping a block that is not a top-level statement |
+| `vis-capability-missing` | Warning | `VisualValidator` | a block whose capability `VisualValidationContext` says the plugin lacks. Shipped in P10j; it is what the per-row `CapabilityId` was carrying for |
+| `vis-drop-shape` / `vis-drop-stale` / `vis-slot-unnamed` / `vis-move-onto-self` / `vis-hat-needs-canvas` / `vis-canvas-needs-hat` | Error | `DropPlan` | the six drag refusals. Prefixed in P10j, when they were a namespace of their own with no table |
+
+**In the table above, not emitted by anything:** `vis-target-file-missing`, `vis-target-anchor-missing` and
+`vis-region-conflict` are the writer's refusals, and it reports them as sentences in a message rather than as
+codes - a refused save has nowhere to put a `VisualDiagnostic`. `vis-newer-schema` is a message from the loader
+rather than a diagnostic. `vis-provider-missing` needs Part 23. `vis-opaque-lines`, `vis-secret-literal`,
+`vis-step-budget` and `vis-migration-originals` need round-tripping, a secret scanner, a persisted budget and the
+legacy discovery that 28.5 lists as unbuilt. The comment at `VisualValidator.cs` that claimed the first two live
+in CodeGen was wrong: CodeGen constructs no diagnostics at all.
+
+`VisualValidatorTests.Every_code_this_validator_uses_is_one_appendix_f_declares` guards this, and it is the test
+that had drifted: it asserted against a hand-copied fourteen-code list rather than this table, over a document
+that produced none of the missing ones.
 
 ---
 
@@ -3436,7 +3657,7 @@ Rules:
 | Open a 5-script document | under 400ms | a stopwatch test around load plus layout |
 | Palette filter, 187 blocks | under 30ms per keystroke | a micro-benchmark with a three-character query |
 | Memory, one document open | under 60MB above the idle application | a working-set measurement in the harness |
-| Export PNG at 2× | under 400ms for a 200-block script | a stopwatch test |
+| Export PNG *(not built - deferred in P10e; SVG ships)* at 2× | under 400ms for a 200-block script | a stopwatch test |
 
 Regression policy: a phase that misses a budget does not ship that phase's exit criteria until the
 number is either met or the budget is amended here with the reason. Amending the budget silently is
@@ -3506,3 +3727,4 @@ What a reviewer checks on any pull request that touches Visual.
 | 2026-09-29 | Extended: table of contents and reading order; Part 17 gap analysis against Scratch; Part 18 full interaction and keyboard specification; Part 19 motion and animation; Part 20 settings; Part 21 block-label localization and RTL; Part 22 versioning and deprecation policy; Part 23 the third-party block-provider contract; Part 24 round-trip from existing code; Part 25 `.dfblock`, clipboard, PNG and SVG export; Part 26 Scratch `.sb3` import design; Part 27 safety, secrets and threat model; Part 28 acceptance criteria and metrics; Appendices D–E worked examples with sidecar JSON, generated C# and interpreter traces; Appendix F diagnostics catalogue; Appendix G undo/redo command catalogue; Appendix H performance budget; Appendix I contributor review checklist. |
 | 2026-10-03 | **P10g and the documentation sweep.** `BlockLabelKeys` gives §21.1's keys a home in Core with an English fallback, so a build with no localization loaded is unremarkable and a rename cannot orphan a translation. §15 brought in line with what shipped, including the files that were planned and deliberately not written. |
 | 2026-10-03 | **P10g–P10h and the documentation sweep.** `BlockLabelKeys` gives §21.1's keys a home in Core and `ResxTextLookup` reads them out of the workspace's own `Strings.resx`, so a translator fills in one row and the block says it — with the catalogue's English as the default, because a build with no localization loaded is the ordinary case. §15 brought in line with what shipped, including the planned files that were deliberately not written and the two duplicate table headers this document had grown. |
+| 2026-10-03 | The documentation sweep the audit asked for: this document's own claims now match the product - an as-built catalogue table (7.18), an as-built storage layout (11.1), an as-built interaction list (18.6), a settings table marked as design rather than product (20.1), a diagnostics catalogue reconciled both ways (Appendix F.1), a measured-scope statement for the performance budget (9.9.1), and 28.5 listing every acceptance criterion that is not met. 9 stale paths removed from the manifest and 19 shipped files added; `EXTENDING.md` no longer claimed to document the block seam. |

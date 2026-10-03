@@ -4,6 +4,15 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!--
+      NU1701, and only NU1701: WPF-UI 4.3.0 publishes no net10.0 asset, so NuGet restores its .NET
+      Framework one and warns that the package "may not be fully compatible". It is. These tests
+      compile against Wpf.Ui.Controls, read SymbolRegular out of it by reflection, and load Wpf.Ui.dll
+      from beside the test assembly to check glyph names; all of that works, and 857 tests pass. The
+      warning is about target-framework matching, not about the library, and there is no newer WPF-UI to
+      move to - so it is named and explained here instead of left as the only warning in the build.
+    -->
+    <NoWarn>$(NoWarn);NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -16,10 +16,17 @@ namespace DeckForge.Core.Visual;
 /// flag that tells them apart.
 /// </para>
 /// </remarks>
+/// <param name="UnavailableCapabilities">
+/// The capabilities the target does not have. A block that drives a gated surface and whose capability is
+/// in here is reported as <c>vis-capability-missing</c>, because the generated code will not compile
+/// against a plugin that cannot reach it - and today nothing reports that, so the user finds out when the
+/// build fails.
+/// </param>
 public sealed record VisualValidationContext(
     IReadOnlySet<string> Parameters,
     IReadOnlySet<string> HostVariables,
-    bool NamesResolved = true)
+    bool NamesResolved = true,
+    IReadOnlySet<string>? UnavailableCapabilities = null)
 {
     /// <summary>Nobody has said yet: no unknown-name warning can fire.</summary>
     /// <remarks>
@@ -41,4 +48,23 @@ public sealed record VisualValidationContext(
     public static readonly VisualValidationContext None = new(
         new HashSet<string>(StringComparer.Ordinal),
         new HashSet<string>(StringComparer.Ordinal));
+
+    /// <summary>A plugin whose integration is present, and which therefore has every capability.</summary>
+    /// <remarks>
+    /// The default for the writer's path, so a canvas saved against a workspace with an integration gets no
+    /// false "missing capability" on every block that touches the host.
+    /// </remarks>
+    public static VisualValidationContext WithAllCapabilities() => new(
+        new HashSet<string>(StringComparer.Ordinal),
+        new HashSet<string>(StringComparer.Ordinal),
+        NamesResolved: false,
+        UnavailableCapabilities: new HashSet<string>(StringComparer.Ordinal));
+
+    /// <summary>A plugin missing exactly the capabilities named.</summary>
+    /// <param name="unavailable">The capability ids the target does not have.</param>
+    public static VisualValidationContext Missing(params string[] unavailable) => new(
+        new HashSet<string>(StringComparer.Ordinal),
+        new HashSet<string>(StringComparer.Ordinal),
+        NamesResolved: false,
+        UnavailableCapabilities: new HashSet<string>(unavailable, StringComparer.Ordinal));
 }

@@ -76,9 +76,17 @@
             mean a panel could be pushed off the right edge, which is the one thing the layout works to
             prevent.
         -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+        <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                       PanningMode="VerticalOnly">
-            <Grid x:Name="Layout" Margin="20,16,20,16">
+            <!--
+                MaxWidth bound to the scroll viewer's own viewport, and it is load-bearing. A vertical
+                ScrollViewer measures its child with the content's own width in mind, so the star column
+                took the width the canvas wanted and squeezed the scripts strip beside it down to an
+                "+ Add" button and a fragment. The layout below is a fixed column budget; a scroll viewer
+                that measures the budget as a suggestion undoes it.
+            -->
+            <Grid x:Name="Layout" Margin="20,16,20,16"
+                  MaxWidth="{Binding ViewportWidth, ElementName=PageScroll}">
             <!--
                 The four panels' rows and columns are assigned in code, not here, because they change with
                 the window width. At the application's minimum width the four columns do not fit beside
@@ -92,16 +100,22 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-
+                    <!--
+                        Trimmed, not wrapped. All four lines below share the header's first column with a
+                        button row that needs about 460 pixels, so in the narrow layout this column gets
+                        about sixty. Wrapped, one sentence of orientation became forty lines of two words
+                        each and pushed every panel a whole screen down the page - which is worse than
+                        losing the end of a sentence, because the editor itself moves out of reach.
+                    -->
                 <StackPanel x:Name="Header">
                     <TextBlock Text="Visual" FontSize="26" FontWeight="SemiBold" />
                     <TextBlock Text="Drag blocks into a script, or out of one. Alt narrows a stack drag to the block under the pointer; Ctrl+Z takes a whole gesture back."
-                               TextWrapping="Wrap" Margin="0,4,0,0"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
                     <TextBlock Text="Nothing needs a mouse: arrows walk the stack, Ctrl+arrows move a block, Space picks it up, Tab and the arrows choose where it goes, Enter drops it, Escape puts it back."
-                               TextWrapping="Wrap" Margin="0,2,0,0" FontSize="11.5"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" FontSize="11.5"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
-                    <TextBlock Text="{Binding DocumentLine}" FontSize="11.5" Margin="0,4,0,0"
+                    <TextBlock Text="{Binding DocumentLine}" FontSize="11.5" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
 
                     <!--
@@ -111,7 +125,7 @@
                         user guessing which file, and a canvas is the thing they are most likely to lose work
                         in.
                     -->
-                    <TextBlock Text="{Binding FileLine}" TextWrapping="Wrap" FontSize="11.5" Margin="0,2,0,0"
+                    <TextBlock Text="{Binding FileLine}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="11.5" Margin="0,2,0,0"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
 
                     <!--
@@ -120,7 +134,7 @@
                         simply does not appear. Saying why once, quietly, is what teaches the rule; an
                         error dialog for every mistyped drop would teach it and then get in the way.
                     -->
-                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" FontSize="11.5" Margin="0,4,0,0"
+                    <TextBlock Text="{Binding Message}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="11.5" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.WarningBrush}"
                                Visibility="{Binding HasMessage, Converter={StaticResource TrueVisible}}" />
 
@@ -129,7 +143,7 @@
                         from the editor having swallowed a keystroke, and the first thing anyone would do is
                         press Escape - which works, but only if they guessed it.
                     -->
-                    <TextBlock Text="{Binding CarryingLine}" TextWrapping="Wrap" FontSize="11.5"
+                    <TextBlock Text="{Binding CarryingLine}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="11.5"
                                Margin="0,4,0,0" Foreground="{DynamicResource Liquid.AccentBrush}"
                                Visibility="{Binding IsCarryingLine, Converter={StaticResource TrueVisible}}" />
                 </StackPanel>

@@ -364,6 +364,20 @@ public static class VisualValidator
                 yield break;
             }
 
+            if (context.UnavailableCapabilities is { Count: > 0 } unavailable
+                && descriptor.CapabilityId is { Length: > 0 } capability
+                && unavailable.Contains(capability))
+            {
+                // The check two tests were guarding and nothing was ever firing. Every catalogue row carries
+                // the capability it drives, and the writer refuses a host-calling region when the
+                // integration is unavailable - so a canvas that could never have compiled was saved, and the
+                // user found out at build time with a C# error rather than here with a sentence.
+                yield return new VisualDiagnostic(
+                    "vis-capability-missing", VisualSeverity.Warning, block.Id,
+                    $"This block needs the \"{capability}\" capability, which this plugin does not declare.",
+                    "Declare the capability, or remove the block - the generated code will not compile without it.");
+            }
+
             foreach (var diagnostic in ValidateSlots(block, descriptor, walk, context, declarations, procedures))
             {
                 yield return diagnostic;
@@ -464,11 +478,14 @@ public static class VisualValidator
                     "Pick a name, or drop a reporter that produces one.");
             }
 
-            if (slot.Type == SlotType.Boolean && kind is BlockInputKind.Text or BlockInputKind.Number
-                or BlockInputKind.Boolean)
+            if (slot.Type == SlotType.Boolean
+                && kind is BlockInputKind.Text or BlockInputKind.Number)
             {
-                var value = input.Text ?? input.Number?.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                    ?? input.Boolean?.ToString();
+                // A boolean *literal* is not warned about. `if <false>` is a condition like any other -
+                // false, always - and the factory puts one in every boolean slot it fills, so warning
+                // here greeted a freshly dropped block with fifteen of these. Only a value of some other
+                // kind has to be converted before it can be read as true or false.
+                var value = input.Text ?? input.Number?.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 yield return new VisualDiagnostic(
                     "vis-type-mismatch", VisualSeverity.Warning, block.Id,
                     $"\"{value}\" is not a condition.",

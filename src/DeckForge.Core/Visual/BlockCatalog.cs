@@ -250,9 +250,20 @@ public static partial class BlockCatalog
         ];
     }
 
-    /// <summary>The palette descriptor for a category: its name, colour and glyph.</summary>
+    /// <summary>
+    /// The palette descriptor for a category: its name, colour and glyph.
+    /// </summary>
+    /// <remarks>
+    /// A neutral descriptor for a category with no rows rather than an exception.
+    /// <c>BlockCategory.Media</c> is in the enum and deliberately empty - Part 7.16 dropped the media blocks
+    /// because the SDK's media surface is not one a block can drive - and <c>First</c> threw for it. Nothing
+    /// reached that today because no row is in Media, so the throw was a trap for the first media block and
+    /// for <see cref="BlockContrastRules"/>, whose public entry point calls this unconditionally. A contrast
+    /// rule that throws on one category of twelve is a rule that will be worked around rather than used.
+    /// </remarks>
     public static BlockCategoryDescriptor Category(BlockCategory category) =>
-        Categories.First(descriptor => descriptor.Category == category);
+        Categories.FirstOrDefault(descriptor => descriptor.Category == category)
+        ?? new BlockCategoryDescriptor(category, category.ToString(), "#808080", "?", "No blocks ship in this category.");
 
     // ---- row helpers ---------------------------------------------------------------------------------
 

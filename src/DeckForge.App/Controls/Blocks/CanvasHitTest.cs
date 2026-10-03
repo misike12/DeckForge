@@ -64,18 +64,6 @@ internal static class CanvasHitTest
     /// pointer over the hole's own edge would otherwise resolve to the block, which is the opposite of
     /// what someone lining a reporter up with a hole is aiming at.
     /// </remarks>
-    public static (BlockNodeViewModel Owner, SlotViewModel Slot)? SlotAt(FrameworkElement root, Point point)
-    {
-        foreach (var view in DescendantsOf<InputSlotView>(root))
-        {
-            if (view.Data is { } slot && Within(view, root, point))
-            {
-                return (slot.Owner, slot);
-            }
-        }
-
-        return null;
-    }
 
     /// <summary>Every tile under <paramref name="root"/>, outermost first.</summary>
     public static IReadOnlyList<BlockTile> Tiles(DependencyObject root) => [.. DescendantsOf<BlockTile>(root)];
@@ -88,7 +76,7 @@ internal static class CanvasHitTest
     /// both are facts about what is on screen, so the resolver stays pure and the canvas hands it
     /// observations rather than predictions.
     /// </remarks>
-    public static IReadOnlyDictionary<string, BlockRect> Rects(FrameworkElement root)
+    internal static IReadOnlyDictionary<string, BlockRect> Rects(FrameworkElement root)
     {
         var rects = new Dictionary<string, BlockRect>(StringComparer.Ordinal);
 
@@ -100,6 +88,10 @@ internal static class CanvasHitTest
             }
 
             var origin = tile.TranslatePoint(new Point(0, 0), root);
+            // NotchY is the bottom edge, which is what the drop resolver's gap candidates are measured
+            // from. The other copy of this walk passed the height here instead, so the same block had two
+            // different notches depending on which caller asked - and the minimap does not read it today,
+            // which is the only reason nobody has seen a drop indicator in the wrong place.
             rects[node.Id] = new BlockRect(
                 origin.X,
                 origin.Y,
@@ -148,13 +140,6 @@ internal static class CanvasHitTest
     /// nested inside it and needs to know which hat a script body belongs to. Flattening the results is
     /// the only canvas-side bookkeeping, and it is a list concatenation.
     /// </remarks>
-    public static IReadOnlyList<DropCandidate> Candidates(
-        FrameworkElement root,
-        IEnumerable<VisualScript> scripts) =>
-        Candidates(root, scripts.Select(script => (
-            BodyRef.ScriptBody(script.Hat.Id),
-            (IReadOnlyList<Block>)script.Body,
-            (Block?)script.Hat)));
 
     /// <summary>
     /// Every gap, mouth and hat slot across every column on the canvas.

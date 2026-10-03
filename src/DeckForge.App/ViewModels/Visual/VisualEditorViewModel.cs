@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeckForge.Core.Visual;
@@ -358,12 +359,25 @@ Editor = new DocumentEditor(Document);
     {
         if (Workspace is not { } workspace)
         {
-            Report("Open a plugin project first — the canvas saves into the workspace.");
+            ReportProblem("Open a plugin project first — the canvas saves into the workspace.");
             return;
         }
 
-        var result = VisualStore.Save(workspace, Document);
-        Report(result.Message);
+var result = VisualStore.Save(workspace, Document);
+
+        // A refused save is transient and a completed one is not: "there is nowhere to save to" is a
+        // moment, while the name of the file that was just written is worth keeping until the next thing
+        // happens. Both sentences come from the same field on the result, so which one this is comes
+        // from whether it worked.
+        if (result.Ok)
+        {
+            Report(result.Message);
+        }
+        else
+        {
+            ReportProblem(result.Message);
+        }
+
         Editor.ClearHistory();
         Build();
     }
@@ -374,7 +388,7 @@ Editor = new DocumentEditor(Document);
     {
         if (Workspace is not { } workspace)
         {
-            Report("Open a plugin project first.");
+            ReportProblem("Open a plugin project first.");
             return;
         }
 
@@ -593,8 +607,54 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
         }
     }
 
-    /// <summary>Says why an edit was refused.</summary>
+/// <summary>Says why an edit was refused.</summary>
     public void Report(string problem) => Message = problem;
+
+    /// <summary>
+    /// Says what went wrong, and stops saying it a few seconds later.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A refusal is a moment, not a state. A block dropped where it cannot go leaves a sentence in the
+    /// message line, and before this the sentence stayed until something else replaced it - so the
+    /// editor could be insisting a minute later that a drop had failed, about a drag the user had
+    /// already finished and moved on from, next to a canvas that had been edited successfully since.
+    /// </para>
+    /// <para>
+    /// Only refusals are transient. "Saved plugin.json" and "recovered the canvas from its autosave" are
+    /// answers to something the user asked for, and they stay until the next thing happens; a timer on
+    /// those would hide a recovery notice from anyone who looked away. The timer also re-reads the text
+    /// before clearing it, so a second refusal arriving inside the window is not wiped by the first
+    /// one's timer.
+    /// </para>
+    /// </remarks>
+    private void ReportProblem(string problem)
+    {
+        Message = problem;
+
+        var timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TransientMessageTime };
+
+        EventHandler? onTick = null;
+        onTick = (_, _) =>
+        {
+            timer.Stop();
+            timer.Tick -= onTick;
+
+            if (string.Equals(Message, problem, StringComparison.Ordinal))
+            {
+                Message = string.Empty;
+            }
+        };
+
+        timer.Tick += onTick;
+        timer.Start();
+    }
+
+    /// <summary>
+    /// How long a refusal stays up: long enough to read, short enough that it is not still there
+    /// tomorrow. Six seconds is about two readings of the longest sentence the editor produces.
+    /// </summary>
+    private static readonly TimeSpan TransientMessageTime = TimeSpan.FromSeconds(6);
 
     // ---- scripts and procedures ----------------------------------------------------------------------
 
@@ -1053,10 +1113,10 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
             return true;
         }
 
-        var result = DropPlan.Apply(Editor, Target, payload, zone, zone.X, zone.Y);
+var result = DropPlan.Apply(Editor, Target, payload, zone, zone.X, zone.Y);
         if (!result.Applied && result.Problem is { } problem)
         {
-            Report(problem);
+            ReportProblem(problem);
         }
 
         CancelKeyboardDrag();
@@ -1109,9 +1169,9 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
             return;
         }
 
-        if (result.Problem is { Length: > 0 } problem)
+if (result.Problem is { Length: > 0 } problem)
         {
-            Report(problem);
+            ReportProblem(problem);
         }
     }
 
@@ -1123,10 +1183,10 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
             return;
         }
 
-        var result = Editor.Execute(command);
+var result = Editor.Execute(command);
         if (!result.Applied && result.Problem is { } problem)
         {
-            Report(problem);
+            ReportProblem(problem);
         }
         else
         {

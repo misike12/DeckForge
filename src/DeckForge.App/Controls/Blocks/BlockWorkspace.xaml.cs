@@ -205,34 +205,16 @@ public partial class BlockWorkspace : UserControl
     /// tiles already paid for their own measurement to be drawn. The transform is taken to the surface
     /// rather than to the window, so the canvas's own pan and zoom do not leak into the numbers: Core works
     /// in workspace units, and a rect that arrived already scaled would be scaled twice.
+    /// <para>
+    /// This delegates to <see cref="CanvasHitTest.Rects"/>, which is the one walk. It was a second
+    /// implementation of "where is everything", differing from the first in how it measured the origin and
+    /// - worse - in what it put in <c>NotchY</c>: the block's height here, its bottom edge there. Two
+    /// answers to one question is how the minimap and the drop resolver end up disagreeing about the same
+    /// tile, and only the fact that the minimap does not read <c>NotchY</c> has been hiding it.
+    /// </para>
     /// </remarks>
-    public IReadOnlyList<BlockRect> Rects
-    {
-        get
-        {
-            var rects = new List<BlockRect>();
+    public IReadOnlyList<BlockRect> Rects => [.. CanvasHitTest.Rects(Surface).Values];
 
-            foreach (var tile in CanvasHitTest.Tiles(Surface))
-            {
-                if (tile.DataContext is not BlockNodeViewModel node || tile.ActualWidth <= 0)
-                {
-                    continue;
-                }
-
-                var origin = tile.TransformToAncestor(Surface).Transform(new Point(0, 0));
-
-                rects.Add(new BlockRect(
-                    origin.X,
-                    origin.Y,
-                    tile.ActualWidth,
-                    tile.ActualHeight,
-                    tile.ActualHeight,
-                    node.Id));
-            }
-
-            return rects;
-        }
-    }
     /// <summary>
     /// What the user can see, in pixels.
     /// </summary>

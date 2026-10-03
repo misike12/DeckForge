@@ -441,6 +441,34 @@ public sealed class StackLayoutTests
         }
     }
 
+    [Test]
+    public void A_measured_container_height_is_honoured_and_only_ever_lengthens_the_layout()
+    {
+        // The height cache was honoured for leaves and silently ignored for every container, so a C-block
+        // whose label wrapped was laid out one header tall while the tile beside it was taller - and both
+        // the drop resolver and the SVG export draw the layout's answer rather than the screen's.
+        var script = Script(
+            Stack("control.repeat", body: body => body.Add(Stack("control.wait"))));
+
+        var estimated = StackLayout.Layout(script);
+        var container = script.Body.Single(block => BlockCatalog.Find(block.Kind)?.Shape is BlockShape.C).Id;
+        var wanted = estimated[container].Height + 30;
+
+        var measured = StackLayout.Layout(
+            script,
+            heightOf: new Dictionary<string, double>(StringComparer.Ordinal) { [container] = wanted });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(measured[container].Height, Is.EqualTo(wanted).Within(0.001),
+                "a caller's measured height is what the container occupies");
+            Assert.That(measured[container].NotchY, Is.EqualTo(measured[container].Y + wanted).Within(0.001),
+                "and the notch stays its bottom edge, which is what the gap candidates are measured from");
+            Assert.That(estimated[container].Height, Is.LessThan(wanted),
+                "the estimate really was shorter, or this test proves nothing");
+        });
+    }
+
     private static Block Stack(
         string kind,
         Action<Block>? configure = null,

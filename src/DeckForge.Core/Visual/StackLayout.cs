@@ -161,6 +161,12 @@ public static class StackLayout
         {
             case BlockShape.C or BlockShape.CIf or BlockShape.CChain:
             {
+                // The cache is honoured for containers too, as a floor on the total rather than as the
+                // header's height: what a caller with a real tile cache holds for a container is the whole
+                // tile, and using it as the header would count the body twice. It used to be ignored for
+                // every container, so a C-block whose label wrapped was laid out one header tall while the
+                // tile beside it was taller - and the drop resolver and the SVG export both draw the
+                // layout's answer rather than the screen's.
                 rects[block.Id] = new BlockRect(x, y, WidthOf(descriptor, zoom, fontScale), labelHeight, y + labelHeight);
                 var innerY = y + labelHeight;
                 var indent = x + BlockMetrics.BodyIndent * zoom;
@@ -186,8 +192,17 @@ public static class StackLayout
                     bodyBottom = Math.Max(bodyBottom + BlockMetrics.MinTileHeight * zoom, statementY);
                 }
 
-                rects[block.Id] = rects[block.Id] with { Height = bodyBottom - y, NotchY = bodyBottom };
-                return bodyBottom;
+                // Only ever a floor. A container measured shorter than its contents - a cache from an
+                // earlier layout, a stale one, a tile that has not been re-measured since the label changed
+                // - must not pull the next statement up over its own body.
+                var total = bodyBottom - y;
+                if (heightOf is not null && heightOf.TryGetValue(block.Id, out var measured) && measured > total)
+                {
+                    total = measured;
+                }
+
+                rects[block.Id] = rects[block.Id] with { Height = total, NotchY = y + total };
+                return y + total;
             }
 
             default:

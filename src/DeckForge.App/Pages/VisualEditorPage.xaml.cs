@@ -323,6 +323,18 @@ AddHandler(
             Panel(130, 120);
             Panel(230, 180);
             Panel(250, 200);
+
+            // A trailing star column, which the narrow layout did not have. Every element that spans the
+            // grid - the header row, the canvas, the stage - spans the *columns*, and three fixed columns
+            // add up to six hundred and ten pixels. In a viewport over nine hundred wide, that left three
+            // hundred pixels of dead space down the right of the editor and squeezed the header's text
+            // column to ninety-six, so its sentences trimmed to "Drag blocks...". The star column costs
+            // the fixed panels nothing: it simply absorbs what is left.
+            Layout.ColumnDefinitions.Add(new ColumnDefinition
+            {
+                Width = new GridLength(1, GridUnitType.Star),
+                MinWidth = 0,
+            });
         }
 
         Place(HeaderRow, 0, 0, Layout.ColumnDefinitions.Count);
@@ -339,7 +351,12 @@ AddHandler(
         {
             Place(RailPanel, 1, 0);
             Place(PalettePanel, 1, 1);
-            Place(InspectorPanel, 1, 2);
+
+            // The inspector takes the trailing star column as well. It is the one panel of the three whose
+            // content - raw expressions, and a diagnostics list that runs long - gets narrower rather than
+            // taller as the window shrinks, and pinned to its fixed column it left a third of a wide
+            // window empty beside it.
+            Place(InspectorPanel, 1, 2, 2);
             Place(CanvasPanel, 2, 0, Layout.ColumnDefinitions.Count);
             Place(StagePanel, 3, 0, Layout.ColumnDefinitions.Count);
         }
