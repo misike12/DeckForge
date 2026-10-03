@@ -392,9 +392,15 @@ public static class CapabilityDefinitions
             MemberTemplate = """
                 // One IConfigFlow per setup session; the host calls CreateConfigFlow() each time.
                 // SubmitAsync's stepId is a plain string and the user can go back, so dispatch on it
-                // rather than tracking a position. The flow below completes immediately, which is a
-                // valid answer - it is what a capability-only plugin should return until a real
+                // rather than tracking a position. The flow below completes immediately, which is
+                // a valid answer - it is what a capability-only plugin should return until a real
                 // setup flow is added from the Setup Flow editor.
+                //
+                // Block bodies rather than expression bodies, and that is for the Visual editor: a
+                // config-flow target is spliced into the braces of the method its anchor names, and an
+                // expression-bodied method has none. The stock member was rewritten instead of
+                // special-cased for it, because a second splicing path for one target kind is
+                // exactly what Part 8.5 asks not to happen.
                 public IConfigFlow CreateConfigFlow() => new SetupFlow();
 
                 private sealed class SetupFlow : IConfigFlow
@@ -402,17 +408,20 @@ public static class CapabilityDefinitions
                     public Task<ConfigFlowResult> StartAsync(
                         IConfigFlowContext context,
                         CancellationToken cancellationToken)
-                        => Task.FromResult(ConfigFlowResult.Complete("Setup complete."));
+                    {
+                        return Task.FromResult(ConfigFlowResult.Complete("Setup complete."));
+                    }
 
                     public Task<ConfigFlowResult> SubmitAsync(
                         string stepId,
                         IReadOnlyDictionary<string, object?> input,
                         IConfigFlowContext context,
                         CancellationToken cancellationToken)
-                        => Task.FromResult(ConfigFlowResult.Complete("Setup complete."));
+                    {
+                        return Task.FromResult(ConfigFlowResult.Complete("Setup complete."));
+                    }
                 }
-                """,
-            NextStep = "Add a setup flow from the Setup Flow editor, then return it here.",
+                """,NextStep = "Add a setup flow from the Setup Flow editor, then return it here.",
         },
 
         new()

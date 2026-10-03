@@ -2,6 +2,7 @@ using DeckForge.Core.Blocks;
 using DeckForge.Core.Capabilities;
 using DeckForge.Core.Visual;
 using DeckForge.Core.Visual.Migrations;
+using DeckForge.CodeGen.Generation;
 using NUnit.Framework;
 using Wpf.Ui.Controls;
 
@@ -182,12 +183,43 @@ public sealed class BlockCatalogTests
                 hats.Where(hat => hat.Bodies is { Count: > 0 }).Select(hat => hat.Kind),
                 Is.Empty,
                 "A hat wraps a body, which would put instructions above the event.");
+            // Every hat has to name a target kind that can actually be written. The list is a map rather
+            // than a set of excuses, because a hat nobody can place is worse than no hat: it draws in the
+            // palette, it validates, and the save then refuses.
+            var placeable = new Dictionary<string, (TargetKind Kind, string AnchorId)>(StringComparer.Ordinal)
+            {
+                ["hat.action-runs"] = (TargetKind.Action, "ExecuteAsync"),
+                ["hat.script-starts"] = (TargetKind.Action, "ExecuteAsync"),
+                ["hat.widget-event"] = (TargetKind.WidgetHandler, "press"),
+                ["hat.config-flow-step"] = (TargetKind.ConfigFlowHook, "StartAsync"),
+                ["hat.plugin-initializes"] = (TargetKind.Lifecycle, "InitializeAsync"),
+                ["hat.plugin-shuts-down"] = (TargetKind.Lifecycle, "ShutdownAsync"),
+            };
+
+            // A procedure's hat declares rather than triggers: it is hoisted into whichever regions
+            // call it, and there is no anchor for it because nothing splices it into a method.
+            var declarations = hats.Where(hat => hat.Kind.StartsWith("proc.define", StringComparison.Ordinal));
+
             Assert.That(
-                hats.Where(hat => hat.Kind is not ("hat.action-runs" or "hat.script-starts")
-                    && !hat.Kind.StartsWith("proc.define", StringComparison.Ordinal))
-                    .Select(hat => hat.Kind),
+                declarations.Select(hat => hat.Kind),
+                Is.EquivalentTo(new[] { "proc.define", "proc.define-returning" }),
+                "the declaring hats, and only those, are hats with no target");
+
+            Assert.That(
+                hats.Where(hat => !placeable.ContainsKey(hat.Kind))
+                    .Select(hat => hat.Kind)
+                    .Where(kind => !kind.StartsWith("proc.define", StringComparison.Ordinal)),
                 Is.Empty,
-                "A hat that neither starts an action nor defines a procedure is not implementable yet.");
+                "A hat that no target kind can write is not implementable yet.");
+
+            foreach (var hat in hats.Where(hat => placeable.ContainsKey(hat.Kind)))
+            {
+                var (kind, anchorId) = placeable[hat.Kind];
+                Assert.That(
+                    VisualTargetWriter.AnchorFor(new VisualTarget { Kind = kind, AnchorId = anchorId }),
+                    Is.Not.Null,
+                    $"{hat.Kind} claims a {kind} target, and that target has no anchor to be written into");
+            }
         });
     }
 
@@ -525,7 +557,7 @@ public sealed class BlockCatalogTests
 
     // ---- the palette --------------------------------------------------------------------------------
 
-    [TestCase(BlockCategory.Control, 24)]
+    [TestCase(BlockCategory.Control, 28)]
     [TestCase(BlockCategory.Deck, 13)]
     [TestCase(BlockCategory.Ui, 15)]
     [TestCase(BlockCategory.Media, 0)]
@@ -549,7 +581,7 @@ public sealed class BlockCatalogTests
     [Test]
     public void The_palette_is_the_size_the_design_says()
     {
-        Assert.That(BlockCatalog.Blocks, Has.Count.EqualTo(156));
+        Assert.That(BlockCatalog.Blocks, Has.Count.EqualTo(160));
         Assert.That(BlockCatalog.All.Count(block => !block.IsPaletteBlock), Is.EqualTo(1),
             "one placeholder, which is the migration's record of an unknown statement");
     }

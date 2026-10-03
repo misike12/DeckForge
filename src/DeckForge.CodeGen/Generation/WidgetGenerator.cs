@@ -596,16 +596,29 @@ public static class WidgetGenerator
     private static string RenderHandler(DesignedEvent handler, int indent)
     {
         var name = CSharpCode.StringLiteral(handler.Name);
+        var pad = new string(' ', indent * 4);
         var body = string.IsNullOrWhiteSpace(handler.Body)
-            ? "_ = 0; // TODO: react to the event."
-            : handler.Body.Trim();
+            ? new[] { "// TODO: react to the event.", "_ = 0;" }
+            : handler.Body.Trim().Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+
+        // Multi-line, always. Rendered onto one line - `On("press", () => { <body> })` - a body that
+        // contains a `//` comment swallows the closing brace, so the generated provider does not
+        // compile, and nothing in this project builds a generated widget provider by default, so it
+        // shipped that way. It also left nowhere for a comment *about* the handler to go, and nowhere
+        // for the Visual editor to write blocks: a target spliced into a one-line lambda gets its
+        // statements after the lambda has already been closed.
+        var lines = body.Select(line => pad + "    " + line.TrimEnd());
 
         if (handler.IsAsync)
         {
-            return $"UiEventHandler.OnAsync({name}, _ => {{ {body} return Task.CompletedTask; }})";
+            return $"UiEventHandler.OnAsync({name}, _ =>\n{pad}    {{\n"
+                + string.Join("\n", lines)
+                + $"\n{pad}        return Task.CompletedTask;\n{pad}    }})";
         }
 
-        return $"UiEventHandler.On({name}, () => {{ {body} }})";
+        return $"UiEventHandler.On({name}, () =>\n{pad}    {{\n"
+            + string.Join("\n", lines)
+            + $"\n{pad}    }})";
     }
 
     private static string RenderDefaultData(WidgetDesign design)

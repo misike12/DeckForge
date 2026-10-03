@@ -386,7 +386,17 @@ public static partial class BlockCompiler
             // The whitespace in front of the marker goes with it. Leaving it and indenting the
             // replacement on top of it grew the first line of the region by one level on every save,
             // without bound - save twice and the file was no longer the file the first save produced.
+            //
+            // "With it" means the region marker *and* the newline in front of it. Taking the marker only
+            // left the carriage return of a CRLF file on its own line, so a second save indented that
+            // stray line and the region walked one level deeper than the first save had put it - the same
+            // unbounded drift, one character at a time and only on Windows line endings.
             var start = LineStartOf(source, begin);
+            if (start > 0 && source[start - 1] == '\n' && start - 2 >= 0 && source[start - 2] == '\r')
+            {
+                start--;
+            }
+
             var after = end + EndMarker.Length;
             var lineEnd = source.IndexOf('\n', after);
             source = source.Remove(start, (lineEnd < 0 ? after : lineEnd + 1) - start);
@@ -417,6 +427,15 @@ public static partial class BlockCompiler
         // The closing line has to line up with the method signature, in the file's own style.
         var closingIndent = LineIndentOf(source, anchorIndex) + (tabbed ? "\t" : new string(' ', indent));
 
+        var braceLine = LineIndentOf(source, open);
+
+        // Whether the opening and closing braces share a line. Asked as "is there a newline between
+        // them" rather than by comparing against a computed line end, because a CRLF file's line end is
+        // two characters past the `\r` and the closing brace sits *before* it - comparing indices made
+        // this false on exactly the line endings Windows files have.
+        var braceLineEnd = source.IndexOf('\n', open);
+        var isSingleLineBrace = braceLineEnd < 0 || braceLineEnd >= close;
+
         // Where in the body the region goes: after everything that is already there, but before the
         // method's own final return.
         //
@@ -426,8 +445,43 @@ public static partial class BlockCompiler
         // canvas that returns decides the result, and a canvas that does not fall through to whatever
         // the action already did.
         var insertAt = LastTopLevelReturn(source, open, close) ?? close;
+        var indentation = tabbed ? "\t" : new string(' ', indent);
+
+        // A body whose opening brace is also its closing brace has nowhere to put a statement. That is
+        // not a widget handler and a lifecycle hook written slightly differently; it is the stock
+        // template's `ShutdownAsync() => Task.CompletedTask;` expanded to a block with an empty body.
+        //
+        // The first version of this inserted after the opening brace, which closed the empty block and
+        // left the region's statements as siblings *after* the method - inside the class, after a method
+        // whose signature has no body. It still compiled if the blocks happened to be statements a class
+        // member list accepts, and produced a file no user could read. So the empty-body case opens the
+        // block up instead.
+        if (isSingleLineBrace && insertAt == close)
+        {
+            var opened = source.Insert(close, nl + braceLine + indentation);
+            var newClose = close + (nl + braceLine + indentation).Length;
+
+            return opened.Insert(newClose, nl + braceLine);
+        }
+
         var insertion = nl + Apply(compiled).TrimEnd() + nl + LineIndentOf(source, anchorIndex);
-        return source.Insert(insertAt, insertion + (insertAt == close ? closingIndent : string.Empty));
+
+        if (insertAt != close)
+        {
+            return source.Insert(insertAt, insertion);
+        }
+
+        // Appending the closing brace's indent to what is already in front of the brace indents it twice,
+        // and then again on every save after that: the region was right on the first save and one level
+        // deeper on the second, which is the drift this method is supposed to have outgrown. So the line
+        // is rebuilt instead - its own indentation is replaced by the signature's, rather than added to.
+        var closeLineStart = LineStartOf(source, close);
+        return source[..closeLineStart]
+            + LineIndentOf(source, anchorIndex)
+            + Apply(compiled).TrimEnd()
+            + nl
+            + LineIndentOf(source, anchorIndex)
+            + source[close..];
     }
 
     /// <summary>
@@ -515,6 +569,25 @@ public static partial class BlockCompiler
     /// <summary>The index of the first character of the line containing <paramref name="index"/>.</summary>
     private static int LineStartOf(string source, int index) =>
         source.LastIndexOf('\n', Math.Clamp(index, 0, Math.Max(source.Length - 1, 0))) + 1;
+
+    /// <summary>
+    /// The index of the end of the line containing <paramref name="index"/>, counting the line break.
+    /// </summary>
+    /// <remarks>
+    /// The newline is included, and it is the character *it* is that matters: a CRLF file's lines end
+    /// with two characters, so an insertion built for the LF case leaves a stray carriage return in the
+    /// middle of a line and every later comparison of that file is off by one.
+    /// </remarks>
+    private static int LineEndOf(string source, int index)
+    {
+        var nl = source.IndexOf('\n', Math.Clamp(index, 0, Math.Max(source.Length - 1, 0)));
+        if (nl < 0)
+        {
+            return source.Length;
+        }
+
+        return nl + 1;
+    }
 
     /// <summary>
     /// The leading whitespace of the line containing <paramref name="index"/>.

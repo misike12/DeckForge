@@ -271,10 +271,16 @@ public static partial class BlockCatalog
         string? docs = null) =>
         new(kind, category, label, summary, BlockShape.Cap, sdk, slots, menus, null, null, docs);
 
+    /// <param name="menus">
+    /// Dropdowns. Only Phase 9's target hats have one: an event name and a config-flow hook are chosen
+    /// from a fixed set rather than typed, because the writer has to be able to find the method each
+    /// names, and a free-text event name would be a name nothing can resolve.
+    /// </param>
     private static BlockDescriptor Hat(
         string kind, BlockCategory category, string label, string summary, string verifiedAgainst,
-        IReadOnlyList<SlotDescriptor>? slots = null) =>
-        new(kind, category, label, summary, BlockShape.Hat, Plain(string.Empty, verifiedAgainst), slots);
+        IReadOnlyList<SlotDescriptor>? slots = null,
+        IReadOnlyList<MenuDescriptor>? menus = null) =>
+        new(kind, category, label, summary, BlockShape.Hat, Plain(string.Empty, verifiedAgainst), slots, menus);
 
     private static BlockDescriptor Container(
         string kind, BlockCategory category, string label, string summary, SdkMapping sdk,

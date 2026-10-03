@@ -25,6 +25,29 @@ public static partial class BlockCatalog
             "A script that nothing but a call reaches.",
             "plain C# (reached only by call)"),
 
+        // Phase 9's targets. Each hat is the trigger its target's anchor already names, so a target
+        // whose id does not match the hat has nowhere to be written and the writer says so rather than
+        // guessing - a hat that does not correspond to a real method would emit into someone else's body.
+        Hat("hat.widget-event", BlockCategory.Control, "when widget {event}",
+            "A widget node's designed event. The blocks are written into that node's handler, which is why "
+            + "the event is a dropdown and not a typed name: the writer has to find the method.",
+            "UiEventHandler.On / OnAsync",
+            menus:
+            [
+                Menu("event", "press", ["press", "long-press", "change", "double-tap", "click"], "event"),
+            ]),
+        Hat("hat.config-flow-step", BlockCategory.Control, "when setup flow {step}",
+            "A setup flow's own hooks, as an IConfigFlow serves them.",
+            "IConfigFlow.StartAsync / SubmitAsync",
+            menus: [Menu("step", "StartAsync", ["StartAsync", "SubmitAsync"], "step")]),
+        Hat("hat.plugin-initializes", BlockCategory.Control, "when plugin initializes",
+            "The integration's InitializeAsync: once the session is established, and again after a "
+            + "non-resume reconnect, so it has to be safe to run again.",
+            "IIntegration.InitializeAsync"),
+        Hat("hat.plugin-shuts-down", BlockCategory.Control, "when plugin shuts down",
+            "The integration's ShutdownAsync: where a subscription started at initialize is disposed.",
+            "IIntegration.ShutdownAsync"),
+
         Stack("control.wait-seconds", BlockCategory.Control, "wait {seconds} seconds",
             "Pauses, honouring cancellation.", Plain("await Task.Delay((int)(VisualRuntime.ToNumber(seconds) * 1000), context.CancellationToken);"),
             [Num("seconds", def: "1")]),
