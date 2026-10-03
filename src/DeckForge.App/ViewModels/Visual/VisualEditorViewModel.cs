@@ -85,8 +85,28 @@ Editor = new DocumentEditor(Document);
     /// Settable and nullable rather than built here, because the view model needs the workspace *control*
     /// as its host and the control cannot reach a view model that does not exist yet. The page creates it on
     /// first use, which is also why the canvas panel's bindings are null until it does.
+    /// <para>
+    /// A backing field and a notification rather than an auto-property, because the minimap binds to this
+    /// and a silent assignment leaves it bound to nothing: the page then draws rectangles into a view model
+    /// nothing is showing, and the thumbnail says the canvas is empty over a canvas full of blocks.
+    /// </para>
     /// </remarks>
-    public CanvasViewModel? Canvas { get; set; }
+    public CanvasViewModel? Canvas
+    {
+        get => _canvas;
+        set
+        {
+            if (ReferenceEquals(_canvas, value))
+            {
+                return;
+            }
+
+            _canvas = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private CanvasViewModel? _canvas;
 
     /// <summary>
     /// The stage: the simulated host, the interpreter and everything they show.

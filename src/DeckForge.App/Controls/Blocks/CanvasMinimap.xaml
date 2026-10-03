@@ -24,7 +24,13 @@
     <Border CornerRadius="8" Padding="6"
             Background="{DynamicResource Liquid.AcrylicBrush}"
             BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
-        <Grid Width="240" Height="150">
+        <!--
+            Clipped, and it has to be. A Canvas does not clip its own children, so a rectangle placed
+            outside the 240 by 150 box paints straight over the canvas next to it - which is what driving
+            the window showed: the map's own blocks, drawn in full size across half the editor, with the
+            map itself empty. The map is the box; anything outside the box is not part of it.
+        -->
+        <Grid Width="240" Height="150" ClipToBounds="True">
             <Canvas x:Name="Map" Background="Transparent" MouseLeftButtonDown="Map_Click" />
 
             <TextBlock Text="Nothing on the canvas yet"

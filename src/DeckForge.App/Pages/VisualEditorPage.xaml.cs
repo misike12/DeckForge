@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using System.Windows.Input;
 using DeckForge.App.Services;
 using DeckForge.App.ViewModels.Visual;
@@ -80,8 +81,35 @@ AddHandler(
             Minimap.Draw();
         };
         Controls.Blocks.BlockWorkspace.PanEnd += (_, _) => Workspace.EndPan();
-        SizeChanged += (_, args) => ApplyLayout(args.NewSize.Width);
+
+        // The surface has a size before the page does, and Core's minimap cannot scale anything without
+        // one. Subscribing to the workspace rather than polling is what makes the thumbnail right the first
+        // time the page opens rather than after the first edit.
+        Workspace.ViewportChanged += () =>
+        {
+            Canvas.Refresh();
+            Minimap.Draw();
+        };
+
+        SizeChanged += (_, args) => OnPageResized(args.NewSize.Width);
         ApplyLayout(ActualWidth);
+    }
+
+    /// <summary>
+    /// Re-arranges the panels, then republishes the canvas view and the minimap.
+    /// </summary>
+    /// <remarks>
+    /// The two go together because the minimap's scale is the canvas's viewport: a viewport that has just
+    /// changed size has to be measured before anything can be drawn to scale. Left out of the first cut, and
+    /// the page opened saying "Nothing on the canvas yet" over a canvas full of blocks - which is what
+    /// driving the window found and reading the markup could not, because every number in it is correct and
+    /// only the order the things happen in is wrong.
+    /// </remarks>
+    private void OnPageResized(double width)
+    {
+        ApplyLayout(width);
+        Canvas.Refresh();
+        Minimap.Draw();
     }
 
     /// <summary>
@@ -97,6 +125,26 @@ AddHandler(
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         Workspace.Refresh();
+
+        // The canvas's own view of the document, and then the thumbnail of it - once per rebuild, not once
+        // per notification. A rebuild raises a dozen of them (scripts, columns, diagnostics, dirty state,
+        // undo labels, the file line), and each one used to re-walk the whole visual tree and rebuild the
+        // minimap's rectangles: thirteen full passes to repaint one frame. Deferred to the dispatcher
+        // rather than guarded with a flag, so the pass happens after the layout those notifications asked
+        // for and reads the tiles as they now are.
+        if (!_canvasRepaintQueued)
+        {
+            _canvasRepaintQueued = true;
+
+            Dispatcher.BeginInvoke(
+                () =>
+                {
+                    _canvasRepaintQueued = false;
+                    Canvas.Refresh();
+                    Minimap.Draw();
+                },
+                DispatcherPriority.Background);
+        }
 
         if (args.PropertyName == nameof(ViewModels.Visual.VisualEditorViewModel.SelectedProcedure)
             && _vm.SelectedProcedure is { } procedure)
@@ -583,6 +631,8 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
 
     private ViewModels.Visual.CanvasViewModel? _canvas;
 
+    private bool _canvasRepaintQueued;
+
     /// <summary>
     /// Builds the canvas view model and hands it the workspace as its host.
     /// </summary>
@@ -591,9 +641,16 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
     /// rects and a viewport size, and the workspace supplies all three. Without it the view model would hold
     /// a <c>BlockWorkspace</c>, and every test of the zoom would need a window.
     /// </remarks>
-    private ViewModels.Visual.CanvasViewModel CreateCanvas()
+private ViewModels.Visual.CanvasViewModel CreateCanvas()
     {
         var canvas = new ViewModels.Visual.CanvasViewModel(new WorkspaceHost(Workspace));
+
+        // Cached before the view model is told, and the order is the whole point. Assigning _vm.Canvas
+        // raises a notification that comes straight back here, this handler reads Canvas, and the getter
+        // would build *another* one because _canvas is still null - forever, which is how a stack of 3,000
+        // identical frames gets to be the report. Found by driving the window: the page simply never came
+        // up, and the crash named a tree walk that was only the last thing the runaway loop touched.
+        _canvas = canvas;
         _vm.Canvas = canvas;
 
         return canvas;

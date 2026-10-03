@@ -210,24 +210,57 @@ internal static class CanvasHitTest
         element.ActualWidth > 0 && element.ActualHeight > 0 && element.IsVisible && root.IsAncestorOf(element);
 
     /// <summary>Every element of a type below the root, in visual order.</summary>
+    /// <remarks>
+    /// <para>
+    /// An explicit stack rather than recursion, because a nested iterator per node costs two stack frames
+    /// per element of the tree and this is the one walk every refresh makes. A canvas holding a few hundred
+    /// blocks puts tens of thousands of frames under it - the walk is depth-first through data templates,
+    /// and a block with a nested body is four or five elements deep - and a stack overflow in the middle of
+    /// a redraw is not a failure anything can report usefully.
+    /// </para>
+    /// <para>
+    /// Visited by reference, so an element that reports itself as its own descendant costs one visit rather
+    /// than the rest of the walk. It should not happen; a WPF tree that does it is still a tree somebody
+    /// has to be able to walk.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<T> DescendantsOf<T>(DependencyObject root)
         where T : DependencyObject
     {
-        var count = VisualTreeHelper.GetChildrenCount(root);
-
-        for (var i = 0; i < count; i++)
+        var pending = new Stack<(DependencyObject Node, int Index)>();
+        var seen = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance)
         {
-            var child = VisualTreeHelper.GetChild(root, i);
+            root,
+        };
+
+        pending.Push((root, 0));
+
+        while (pending.Count > 0)
+        {
+            var (node, index) = pending.Pop();
+
+            if (index >= VisualTreeHelper.GetChildrenCount(node))
+            {
+                continue;
+            }
+
+            var child = VisualTreeHelper.GetChild(node, index);
+
+            if (!seen.Add(child))
+            {
+                continue;
+            }
+
+            // Re-pushed with the next index so the walk comes back to this node's remaining children
+            // after the child's own subtree, which is what makes the order depth-first.
+            pending.Push((node, index + 1));
 
             if (child is T match)
             {
                 yield return match;
             }
 
-            foreach (var nested in DescendantsOf<T>(child))
-            {
-                yield return nested;
-            }
+            pending.Push((child, 0));
         }
     }
 }

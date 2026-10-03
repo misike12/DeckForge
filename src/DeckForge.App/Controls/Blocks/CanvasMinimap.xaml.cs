@@ -9,6 +9,19 @@ using DeckForge.Core.Visual;
 namespace DeckForge.App.Controls.Blocks;
 
 /// <summary>
+/// Carries the view a click on the minimap asked for.
+/// </summary>
+/// <remarks>
+/// A typed delegate and not <see cref="RoutedEventHandler"/>, and that is the whole point of this type.
+/// A plain <c>RoutedEventHandler</c> can only carry <see cref="RoutedEventArgs"/>, so XAML wiring it to a
+/// handler that wants the view fails at parse time with "signature is not compatible with that of the
+/// delegate type" - which is not a compile error, is not caught by the build, and took the whole Visual
+/// page down at load with the shell quietly recovering to Home. A custom delegate is what lets the handler
+/// ask for the view it actually needs.
+/// </remarks>
+public delegate void MinimapViewRequestedEventHandler(object sender, ViewRequestedEventArgs e);
+
+/// <summary>
 /// The minimap control: draws Core's rectangles and takes a click back to a view.
 /// </summary>
 /// <remarks>
@@ -19,7 +32,7 @@ namespace DeckForge.App.Controls.Blocks;
 /// </para>
 /// <para>
 /// The click is turned into a view by asking Core for the inverse of the mapping it just used, rather than
-/// by inverting the mapping again here — which is the mistake that makes a minimap scroll to somewhere
+/// by inverting the mapping again here - which is the mistake that makes a minimap scroll to somewhere
 /// slightly wrong and nobody can say why.
 /// </para>
 /// </remarks>
@@ -29,11 +42,11 @@ public partial class CanvasMinimap : UserControl
     public static readonly RoutedEvent ViewRequestedEvent = EventManager.RegisterRoutedEvent(
         "ViewRequested",
         RoutingStrategy.Bubble,
-        typeof(RoutedEventHandler),
+        typeof(MinimapViewRequestedEventHandler),
         typeof(CanvasMinimap));
 
     /// <summary>Raised when the user clicks the map, carrying the view they asked for.</summary>
-    public event RoutedEventHandler? ViewRequested
+    public event MinimapViewRequestedEventHandler? ViewRequested
     {
         add => AddHandler(ViewRequestedEvent, value);
         remove => RemoveHandler(ViewRequestedEvent, value);

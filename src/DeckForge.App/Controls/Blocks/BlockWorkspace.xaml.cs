@@ -54,7 +54,44 @@ public partial class BlockWorkspace : UserControl
         // Abandoning a drag is detected by the pointer leaving, or by Escape, both of which are gestures
         // rather than consequences of WPF's own bookkeeping.
         Surface.LostMouseCapture += (_, _) => _scroll?.Stop();
+
+        // The viewport's own size changing is the one measurement the minimap cannot do without: Core
+        // scales the whole document into 240 by 150, so a viewport that has not been measured yet produces
+        // no rectangles at all - and the page's first SizeChanged arrives before the surface has a size,
+        // so nothing else would ever ask again. Driving the window found this as a thumbnail reading
+        // "Nothing on the canvas yet" over a canvas full of blocks.
+        //
+        // Only on a size that actually changed: WPF raises SizeChanged more than once per layout pass, and
+        // the subscriber redraws the minimap, which changes the minimap's layout, which raises SizeChanged
+        // again. Left unguarded that is a feedback loop, and it ends in a stack overflow inside the visual
+        // tree walk rather than in anything that names the cause.
+        Surface.SizeChanged += (_, args) =>
+        {
+            var width = args.NewSize.Width;
+            var height = args.NewSize.Height;
+
+            if (Math.Abs(width - _viewportWidth) < 0.5 && Math.Abs(height - _viewportHeight) < 0.5)
+            {
+                return;
+            }
+
+            _viewportWidth = width;
+            _viewportHeight = height;
+            ViewportChanged?.Invoke();
+        };
     }
+
+    private double _viewportWidth;
+    private double _viewportHeight;
+
+    /// <summary>
+    /// Raised when the canvas viewport's size changed, for anything that scales against it.
+    /// </summary>
+    /// <remarks>
+    /// The same compromise as the static zoom and pan events, and for the same reason: a control cannot
+    /// hold a reference to a view model that does not exist yet, and the page is what knows which one.
+    /// </remarks>
+    public event Action? ViewportChanged;
 
     /// <summary>
     /// Wires a drag controller up when the page's view model arrives.
