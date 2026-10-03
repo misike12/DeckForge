@@ -38,4 +38,48 @@ public static class BlockTheme
     /// </remarks>
     public static bool IsKnown(BlockCategory category) =>
         BlockCatalog.Categories.Any(descriptor => descriptor.Category == category);
+
+    /// <summary>
+    /// The contrast the application is drawing at.
+    /// </summary>
+    /// <remarks>
+    /// Asked of the *system* rather than of a settings page, because §9.8 says "when the system asks" and a
+    /// user who has set the OS to high contrast has already answered the question. It is read once and
+    /// cached, because it changes only when the user restarts the application in practice, and a theme
+    /// property that raises a notification per tile would re-render the whole canvas to say nothing new.
+    /// </remarks>
+    public static ContrastLevel Contrast { get; private set; } = ReadSystemContrast();
+
+    /// <summary>
+    /// Re-reads the system's contrast preference.
+    /// </summary>
+    /// <remarks>
+    /// Called once at startup and available for a settings control to call. <see cref="SystemParameters.HighContrast"/>
+    /// is the WPF answer to "the system asks"; the extra monochrome step is ours, because a user who needs
+    /// more than a stronger outline needs the fills gone, and no system setting offers exactly that.
+    /// </remarks>
+    public static ContrastLevel ReadSystemContrast()
+    {
+        if (MonochromeRequested())
+        {
+            return ContrastLevel.Monochrome;
+        }
+
+        return System.Windows.SystemParameters.HighContrast ? ContrastLevel.Strong : ContrastLevel.Standard;
+    }
+
+    /// <summary>
+    /// Whether the user has asked for no fills at all.
+    /// </summary>
+    /// <remarks>
+    /// Not a system setting, because none exists. It is an environment variable so that it can be set for a
+    /// screenshot run, a bug report and an automated check without a user having to find a hidden switch —
+    /// and so that "what does the monochrome canvas look like" has an answer that is not "change the OS".
+    /// </remarks>
+    private static bool MonochromeRequested() =>
+        Environment.GetEnvironmentVariable("DECKFORGE_BLOCK_MONOCHROME") is "1" or "true";
+
+    /// <summary>How thick a block's outline is drawn at this contrast.</summary>
+    public static double StrokeThicknessFor(BlockCategory category) =>
+        BlockContrast.StrokeWidthFor(Contrast);
 }
