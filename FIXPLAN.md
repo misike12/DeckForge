@@ -215,3 +215,37 @@ the same reason, and the palette's right-click is not built at all (Part 18.5 do
 - Photograph a WPF `Popup`. `ContextMenu` renders into a separate top-level window, so the window-DC
   capture cannot see one even when it is open; only a full-desktop capture can, and that one is too wide
   to read without knowing where the window landed.
+## The crash the user hit, and what it was
+
+`crash.log`, 44 entries, latest 2026-10-04 18:18:35:
+
+```
+System.Windows.Markup.XamlParseException: A TwoWay or OneWayToSource binding cannot
+work on the read-only property 'Selected' of type 'DeckForge.App.ViewModels.Visual.MenuEditor'.
+```
+
+Selecting any block with a dropdown took the application down. `ComboBox.SelectedItem` binds
+TwoWay by default; the inspector's menu row bound it to `MenuEditor.Selected`, which is computed
+from the block (`SlotValue.ReadMenu`) and had no setter. WPF throws while the *template loads*,
+so the crash happened on layout rather than on the selection that caused it.
+
+**It was never working.** `git log -S` puts the binding and the read-only property in the same
+commit, `34ccb83` "Edit a block's fields, and see the code it makes" - the commit that introduced
+the inspector's editors. The dropdown has been inert since the day it was written, and the day
+became a crash the first time somebody selected a block that has one.
+
+**The smaller half.** Adding a setter stops the crash and would have left a combo box that shows
+the current option and cannot change it. The setter routes through the existing guarded `Choose`,
+so the write is the same one an explicit choose performs: refused unless the option is one the
+menu declares, applied as one undoable `EditField`. `Selected` still caches nothing in either
+direction - the getter reads the block every time, so undo and rebuild cannot leave the row
+showing a value the document does not have.
+
+**What no test can catch, and why.** A read-only property under an implicit two-way binding is a
+crash, so it is only ever found by running the window. A guard would have to resolve each binding
+against the App assembly, and the test project may not reference the App - which is the right rule
+and the reason this class of defect stays manual. There are **35 more bindings** in the App's XAML
+that lean on the same implicit mode (`IsChecked="{Binding ...}"`, `SelectedItem="{Binding ...}"`
+without `Mode=`). Every one checked has a setter, so none is presently a crash; none is guarded
+either. The honest recommendation is a sweep that makes each of them state its mode, which is
+mechanical and about an hour, and this entry is the argument for doing it.

@@ -673,8 +673,41 @@ public sealed partial class MenuEditor : ObservableObject
     /// <summary>The options, in the order the catalogue lists them.</summary>
     public IReadOnlyList<string> Options => Model.Options;
 
-    /// <summary>The chosen option, read from the block rather than cached.</summary>
-    public string Selected => SlotValue.ReadMenu(_block.Block, Model.Descriptor);
+    /// <summary>
+    /// The chosen option, read from the block rather than cached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Settable, and the setter does nothing but call <see cref="Choose"/>. That looks like a way to make
+    /// the crash go away - and it did - but the crash was the smaller half of the defect.
+    /// </para>
+    /// <para>
+    /// The inspector's markup binds this from a <c>ComboBox</c>, and <c>SelectedItem</c>'s default mode is
+    /// <c>TwoWay</c>. A read-only property under a two-way binding throws while the template loads, so
+    /// selecting any block with a dropdown - "when widget press", "set volume" - took the application down
+    /// with <c>XamlParseException: A TwoWay or OneWayToSource binding cannot work on the read-only
+    /// property 'Selected'</c>. Had the binding been <c>OneWay</c> the crash would have gone and the
+    /// dropdown would have been inert instead: a combo box that displays the current option and cannot
+    /// change it. Routing the write through the guarded <see cref="Choose"/> is what makes it a control
+    /// rather than a label that looks like one.
+    /// </para>
+    /// <para>
+    /// Nothing is cached here in either direction. The getter reads the block every time, so an undo, a
+    /// rebuild or a peer changing the field cannot leave the row showing a value the document does not
+    /// have; and the setter writes through the same guarded command an explicit choose would.
+    /// </para>
+    /// </remarks>
+    public string Selected
+    {
+        get => SlotValue.ReadMenu(_block.Block, Model.Descriptor);
+        set
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                Choose(value);
+            }
+        }
+    }
 
     /// <summary>Chooses an option.</summary>
     [RelayCommand]
