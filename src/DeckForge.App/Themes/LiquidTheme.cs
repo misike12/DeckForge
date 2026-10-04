@@ -210,9 +210,13 @@ public static class LiquidTheme
 
         foreach (var category in Core.Visual.BlockCatalog.Categories)
         {
-            var hue = ParseHue(category.Hue);
-            var top = isDark ? Darken(hue, 0.30f) : Lighten(hue, 0.52f);
-            var bottom = isDark ? Darken(hue, 0.48f) : Lighten(hue, 0.28f);
+            // The colours come from Core, not from here. They used to be computed in this loop, which
+            // meant the label contrast §28.2 asks for could be looked at and never measured: the numbers
+            // were behind WPF colour structs. Core computes them, this converts them, and
+            // `BlockThemePaletteTests` measures the same values that reach these brushes.
+            var tokens = Core.Visual.BlockThemePalette.For(category.Category, isDark);
+            var top = ParseHue(tokens.FillTop);
+            var bottom = ParseHue(tokens.FillBottom);
 
             var fill = new LinearGradientBrush
             {
@@ -225,9 +229,8 @@ public static class LiquidTheme
 
             var suffix = category.Category.ToString();
             Set($"Liquid.BlockFill.{suffix}", fill);
-            Set($"Liquid.BlockStroke.{suffix}", new SolidColorBrush(Darken(hue, isDark ? 0.58f : 0.06f)));
-            Set($"Liquid.BlockInk.{suffix}", new SolidColorBrush(
-                isDark ? Color.FromRgb(0xF7, 0xF9, 0xFC) : Color.FromRgb(0x14, 0x16, 0x1C)));
+            Set($"Liquid.BlockStroke.{suffix}", new SolidColorBrush(ParseHue(tokens.Stroke)));
+            Set($"Liquid.BlockInk.{suffix}", new SolidColorBrush(ParseHue(tokens.Ink)));
         }
     }
 
