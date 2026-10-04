@@ -3,6 +3,7 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeckForge.Core.Extensions;
+using DeckForge.Core.Settings;
 
 namespace DeckForge.App.ViewModels;
 
@@ -18,9 +19,9 @@ namespace DeckForge.App.ViewModels;
 public partial class ExtensionsViewModel : ObservableObject
 {
     private readonly ExtensionService _extensions;
-    private readonly Services.SettingsService _settings;
+    private readonly SettingsService _settings;
 
-    public ExtensionsViewModel(ExtensionService extensions, Services.SettingsService settings)
+    public ExtensionsViewModel(ExtensionService extensions, SettingsService settings)
     {
         _extensions = extensions;
         _settings = settings;

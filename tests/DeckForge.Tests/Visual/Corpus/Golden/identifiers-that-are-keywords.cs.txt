@@ -1,0 +1,26 @@
+// ==== golden: identifiers-that-are-keywords ====
+// Covers: Variable, list and procedure names that are C# keywords, and a name that already ends in Async.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task WaitAsync()
+{
+    _logger.Information(VisualRuntime.LogTemplate("a method-shaped name", context.Parameters));
+}
+
+async Task alreadyAsync(object? value)
+{
+    VisualRuntime.Set("value", value);
+    _logger.Information(VisualRuntime.LogTemplate("value", context.Parameters));
+}
+
+async Task with_space_and_1Async()
+{
+    _logger.Information(VisualRuntime.LogTemplate("sanitised", context.Parameters));
+}
+// script: main
+var @class = new List<string>();
+VisualRuntime.Set(VisualRuntime.ToText("int"), 1);
+await WaitAsync();
+await alreadyAsync("1");
+await with_space_and_1Async();

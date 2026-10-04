@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace DeckForge.Core.Visual;
 
 /// <summary>What kind of code artefact a target writes into.</summary>
@@ -207,6 +209,38 @@ public sealed class VisualProject
     public const int CurrentVersion = 1;
 
     public int Version { get; set; } = CurrentVersion;
+
+    /// <summary>
+    /// Whether this document was opened from a file a newer DeckForge wrote, and must never be written
+    /// back.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added when the newer-schema case changed from a refusal to a read-only open (Part 22.1's table
+    /// says "read-only" for a version above this one, and the first implementation only ever said "no").
+    /// The refusal lived in three places — the reader, the load result and the page's Save command — and
+    /// the document itself knew nothing about it, so a caller that had the document and not the load
+    /// result had no way at all to tell the user's file from a fresh canvas.
+    /// </para>
+    /// <para>
+    /// That gap was load-bearing: <see cref="VisualStore.Save"/> could be handed a read-only document and
+    /// would write it, replacing a newer file with an older reading of it. The page's guard was the only
+    /// thing standing between a canvas and that, and a guard in the App is a guard in one caller. The
+    /// marker is on the model so the store can refuse on its own, which is the same reason
+    /// <see cref="BodyRef"/> is ids rather than indices: the thing that must not happen is checkable
+    /// without the caller remembering.
+    /// </para>
+    /// <para>
+    /// Deliberately <em>not</em> written to the sidecar. It describes this session's relationship with a
+    /// file, not the document — a read-only canvas saved elsewhere is an ordinary document — so
+    /// serialising it would produce a file whose own text told a later build it was read-only, and
+    /// <see cref="VisualProjectJson.Serialize"/> would stop being text-stable, which
+    /// <see cref="VisualStore.IsDirty"/> depends on. That is the whole reason this property is
+    /// <see cref="JsonIgnoreAttribute"/>d rather than left as an ordinary field.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public bool ReadOnly { get; set; }
 
     /// <summary>A short id for this document, recorded in the generated region header.</summary>
     public string DocumentId { get; set; } = string.Empty;

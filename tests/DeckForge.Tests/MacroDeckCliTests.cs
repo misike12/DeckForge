@@ -186,58 +186,32 @@ public class MacroDeckCliTests
     [Test]
     public void Keygen_writes_the_filenames_the_adapter_expects()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "deckforge-keygen-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(dir);
-        try
-        {
-            var result = Cli().KeygenAsync(dir, "probe-key").GetAwaiter().GetResult();
-            Assert.That(result.Succeeded, Is.True, result.CombinedOutput);
+        using var temp = new TempDirectory("deckforge-keygen");
+        var dir = temp.Root;
 
-            Assert.Multiple(() =>
-            {
-                Assert.That(File.Exists(MacroDeckCli.KeyPublicPath(dir, "probe-key")), Is.True);
-                Assert.That(File.Exists(MacroDeckCli.KeyPrivatePath(dir, "probe-key")), Is.True);
-            });
+        var result = Cli().KeygenAsync(dir, "probe-key").GetAwaiter().GetResult();
+        Assert.That(result.Succeeded, Is.True, result.CombinedOutput);
 
-            // And the old ".key"/".pem" glob the Ship page used would have found neither.
-            Assert.That(
-                Directory.GetFiles(dir).Any(f => f.EndsWith(".key", StringComparison.OrdinalIgnoreCase)
-                                              || f.EndsWith(".pem", StringComparison.OrdinalIgnoreCase)),
-                Is.False);
-        }
-        finally
+        Assert.Multiple(() =>
         {
-            try
-            {
-                Directory.Delete(dir, recursive: true);
-            }
-            catch (IOException)
-            {
-                // A leftover temp directory is not worth failing a test over.
-            }
-        }
+            Assert.That(File.Exists(MacroDeckCli.KeyPublicPath(dir, "probe-key")), Is.True);
+            Assert.That(File.Exists(MacroDeckCli.KeyPrivatePath(dir, "probe-key")), Is.True);
+        });
+
+        // And the old ".key"/".pem" glob the Ship page used would have found neither.
+        Assert.That(
+            Directory.GetFiles(dir).Any(f => f.EndsWith(".key", StringComparison.OrdinalIgnoreCase)
+                                          || f.EndsWith(".pem", StringComparison.OrdinalIgnoreCase)),
+            Is.False);
     }
 
     [Test]
     public void A_reserved_key_name_is_refused()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "deckforge-keygen-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(dir);
-        try
-        {
-            var result = Cli().KeygenAsync(dir, "macrodeck-root").GetAwaiter().GetResult();
-            Assert.That(result.ExitCode, Is.EqualTo(MacroDeckCli.ExitUsage), result.CombinedOutput);
-        }
-        finally
-        {
-            try
-            {
-                Directory.Delete(dir, recursive: true);
-            }
-            catch (IOException)
-            {
-            }
-        }
+        using var temp = new TempDirectory("deckforge-keygen");
+        var result = Cli().KeygenAsync(temp.Root, "macrodeck-root").GetAwaiter().GetResult();
+
+        Assert.That(result.ExitCode, Is.EqualTo(MacroDeckCli.ExitUsage), result.CombinedOutput);
     }
 
     [Test]

@@ -20,23 +20,19 @@ namespace DeckForge.Tests;
 [TestFixture]
 public sealed class GeneratedLocalizationTests
 {
+    private TempDirectory _temp = null!;
+
     private string _root = "";
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "deckforge-loc-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_root);
+        _temp = new TempDirectory("deckforge-loc");
+        _root = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     /// <summary>
     /// A project directory holding the template's real resx, so the tests check what the
@@ -59,12 +55,12 @@ public sealed class GeneratedLocalizationTests
         return project;
     }
 
-    private static NewProjectOptions Options(string? parent = null, params string[] presets) => new()
+    private NewProjectOptions Options(string? parent = null, params string[] presets) => new()
     {
         PluginName = "Loc",
         PluginId = "com.example.loc",
         Publisher = "Example",
-        ParentDirectory = parent ?? Path.GetTempPath(),
+        ParentDirectory = parent ?? _root,
         ProjectName = "Loc",
         InitGit = false,
         CapabilityPresets = presets,

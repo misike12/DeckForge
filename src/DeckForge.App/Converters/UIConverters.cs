@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using DeckForge.App.Services;
+using DeckForge.Core.Settings;
 using DeckForge.CliAdapter;
 using DeckForge.Validators;
 
@@ -64,6 +65,32 @@ public sealed class EnumToAppThemeConverter : IValueConverter
         value is true
             ? Enum.TryParse(parameter as string, ignoreCase: true, out AppTheme theme)
                 ? theme
+                : DependencyProperty.UnsetValue
+            : Binding.DoNothing;
+}
+
+/// <summary>
+/// Binds a radio button's <c>IsChecked</c> to any enum member named by <c>ConverterParameter</c>.
+/// </summary>
+/// <remarks>
+/// A second converter rather than making <see cref="EnumToAppThemeConverter"/> generic, because a generic
+/// one loses the check that a converter parameter is a member of <em>this</em> enum: with a generic
+/// converter a typo in <c>ConverterParameter</c> compiles, binds to <see cref="DependencyProperty.UnsetValue"/>
+/// and simply renders an unchecked radio, which is a control the user can click and that does nothing.
+/// Two small converters and a failure at the point of use beat one flexible one and a silent no-op.
+/// </remarks>
+public sealed class EnumToMotionPreferenceConverter : IValueConverter
+{
+    /// <inheritdoc />
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is MotionPreference preference
+        && string.Equals(preference.ToString(), parameter as string, StringComparison.OrdinalIgnoreCase);
+
+    /// <inheritdoc />
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true
+            ? Enum.TryParse(parameter as string, ignoreCase: true, out MotionPreference preference)
+                ? preference
                 : DependencyProperty.UnsetValue
             : Binding.DoNothing;
 }

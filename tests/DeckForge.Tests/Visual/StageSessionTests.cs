@@ -473,6 +473,174 @@ public sealed class StageSessionTests
         });
     }
 
+    [Test]
+    public void Pause_suspends_a_run_after_one_more_block_and_Resume_carries_on_from_there()
+    {
+        var session = Session(Project(Set("a", "1"), Set("b", "2"), Set("c", "4")));
+
+        session.Run();
+        _clock.FireOne();
+
+        session.Pause();
+
+        // The one tick that honours the request. Nothing else fires: the tick must not queue another, or
+        // Pause would look like it had done nothing at all.
+        _clock.FireOne();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.IsRunning, Is.False, "a pause is a suspension, not a slower run");
+            Assert.That(session.IsPaused, Is.True);
+            Assert.That(session.PauseLabel, Is.EqualTo("Resume"),
+                "the transport says Resume the moment there is something to resume, which is why this is "
+                + "one command and not two");
+            Assert.That(session.Host.Variables.Get("b"), Is.EqualTo("2"),
+                "the block in flight finished, which is what stopping at a boundary means");
+            Assert.That(session.Host.Variables.Get("c"), Is.Null);
+            Assert.That(session.Outcome, Does.Contain("hand"),
+                "a run that stops without saying why looks exactly like one that finished");
+        });
+
+        session.Resume();
+        _clock.FireAll();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.IsPaused, Is.False);
+            Assert.That(session.Host.Variables.Get("c"), Is.EqualTo("4"),
+                "the resume carries on rather than restarting, so the trace keeps the blocks that already ran");
+            Assert.That(session.Outcome, Is.EqualTo("Finished."));
+        });
+    }
+
+    [Test]
+    public void Pause_with_nothing_running_says_so_rather_than_doing_nothing_quietly()
+    {
+        var session = Session(Project(Set("a", "1")));
+
+        session.Pause();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.IsPaused, Is.False);
+            Assert.That(
+                session.Outcome,
+                Does.Contain("Nothing is running"),
+                "a button that does nothing teaches nothing, and the two reasons a transport is not "
+                + "running are different problems with different answers");
+        });
+    }
+
+    [Test]
+    public void Pause_on_a_run_already_stopped_at_a_breakpoint_points_at_the_breakpoint()
+    {
+        var project = Project(Set("a", "1"), Set("b", "2"));
+        var session = Session(project);
+
+        session.ToggleBreakpoint(project.Targets[0].Scripts[0].Body[1].Id);
+        session.Run();
+        _clock.FireAll();
+
+        session.Pause();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.IsPaused, Is.False,
+                "a run stopped at a breakpoint is over; carrying on from it is Run, not Resume");
+            Assert.That(session.Outcome, Does.Contain("breakpoint"));
+            Assert.That(session.PauseLabel, Is.EqualTo("Pause"));
+        });
+    }
+
+    [Test]
+    public void Stop_ends_a_paused_run_without_leaving_the_transport_offering_to_resume_it()
+    {
+        var session = Session(Project(Set("a", "1"), Set("b", "2")));
+
+        session.Run();
+        _clock.FireOne();
+        session.Pause();
+        _clock.FireOne();
+        Assert.That(session.IsPaused, Is.True);
+
+        session.Stop();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.IsPaused, Is.False,
+                "otherwise the Pause control still reads Resume after Stop, and pressing it starts a run "
+                + "the user did not ask for");
+            Assert.That(session.PauseLabel, Is.EqualTo("Pause"));
+            Assert.That(session.Outcome, Does.Contain("hand"));
+        });
+    }
+
+    [Test]
+    public void The_stage_only_lists_and_runs_the_scripts_of_the_target_it_was_given()
+    {
+        var project = Project(Set("a", "1"));
+        var other = new VisualScript
+        {
+            Id = "script-2",
+            Name = "Elsewhere",
+            Hat = new Block { Kind = "hat.action-runs", Id = "hat-2" },
+        };
+        other.Body.Add(Set("b", "2"));
+        project.Targets.Add(new VisualTarget
+        {
+            Id = "action:two",
+            Name = "Two",
+            Kind = TargetKind.Action,
+            TargetFile = "Actions/TwoAction.cs",
+            AnchorId = "ExecuteAsync",
+            Scripts = [other],
+        });
+
+        var session = new StageSession(project, _breakpoints, _watched, _clock.Schedule, "action:two");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.TargetId, Is.EqualTo("action:two"));
+            Assert.That(session.Scripts.Select(entry => entry.Id), Is.EqualTo(new[] { "script-2" }),
+                "Part 9.7's picker says which target is being edited; a script list that also held the "
+                + "other actions' scripts would make the picker a decoration");
+            Assert.That(session.SelectedScript?.Id, Is.EqualTo("script-2"));
+        });
+
+        session.Step();
+
+        Assert.That(session.Host.Variables.Get("a"), Is.Null, "and Step runs the one that was listed");
+    }
+
+    [Test]
+    public void A_rebind_that_names_no_target_keeps_the_one_already_chosen()
+    {
+        var project = Project(Set("a", "1"));
+        var other = new VisualScript { Id = "script-2", Name = "Elsewhere", Hat = new Block { Kind = "hat.action-runs", Id = "h2" } };
+        other.Body.Add(Set("b", "2"));
+        project.Targets.Add(new VisualTarget
+        {
+            Id = "action:two",
+            Name = "Two",
+            Kind = TargetKind.Action,
+            TargetFile = "Actions/TwoAction.cs",
+            AnchorId = "ExecuteAsync",
+            Scripts = [other],
+        });
+
+        var session = new StageSession(project, _breakpoints, _watched, _clock.Schedule, "action:two");
+
+        // An edit on the canvas calls Rebind with no target. Widening it back to the whole document here
+        // would make the picker flicker: switch target, type a character, and the list is every script again.
+        session.Rebind(project, parameters: []);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(session.TargetId, Is.EqualTo("action:two"));
+            Assert.That(session.Scripts.Select(entry => entry.Id), Is.EqualTo(new[] { "script-2" }));
+        });
+    }
+
     // ---- helpers -------------------------------------------------------------------------------------
 
     /// <summary>A session over a document, sharing the test's breakpoint and watch sets.</summary>

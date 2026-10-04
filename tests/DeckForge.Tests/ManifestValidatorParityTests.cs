@@ -453,51 +453,39 @@ public class ManifestValidatorParityTests
             Assert.Ignore("macrodeck-plugin is not on PATH.");
         }
 
-        var directory = Path.Combine(Path.GetTempPath(), "deckforge-parity-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(directory);
-            CreateEntryPoint(directory);
-        try
+using var temp = new TempDirectory("deckforge-parity");
+        var directory = temp.Root;
+        CreateEntryPoint(directory);
+
+        // The tool is authoritative for what it accepts at each level.
+        foreach (var (level, toolLevel) in new[]
+                 {
+                     (ManifestValidationLevel.Development, "development"),
+                     (ManifestValidationLevel.Package, "package"),
+                     (ManifestValidationLevel.Publication, "publication"),
+                 })
         {
-            // The tool is authoritative for what it accepts at each level.
-            foreach (var (level, toolLevel) in new[]
-                     {
-                         (ManifestValidationLevel.Development, "development"),
-                         (ManifestValidationLevel.Package, "package"),
-                         (ManifestValidationLevel.Publication, "publication"),
-                     })
-            {
-                var path = Path.Combine(directory, toolLevel + ".json");
-                File.WriteAllText(path, NoPublication, new UTF8Encoding(false));
+            var path = Path.Combine(directory, toolLevel + ".json");
+            File.WriteAllText(path, NoPublication, new UTF8Encoding(false));
 
-                var toolValid = RunValidate(path, toolLevel);
-                var ours = ManifestValidator.Validate(NoPublication, level, directory);
+            var toolValid = RunValidate(path, toolLevel);
+            var ours = ManifestValidator.Validate(NoPublication, level, directory);
 
-                Assert.That(
-                    toolValid,
-                    Is.EqualTo(ours.Ok),
-                    $"The tool and DeckForge disagree at {toolLevel}: tool valid={toolValid}, ours={ours.Ok}. "
-                    + string.Join(" | ", ours.Issues.Select(i => i.Code)));
-            }
-
-            // And for a complete manifest, the tool accepts it at the strictest level.
-            var completePath = Path.Combine(directory, "complete.json");
-            File.WriteAllText(completePath, Complete, new UTF8Encoding(false));
-            Assert.That(RunValidate(completePath, "publication"), Is.True);
-
-            // With the built tree present, the two filesystem rules agree too.
-            var packaged = ManifestValidator.Validate(Complete, ManifestValidationLevel.Package, directory);
-            Assert.That(packaged.Ok, Is.True, string.Join(" | ", packaged.Issues.Select(i => i.Code)));
+            Assert.That(
+                toolValid,
+                Is.EqualTo(ours.Ok),
+                $"The tool and DeckForge disagree at {toolLevel}: tool valid={toolValid}, ours={ours.Ok}. "
+                + string.Join(" | ", ours.Issues.Select(i => i.Code)));
         }
-        finally
-        {
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-            catch (IOException)
-            {
-            }
-        }
+
+        // And for a complete manifest, the tool accepts it at the strictest level.
+        var completePath = Path.Combine(directory, "complete.json");
+        File.WriteAllText(completePath, Complete, new UTF8Encoding(false));
+        Assert.That(RunValidate(completePath, "publication"), Is.True);
+
+        // With the built tree present, the two filesystem rules agree too.
+        var packaged = ManifestValidator.Validate(Complete, ManifestValidationLevel.Package, directory);
+        Assert.That(packaged.Ok, Is.True, string.Join(" | ", packaged.Issues.Select(i => i.Code)));
     }
 
     [Test]
@@ -508,29 +496,17 @@ public class ManifestValidatorParityTests
             Assert.Ignore("macrodeck-plugin is not on PATH.");
         }
 
-        var directory = Path.Combine(Path.GetTempPath(), "deckforge-parity-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(directory);
-            CreateEntryPoint(directory);
-        try
-        {
-            var path = Path.Combine(directory, "placeholder.json");
-            File.WriteAllText(path, Complete, new UTF8Encoding(false));
+        using var temp = new TempDirectory("deckforge-parity");
+        var directory = temp.Root;
+        CreateEntryPoint(directory);
 
-            // The old validator invented a rule rejecting the template placeholder. The tool does
-            // not: it checks the shape, and the Store is what refuses a placeholder.
-            Assert.That(RunValidate(path, "publication"), Is.True);
-            Assert.That(ManifestValidator.Validate(Complete, ManifestValidationLevel.Publication).Ok, Is.True);
-        }
-        finally
-        {
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-            catch (IOException)
-            {
-            }
-        }
+        var path = Path.Combine(directory, "placeholder.json");
+        File.WriteAllText(path, Complete, new UTF8Encoding(false));
+
+        // The old validator invented a rule rejecting the template placeholder. The tool does
+        // not: it checks the shape, and the Store is what refuses a placeholder.
+        Assert.That(RunValidate(path, "publication"), Is.True);
+        Assert.That(ManifestValidator.Validate(Complete, ManifestValidationLevel.Publication).Ok, Is.True);
     }
 
     [Test]
@@ -541,28 +517,16 @@ public class ManifestValidatorParityTests
             Assert.Ignore("macrodeck-plugin is not on PATH.");
         }
 
-        var directory = Path.Combine(Path.GetTempPath(), "deckforge-parity-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(directory);
-            CreateEntryPoint(directory);
-        try
-        {
-            var manifest = Mutate(Complete, "\"win-x64\"", "\"linux\"");
-            var path = Path.Combine(directory, "rid.json");
-            File.WriteAllText(path, manifest, new UTF8Encoding(false));
+        using var temp = new TempDirectory("deckforge-parity");
+        var directory = temp.Root;
+        CreateEntryPoint(directory);
 
-            Assert.That(RunValidate(path, "development"), Is.True);
-            Assert.That(ManifestValidator.Validate(manifest, ManifestValidationLevel.Development).Ok, Is.True);
-        }
-        finally
-        {
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-            catch (IOException)
-            {
-            }
-        }
+        var manifest = Mutate(Complete, "\"win-x64\"", "\"linux\"");
+        var path = Path.Combine(directory, "rid.json");
+        File.WriteAllText(path, manifest, new UTF8Encoding(false));
+
+        Assert.That(RunValidate(path, "development"), Is.True);
+        Assert.That(ManifestValidator.Validate(manifest, ManifestValidationLevel.Development).Ok, Is.True);
     }
 
     /// <summary>

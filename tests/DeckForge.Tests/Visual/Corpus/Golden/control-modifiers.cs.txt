@@ -1,0 +1,11 @@
+// ==== golden: control-modifiers ====
+// Covers: The two modifiers and the migration placeholder: a comment block, the disable modifier, and a legacy type.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+// a note to the reader
+// old.custom.block came from a build this one does not know, so it is skipped.
+_logger.Information(VisualRuntime.LogTemplate("still emitted", context.Parameters));
+
+// ==== problems the emitter reported ====
+// b2: "control.disable" cannot be emitted; it is a canvas modifier.

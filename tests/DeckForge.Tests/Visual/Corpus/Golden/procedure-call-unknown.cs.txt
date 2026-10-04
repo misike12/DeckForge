@@ -1,0 +1,11 @@
+// ==== golden: procedure-call-unknown ====
+// Covers: A call to a procedure the document does not declare: the emitter reports it and still writes a call.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - The emitter writes `await neverDeclaredAsync()` for a procedure the document never declared, which is CS0103 in the generated action. That is the emitter's behaviour to pin, not a corpus defect, so this document is snapshotted and not built. Fixing it means changing the emitter - and when it does, this document joins the built set and this sentence goes with it.
+// script: main
+await neverDeclaredAsync("");
+await alsoMissingAsync("a=1");
+var _r0 = await missingValueAsync("");
+
+// ==== problems the emitter reported ====
+// b2: "alsoMissing" is not a procedure this document declares; its arguments were not bound.

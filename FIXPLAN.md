@@ -183,3 +183,35 @@ pressed rather than as listed - rest on `VisualCommandsTests` and on the fact th
 palette, the sheet and the dispatcher. The harness's own bug was found on the way: its
 `GetCurrentThreadId` P/Invoke named `user32.dll` instead of `kernel32.dll`, which is why three lanes
 agreed that clicks had stopped working.
+## Second audit round, closed
+
+| Item | Outcome |
+|---|---|
+| D17 - fifteen `"False" is not a condition` warnings on a fresh canvas | Fixed in the validator, not the sample. `BlockFactory` fills every boolean slot with `Of(false)` and the validator counted a boolean literal as needing conversion; `ScriptInterpreter` reads it directly. The window now shows 3 honest warnings |
+| D18 - the header hint crushed | Two faults: the header wrapped instead of trimming, and the narrow layout had no trailing star column, so the header, the canvas and the stage were 610px inside a 930px viewport |
+| D14 - a refusal stayed in the message line | `ReportProblem` with a six-second timer. **Not verified in the window** - every reachable refusal is either a disabled button or behind a modal `SaveFileDialog` |
+| D15, D16 - rail and panel "clipping" | Not defects. Both scroll, with a scrollbar. The lane had not used the wheel |
+| Build warnings | NU1701 x2, named and explained rather than left as the only warning in the build |
+
+## The context-menu defect the window found
+
+Driving the window after the third audit round found a **right-click on a block doing nothing at all** -
+no menu, and the block not even selected, so `ContextMenuOpening` had plainly never run. The cause is
+that `BlockWorkspace` puts *its* menu on three elements that are all ancestors of every tile, and which of
+two `ContextMenu`s on one route wins is not something the tile controls. No test can see this: a menu that
+does not open fails silently and identically to a menu with nothing in it.
+
+The tile now handles the right button itself and opens its own menu, so nothing depends on which ancestor
+wins. **That fix is not confirmed end to end.** The harness reports `GetForegroundWindow()` returning
+zero on this machine, so `SetForegroundWindow` is refused and the click that navigates to the Visual page
+is swallowed - roughly one run in three reaches the page. The canvas and stage menus are unverified for
+the same reason, and the palette's right-click is not built at all (Part 18.5 does not ask for it).
+
+## What the harness still cannot do
+
+- Hold the foreground window, so the first navigation click is unreliable. This is the single biggest
+  gap left and it has now cost one unverifiable fix.
+- Send keystrokes the application receives. Every shortcut is covered by `VisualCommandsTests` instead.
+- Photograph a WPF `Popup`. `ContextMenu` renders into a separate top-level window, so the window-DC
+  capture cannot see one even when it is open; only a full-desktop capture can, and that one is too wide
+  to read without knowing where the window landed.

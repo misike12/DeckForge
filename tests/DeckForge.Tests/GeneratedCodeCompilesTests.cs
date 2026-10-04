@@ -33,15 +33,29 @@ public class GeneratedCodeCompilesTests
 {
     private static bool Skip => Environment.GetEnvironmentVariable("DECKFORGE_SKIP_SLOW_TESTS") == "1";
 
-    private static string Sandbox()
+    /// <summary>The sandboxes this fixture has created, removed after each test.</summary>
+    private readonly List<TempDirectory> _sandboxes = [];
+
+    [TearDown]
+    public void TearDown()
     {
-        var root = Path.Combine(Path.GetTempPath(), "deckforge-compile-" + Guid.NewGuid().ToString("N")[..10]);
-        Directory.CreateDirectory(root);
-        return root;
+        foreach (var sandbox in _sandboxes)
+        {
+            sandbox.Dispose();
+        }
+
+        _sandboxes.Clear();
+    }
+
+    private string Sandbox()
+    {
+        var sandbox = new TempDirectory("deckforge-compile");
+        _sandboxes.Add(sandbox);
+        return sandbox.Root;
     }
 
     /// <summary>Writes a stock project plus the given extra files, then builds it.</summary>
-    private static (string Root, string Output) WriteAndBuild(
+    private (string Root, string Output) WriteAndBuild(
         NewProjectOptions options,
         IReadOnlyList<(string RelativePath, string Content)> extras,
         IReadOnlyDictionary<string, string>? resxEntries = null)
@@ -117,9 +131,10 @@ public class GeneratedCodeCompilesTests
 
     /// <summary>
     /// Options for a throwaway project. The id and project name carry a per-test suffix so a
-    /// rerun never collides with a previous run's directory in TEMP.
+    /// rerun never collides with a previous run's directory, and the parent is a
+    /// <see cref="TempDirectory"/> so the generated tree is removed rather than left in TEMP.
     /// </summary>
-    private static NewProjectOptions Options(string? name = null)
+    private NewProjectOptions Options(string? name = null)
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var pluginName = name ?? "Compile Probe";
@@ -129,7 +144,7 @@ public class GeneratedCodeCompilesTests
             PluginId = "com.example.probe-" + suffix,
             Publisher = "Example",
             Description = "Compiles every generated surface.",
-            ParentDirectory = Path.GetTempPath(),
+            ParentDirectory = Sandbox(),
             ProjectName = "Probe" + suffix,
             Platforms = ["win-x64"],
         };

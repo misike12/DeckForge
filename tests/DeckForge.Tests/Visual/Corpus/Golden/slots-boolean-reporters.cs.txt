@@ -1,0 +1,16 @@
+// ==== golden: slots-boolean-reporters ====
+// Covers: Boolean blocks in every slot that takes a condition, including a boolean nested in a boolean.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+do
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    _logger.Information(VisualRuntime.LogTemplate("inside", context.Parameters));
+}
+while (!VisualRuntime.ToBool(VisualRuntime.Compare("1", VisualRuntime.ToText("isNotEmpty"), "2")) && VisualRuntime.ToBool(VisualRuntime.ToBool(false) || VisualRuntime.ToBool(!VisualRuntime.ToBool(VisualRuntime.ToText("haystack").Contains(VisualRuntime.ToText("needle"), StringComparison.Ordinal)))));
+await VisualRuntime.WaitUntilAsync(() => VisualRuntime.ToBool(VisualRuntime.ToBool(VisualRuntime.Compare("1", VisualRuntime.ToText("isNotEmpty"), "2")) && VisualRuntime.ToBool(VisualRuntime.ToBool(false) || VisualRuntime.ToBool(!VisualRuntime.ToBool(VisualRuntime.ToText("haystack").Contains(VisualRuntime.ToText("needle"), StringComparison.Ordinal))))), 50, context.CancellationToken);
+if (_integration is not null)
+{
+    _logger.Information(VisualRuntime.LogTemplate("connected", context.Parameters));
+}

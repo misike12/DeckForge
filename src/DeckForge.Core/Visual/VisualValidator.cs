@@ -78,6 +78,96 @@ public static class VisualValidator
         Validate(project, VisualValidationContext.None);
 
     /// <summary>
+    /// The block ids one target's canvas shows: its own scripts, plus every procedure body.
+    /// </summary>
+    /// <param name="project">The document.</param>
+    /// <param name="target">The target the canvas is editing.</param>
+    /// <remarks>
+    /// <para>
+    /// Procedures are in every target's set because a procedure is emitted into whichever target file the
+    /// emitter is writing and Part 4.2's note is explicit that it belongs to one target <em>file</em> rather
+    /// than to one target's scripts. The canvas draws procedures beside the scripts for the same reason, so
+    /// a diagnostic about a procedure is on screen and must be in the pane.
+    /// </para>
+    /// <para>
+    /// Not a target's own blocks alone, which is the reading that would hide half the findings from a user
+    /// who is looking at a procedure.
+    /// </para>
+    /// </remarks>
+    public static HashSet<string> IdsIn(VisualProject project, VisualTarget target)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(target);
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var block in target.Blocks())
+        {
+            ids.Add(block.Id);
+        }
+
+        foreach (var procedure in project.Procedures)
+        {
+            foreach (var statement in procedure.Body)
+            {
+                foreach (var block in statement.Walk())
+                {
+                    ids.Add(block.Id);
+                }
+            }
+        }
+
+        return ids;
+    }
+
+    /// <summary>
+    /// The findings that concern one target, for a canvas that is editing one target.
+    /// </summary>
+    /// <param name="project">The document.</param>
+    /// <param name="target">The target the canvas is editing.</param>
+    /// <param name="context">The declared names the reference checks run against.</param>
+    /// <remarks>
+    /// <para>
+    /// Added with Part 9.7's target picker. Before it, the header said "1 target" whatever the document
+    /// held and the canvas always drew the first one, so a document with three actions could only ever be
+    /// diagnosed on the first of them — and the other two were not merely hidden, they were
+    /// <em>unreachable</em>: the pane listed findings about blocks no user could select, because the
+    /// blocks were not on screen.
+    /// </para>
+    /// <para>
+    /// Two kinds of finding survive the filter. One with no block at all is about the document — a local
+    /// that collides with the generated method's own name, a variable declared twice — and hiding it would
+    /// hide the only thing the user has to fix in the header's own project settings. The other is the one
+    /// this method exists for: a finding about a block in <em>this</em> target, or in a procedure, which is
+    /// on the canvas beside it.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<VisualDiagnostic> ForTarget(
+        VisualProject project,
+        VisualTarget target,
+        VisualValidationContext context)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        var all = Validate(project, context);
+
+        if (project.Targets.Count <= 1)
+        {
+            // One target means the canvas is showing everything there is, so filtering would only be a
+            // chance for the pane to lose a finding.
+            return all;
+        }
+
+        var mine = IdsIn(project, target);
+
+        return
+        [
+            .. all.Where(diagnostic =>
+                diagnostic.BlockId is null || mine.Contains(diagnostic.BlockId)),
+        ];
+    }
+
+    /// <summary>
     /// Validates a whole document against what the plugin actually declares.
     /// </summary>
     /// <param name="project">The document.</param>

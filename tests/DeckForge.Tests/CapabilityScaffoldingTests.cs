@@ -33,18 +33,26 @@ public class CapabilityScaffoldingTests
 {
     private static bool Skip => Environment.GetEnvironmentVariable("DECKFORGE_SKIP_SLOW_TESTS") == "1";
 
-    private static NewProjectOptions Options() => new()
+    private static TempDirectory _sandbox = null!;
+
+    [SetUp]
+    public void SetUp() => _sandbox = new TempDirectory("deckforge-capability");
+
+    [TearDown]
+    public void TearDown() => _sandbox.Dispose();
+
+    private NewProjectOptions Options() => new()
     {
         PluginName = "Capability Probe",
         PluginId = "com.example.capability-probe",
         Publisher = "Example",
         Description = "Exercises every capability.",
-        ParentDirectory = Path.GetTempPath(),
+        ParentDirectory = _sandbox.Root,
         ProjectName = "CapabilityProbe" + Guid.NewGuid().ToString("N")[..8],
         Platforms = ["win-x64"],
     };
 
-    private static WorkspaceContext Generate(out string root)
+    private WorkspaceContext Generate(out string root)
     {
         var services = new ServiceCollection().BuildServiceProvider();
         var generator = new PluginProjectGenerator(services, NullLogger<PluginProjectGenerator>.Instance);

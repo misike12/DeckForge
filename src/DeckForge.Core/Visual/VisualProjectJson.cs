@@ -14,10 +14,26 @@ public enum VisualLoadOutcome
     /// <summary>Read as a legacy <c>.blocks.json</c> and migrated. The caller should offer to keep the original.</summary>
     LoadedFromLegacy,
 
+    /// <summary>
+    /// Read, and marked read-only because the file was written by a newer DeckForge. The document is
+    /// real and must not be written back.
+    /// </summary>
+    /// <remarks>
+    /// A third outcome for the newer-schema case, alongside <see cref="UnsupportedSchema"/>, and the
+    /// reason is that Part 22.1's table says a version above this one is <em>read-only</em> rather than
+    /// unreadable. The first implementation returned nothing at all, which left the page drawing the
+    /// sample document and telling the user the canvas had not been read — true, and useless, because the
+    /// one thing a user with a newer file wants is to see what is in it.
+    /// </remarks>
+    LoadedReadOnly,
+
     /// <summary>Not JSON at all.</summary>
     NotJson,
 
-    /// <summary>Written by a newer DeckForge. It must not be loaded, and must never be written back.</summary>
+    /// <summary>
+    /// Written by a newer DeckForge, and the caller asked not to be handed one. It must never be written
+    /// back.
+    /// </summary>
     UnsupportedSchema,
 
     /// <summary>JSON, and structurally this format, but not usable. The file is left untouched.</summary>
@@ -91,11 +107,63 @@ public static class VisualProjectJson
     /// <param name="message">A sentence naming what happened, suitable for the status line.</param>
     /// <returns>What kind of read this was.</returns>
     /// <remarks>
+    /// <para>
     /// The page needs to tell four situations apart, and they lead to four different actions: load it,
     /// migrate it and keep the original aside, refuse and explain, or leave the file alone. A method
     /// that returns a document or null cannot carry that, which is why this returns an outcome.
+    /// </para>
+    /// <para>
+    /// <strong>This is the reader that owns the file.</strong> A version newer than this build's is
+    /// refused here rather than handed over, because everything downstream of a load — the emitter, the
+    /// interpreter, the writer — is entitled to assume the document is this build's vocabulary.
+    /// <see cref="TryLoadReadOnly"/> is the other half: it shows a newer file without pretending to own
+    /// it.
+    /// </para>
     /// </remarks>
-    public static VisualLoadOutcome TryLoad(string json, out VisualProject project, out string message)
+    public static VisualLoadOutcome TryLoad(string json, out VisualProject project, out string message) =>
+        Read(json, acceptNewerSchema: false, out project, out message);
+
+    /// <summary>
+    /// Reads a document this build may open but must never write back, which is what a file from a newer
+    /// DeckForge is.
+    /// </summary>
+    /// <param name="json">The file's text.</param>
+    /// <param name="project">
+    /// The document, with <see cref="VisualProject.ReadOnly"/> set when the file is newer. Empty on
+    /// failure.
+    /// </param>
+    /// <param name="message">A sentence naming what happened, suitable for the status line.</param>
+    /// <returns>
+    /// <see cref="VisualLoadOutcome.LoadedReadOnly"/> for a newer file, and otherwise exactly what
+    /// <see cref="TryLoad"/> would have returned.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// A second entry point rather than a changed one, deliberately. <see cref="TryLoad"/> answers "can
+    /// this build own this file?" — which is what the writer needs to know, and what a test asserting a
+    /// refusal has always meant. This one answers "can this build show it?" A single method with a
+    /// parameter would have had to pick one of those as the default, and the default is the one that gets
+    /// forgotten: the page wants to display the file, and a reader whose happy path refuses to display it
+    /// is a reader somebody works around.
+    /// </para>
+    /// <para>
+    /// The two differ in exactly one respect, and <see cref="VisualProject.ReadOnly"/> is what carries it:
+    /// the document is parsed either way, but only here is the result handed over. Nothing is
+    /// downgraded, nothing is dropped, and <c>Version</c> still reads back as whatever the file said —
+    /// the document is the newer document, not a translation of it into this build's vocabulary.
+    /// </para>
+    /// </remarks>
+    public static VisualLoadOutcome TryLoadReadOnly(string json, out VisualProject project, out string message) =>
+        Read(json, acceptNewerSchema: true, out project, out message);
+
+    /// <summary>
+    /// The one reader, parameterised by whether a newer schema is handed over or refused.
+    /// </summary>
+    private static VisualLoadOutcome Read(
+        string json,
+        bool acceptNewerSchema,
+        out VisualProject project,
+        out string message)
     {
         project = new VisualProject();
         message = string.Empty;
@@ -136,14 +204,25 @@ public static class VisualProjectJson
                 return VisualLoadOutcome.LoadedFromLegacy;
             }
 
+            var newerSchema = false;
             if (root.TryGetProperty("version", out var version)
                 && version.TryGetInt32(out var number)
                 && number > VisualProject.CurrentVersion)
             {
+                // One sentence for both outcomes. The refusal and the read-only open are the same fact
+                // told to two different callers, and a caller that had to choose between them would be
+                // choosing which sentence a user reads — so the text names the versions, says read-only,
+                // and says the file will not be overwritten, whichever way the branch below goes.
                 message =
                     $"This canvas was written by a newer DeckForge (format {number}, this build reads "
                     + $"{VisualProject.CurrentVersion}). It is open read-only and will not be overwritten.";
-                return VisualLoadOutcome.UnsupportedSchema;
+
+                if (!acceptNewerSchema)
+                {
+                    return VisualLoadOutcome.UnsupportedSchema;
+                }
+
+                newerSchema = true;
             }
 
             VisualProject? loaded;
@@ -164,7 +243,9 @@ public static class VisualProjectJson
             }
 
             // An input with two members set is not decidable from the file, and guessing which the user
-            // meant would silently change their program. It is refused, by id, so it can be fixed.
+            // meant would silently change their program. It is refused, by id, so it can be fixed. A
+            // read-only open is refused for it too: handing over a document we already know is wrong is
+            // worse than handing over none.
             foreach (var block in loaded.Blocks())
             {
                 foreach (var (slot, input) in block.Inputs.Where(pair => pair.Value.IsAmbiguous))
@@ -176,10 +257,12 @@ public static class VisualProjectJson
                 }
             }
 
+            loaded.ReadOnly = newerSchema;
             project = loaded;
             project.EnsureProcedureIds();
-            message = string.Empty;
-            return VisualLoadOutcome.Loaded;
+
+            message = newerSchema ? message : string.Empty;
+            return newerSchema ? VisualLoadOutcome.LoadedReadOnly : VisualLoadOutcome.Loaded;
         }
     }
 

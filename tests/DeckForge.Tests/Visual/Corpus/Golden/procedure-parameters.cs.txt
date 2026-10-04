@@ -1,0 +1,18 @@
+// ==== golden: procedure-parameters ====
+// Covers: A procedure with parameters, bound into the body's locals, and a call that supplies them by name.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task greetAsync(object? who, object? times)
+{
+    VisualRuntime.Set("who", who);
+    VisualRuntime.Set("times", times);
+    for (var _i0 = 0; _i0 < VisualRuntime.ToNumber(3); _i0++)
+{
+        context.CancellationToken.ThrowIfCancellationRequested();
+        _logger.Information(VisualRuntime.LogTemplate("who", context.Parameters));
+}
+    VisualRuntime.Set(VisualRuntime.ToText("copied"), VisualRuntime.Get("missing-parameter"));
+}
+// script: main
+await greetAsync("world", "3");

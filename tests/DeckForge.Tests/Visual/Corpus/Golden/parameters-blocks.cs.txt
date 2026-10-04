@@ -1,0 +1,14 @@
+// ==== golden: parameters-blocks ====
+// Covers: Every Parameters block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Convert(VisualRuntime.Parameter(context, VisualRuntime.ToText("name")), VisualRuntime.ToText("Text")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Parameter(context, VisualRuntime.ToText("name")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.HasValue(context, VisualRuntime.ToText("name")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber("value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToBool("value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.IsNumeric("value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.DefaultIfEmpty("value", "fallback"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.DecodeJson(VisualRuntime.ToText("text")));

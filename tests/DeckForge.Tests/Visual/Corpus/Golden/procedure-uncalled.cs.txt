@@ -1,0 +1,11 @@
+// ==== golden: procedure-uncalled ====
+// Covers: Two declared procedures and one call: the uncalled one must cost nothing in the region.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task usedAsync()
+{
+    _logger.Information(VisualRuntime.LogTemplate("used", context.Parameters));
+}
+// script: main
+await usedAsync();

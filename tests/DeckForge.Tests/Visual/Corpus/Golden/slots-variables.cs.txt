@@ -1,0 +1,12 @@
+// ==== golden: slots-variables ====
+// Covers: A slot holding a variable reference rather than a literal, which emits the identifier and not the name.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("count"), 0);
+VisualRuntime.Change(VisualRuntime.ToText("count"), VisualRuntime.Get("count"));
+if (VisualRuntime.Compare(VisualRuntime.Get("count"), VisualRuntime.ToText(">"), "3"))
+{
+    _logger.Information(VisualRuntime.LogTemplate("more than three", context.Parameters));
+}
+await VisualRuntime.WaitUntilAsync(() => VisualRuntime.ToBool(VisualRuntime.Compare(VisualRuntime.Get("label"), VisualRuntime.ToText("isNotEmpty"), "hello")), 50, context.CancellationToken);

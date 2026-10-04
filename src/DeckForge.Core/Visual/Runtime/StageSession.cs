@@ -33,6 +33,8 @@ public sealed class StageSession
     private ScriptInterpreter _interpreter;
     private IDisposable? _timer;
     private string? _selectedScriptId;
+    private string? _targetId;
+
     /// <summary>The steps per second a run starts at, and what the slider starts showing.</summary>
     /// <remarks>
     /// Named rather than left as a literal in two places, because the panel's slider and the session's
@@ -58,20 +60,28 @@ public sealed class StageSession
     /// Runs an action after a delay and hands back the canceller. The tests pass their own so a run can
     /// be advanced one tick at a time.
     /// </param>
+    /// <param name="targetId">
+    /// The one target the stage may run, or null for all of them. Part 9.7's header picker makes "which
+    /// action am I editing" a thing the user chooses, and a stage that listed and ran every action's
+    /// scripts underneath that choice would be answering a question nobody asked.
+    /// </param>
     public StageSession(
         VisualProject document,
         HashSet<string>? breakpoints = null,
         HashSet<string>? watched = null,
-        Func<TimeSpan, Action, IDisposable>? schedule = null)
+        Func<TimeSpan, Action, IDisposable>? schedule = null,
+        string? targetId = null)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _breakpoints = breakpoints ?? new HashSet<string>(StringComparer.Ordinal);
         _watched = watched ?? new HashSet<string>(StringComparer.Ordinal);
         _schedule = schedule ?? DefaultSchedule;
+        _targetId = targetId;
         _interpreter = NewInterpreter();
 
         Rebind();
     }
+
 
     /// <summary>
     /// What a panel says about itself, whether or not anything has run.
@@ -89,6 +99,17 @@ public sealed class StageSession
 
     /// <summary>The host the run is writing to.</summary>
     public IVisualHost Host => _host;
+
+    /// <summary>
+    /// The one target the stage runs, or null when it runs them all.
+    /// </summary>
+    /// <remarks>
+    /// Published because a panel that shows a script list has to be able to say where the list came from.
+    /// A stage whose picker says "Log a message" and whose Run presses a script from a different action is
+    /// not a small disagreement: it produces a trace full of values the user never wrote.
+    /// </remarks>
+    public string? TargetId => _targetId;
+
 
     /// <summary>The scripts that can be run, in document order.</summary>
     public IReadOnlyList<StageScript> Scripts { get; private set; } = [];
@@ -257,6 +278,24 @@ public sealed class StageSession
     /// <summary>Whether a run is in progress.</summary>
     public bool IsRunning => _timer is not null;
 
+    /// <summary>
+    /// Whether a run is suspended at a block boundary and can be carried on from there.
+    /// </summary>
+    /// <remarks>
+    /// Not the same question as "is something paused". A run stopped at a breakpoint is paused in the
+    /// ordinary English sense and <em>cannot</em> be resumed with <see cref="Resume"/> — the run finished
+    /// for that purpose, and the answer to "carry on" is <see cref="Run"/>. Only a pause asked for while
+    /// the transport was running leaves a run that is still going, halfway through, with its stack intact.
+    /// </remarks>
+    public bool IsPaused => _timer is null && _interpreter.PausedOnRequest;
+
+    /// <summary>Whether the transport's pause control can do anything right now.</summary>
+    public bool CanPause => _timer is not null || IsPaused;
+
+    /// <summary>What the transport's pause control says, which is Pause or Resume and never both.</summary>
+    public string PauseLabel => IsPaused ? "Resume" : "Pause";
+
+
     /// <summary>Whether there is a script to step.</summary>
     public bool CanStep => SelectedScript is not null;
 
@@ -352,6 +391,65 @@ public sealed class StageSession
     public void StepInto() => Tick(interactive: true, into: true);
 
     /// <summary>
+    /// Suspends a running script at the next block boundary.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asks the interpreter and lets the tick that is already in flight finish, rather than cancelling the
+    /// timer here. That is the difference between a pause and a stop: the interpreter is asked to yield
+    /// <em>between</em> two blocks, so the block that was running when the button was pressed completes and
+    /// the one after it does not start. Cancelling the timer instead would freeze the stage at whatever
+    /// point the pointer happened to reach, which reads as a pause and is really a snapshot — the trace and
+    /// the host would agree with each other and both be one block ahead of what the user was shown.
+    /// </para>
+    /// <para>
+    /// It also means at most one more block runs after the press, at the transport's own speed. A user who
+    /// pauses a fast script and watches one more line appear in the trace has been given a fact about where
+    /// the run stopped, which the outcome line then names.
+    /// </para>
+    /// </remarks>
+    public void Pause()
+    {
+        if (_timer is null)
+        {
+            // Said rather than silently ignored, because the two reasons a transport is not running are
+            // different problems with different answers, and a button that does nothing teaches nothing.
+            Outcome = _interpreter.PausedAtBreakpoint is not null
+                ? $"Already stopped at a breakpoint, before: {_interpreter.PausedAtBreakpointLabel}. "
+                    + "Run carries on from there."
+                : IsPaused
+                    ? $"Already paused, after: {_interpreter.PausedAfterBlockLabel}."
+                    : "Nothing is running.";
+
+            return;
+        }
+
+        _interpreter.RequestPause();
+    }
+
+    /// <summary>
+    /// Carries on from a pause, keeping everything the run had already done.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Run"/> and not a fresh start: the interpreter is still running — it yielded, it did not
+    /// finish — so <see cref="Run"/> re-arms the tick without resetting, which is what keeps the trace,
+    /// the variables and the clock. Resetting here would make Resume indistinguishable from pressing Run
+    /// twice, and a pause the user has to restart from the top to leave is not a pause.
+    /// </remarks>
+    public void Resume()
+    {
+        if (!IsPaused)
+        {
+            Outcome = "Nothing is paused.";
+            return;
+        }
+
+        _interpreter.ClearPause();
+        Run();
+    }
+
+
+    /// <summary>
     /// Stops the run where it stands.
     /// </summary>
     /// <remarks>
@@ -363,8 +461,14 @@ public sealed class StageSession
     {
         _timer?.Dispose();
         _timer = null;
+
+        // So the transport stops offering to resume a run the user has just ended. Without this the Pause
+        // control keeps reading "Resume" after Stop, and pressing it starts a run the user did not ask for.
+        _interpreter.ForgetPause();
+
         Outcome = "Stopped by hand.";
     }
+
 
     /// <summary>
     /// Clears the trace, the host and the clock, and puts the stage back before its hat.
@@ -450,7 +554,11 @@ public sealed class StageSession
     /// </remarks>
     /// <param name="document">The new document, or null to re-read the one already held.</param>
     /// <param name="parameters">The parameter names the action declares.</param>
-    public void Rebind(VisualProject? document = null, IEnumerable<string>? parameters = null)
+    /// <param name="targetId">The target to run, or null for all of them.</param>
+    public void Rebind(
+        VisualProject? document = null,
+        IEnumerable<string>? parameters = null,
+        string? targetId = null)
     {
         _timer?.Dispose();
         _timer = null;
@@ -460,7 +568,12 @@ public sealed class StageSession
             _document = document;
         }
 
+        // Null means "no change", which is what makes the two-argument calls still work: switching the
+        // stage's script must not silently widen it back to every target in the document.
+        _targetId = targetId ?? _targetId;
+
         _interpreter = NewInterpreter();
+
 
         var scripts = _interpreter.Steps
             .Select(script => new StageScript(
@@ -523,14 +636,22 @@ public sealed class StageSession
         // so a pause on its own is not a reason to re-arm: arm it here and one press of Step runs the
         // whole script at the transport's speed while the outcome still says "Paused", which is the
         // difference between a debugger and a very slow Run. The Run button re-arms it from Run().
+        //
+        // A pause somebody asked for is the third thing that must not re-arm, and it is the one this
+        // condition did not know about when it was written: without it the tick that honoured the request
+        // would immediately queue another one, so Pause would appear to do nothing at all - the run would
+        // keep going at full speed with the transport button now reading "Resume". The three conditions
+        // are now the three reasons a paced run stops on its own.
         if (!interactive
             && outcome is RunOutcome.Paused
+            && !_interpreter.PausedOnRequest
             && _interpreter.PausedAtBreakpoint is null
             && _interpreter.Executed < _interpreter.StepBudget)
         {
             _timer = _schedule(TickDelay, () => Tick());
         }
     }
+
 
     /// <summary>
     /// The trace, the watch table, the deck, the notifications and the log, read off the host.
@@ -597,6 +718,16 @@ public sealed class StageSession
             case RunOutcome.Paused:
                 StopTimer();
 
+                // Three ways a paced run ends in a pause, and they are told apart rather than lumped into
+                // "Paused.": a breakpoint the user set, a pause the user just asked for, and the budget
+                // running out. The last one is not a pause at all and says so below; the first two are
+                // genuinely different and the difference decides what the transport should offer next.
+                if (_interpreter.PausedOnRequest)
+                {
+                    Outcome = $"Paused by hand, after: {_interpreter.PausedAfterBlockLabel}";
+                    return;
+                }
+
                 // Stepping pauses after every block, so a pause on its own says nothing. What the stage has
                 // to say is *why* it stopped, and the two things that can end a stepped run are a
                 // breakpoint the user set and the budget running out.
@@ -615,6 +746,7 @@ public sealed class StageSession
 
                 Outcome = "Paused.";
                 return;
+
 
             case RunOutcome.Completed:
                 StopTimer();
@@ -650,7 +782,8 @@ public sealed class StageSession
     /// <summary>A fresh interpreter over the document, sharing this session's breakpoint set.</summary>
     private ScriptInterpreter NewInterpreter()
     {
-        var interpreter = new ScriptInterpreter(_document, _host) { StepBudget = StepBudget };
+        var interpreter = new ScriptInterpreter(_document, _host, targetId: _targetId) { StepBudget = StepBudget };
+
 
         // Handed the same set rather than a copy of it.
         interpreter.Breakpoints = _breakpoints;

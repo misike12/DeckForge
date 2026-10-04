@@ -1,0 +1,8 @@
+// ==== golden: slot-name-reused-as-a-variable-name ====
+// Covers: A variable named after one of the block's own slots, which the emitter substitutes twice.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - `var.set` emits `VisualRuntime.Set(VisualRuntime.ToText("value"), value);` and the emitter fills one slot per pass, so the `value` pass finds the word inside the variable's own string literal and rewrites it. The result is CS1003 - the region ends up holding a reporter expression embedded in a string. Snapshot-only, and the golden file shows the mangling on its own line; every other document avoids naming a variable after a slot so this one defect does not fail the whole build.
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("VisualRuntime.Round(7)"), VisualRuntime.Round(7));
+VisualRuntime.Change(VisualRuntime.ToText("1"), 1);
+VisualRuntime.Set(VisualRuntime.ToText("var"), "safe");

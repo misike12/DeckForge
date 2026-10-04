@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using DeckForge.App.Services;
 using DeckForge.App.Themes;
 using DeckForge.App.ViewModels;
+using DeckForge.Core.Settings;
 
 namespace DeckForge.App.Pages;
 

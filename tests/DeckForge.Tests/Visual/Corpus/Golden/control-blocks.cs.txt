@@ -1,0 +1,67 @@
+// ==== golden: control-blocks ====
+// Covers: Every Control block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+await Task.Delay((int)(VisualRuntime.ToNumber(1) * 1000), context.CancellationToken);
+await Task.Delay((int)VisualRuntime.ToNumber(1), context.CancellationToken);
+await VisualRuntime.WaitUntilAsync(() => VisualRuntime.ToBool(true), 50, context.CancellationToken);
+for (var _i0 = 0; _i0 < VisualRuntime.ToNumber(1); _i0++)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    _logger.Information(VisualRuntime.LogTemplate("inside body", context.Parameters));
+}
+do
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    _logger.Information(VisualRuntime.LogTemplate("inside body", context.Parameters));
+}
+while (!true);
+while (true)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    _logger.Information(VisualRuntime.LogTemplate("inside body", context.Parameters));
+}
+while (true)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    _logger.Information(VisualRuntime.LogTemplate("inside body", context.Parameters));
+}
+if (true)
+{
+    _logger.Information(VisualRuntime.LogTemplate("inside then", context.Parameters));
+}
+if (true)
+{
+    _logger.Information(VisualRuntime.LogTemplate("inside then", context.Parameters));
+}
+else
+{
+    _logger.Information(VisualRuntime.LogTemplate("inside else", context.Parameters));
+}
+if (true)
+{
+    _logger.Information(VisualRuntime.LogTemplate("inside then", context.Parameters));
+}
+else if (true)
+{
+    _logger.Information(VisualRuntime.LogTemplate("inside elseIf", context.Parameters));
+}
+else
+{
+    _logger.Information(VisualRuntime.LogTemplate("inside else", context.Parameters));
+}
+await Task.Yield();
+return ActionResult.Success();
+return ActionResult.Success();
+return ActionResult.Success();
+return ActionResult.Failed(ActionErrorCodes.ProviderError, "message");
+return ActionResult.Accepted("message");
+throw new InvalidOperationException(VisualRuntime.ToText("message"));
+for (var _i1 = 0; _i1 < VisualRuntime.ToNumber(3); _i1++)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    break;
+    _logger.Information(VisualRuntime.LogTemplate("after the break", context.Parameters));
+    continue;
+}

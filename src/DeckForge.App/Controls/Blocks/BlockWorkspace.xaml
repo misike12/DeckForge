@@ -33,7 +33,7 @@
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                   CanContentScroll="False"
                   Background="{DynamicResource Liquid.BlockCanvasBrush}">
-        <Grid Background="{DynamicResource Liquid.BlockGridBrush}">
+        <Grid x:Name="SurfaceGrid" Background="{DynamicResource Liquid.BlockGridBrush}">
 
             <StackPanel Orientation="Horizontal">
 

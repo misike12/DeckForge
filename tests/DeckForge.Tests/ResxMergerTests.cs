@@ -14,14 +14,16 @@ namespace DeckForge.Tests;
 [TestFixture]
 public sealed class ResxMergerTests
 {
+    private TempDirectory _temp = null!;
+
     private string _dir = "";
     private string _resx = "";
 
     [SetUp]
     public void SetUp()
     {
-        _dir = Path.Combine(Path.GetTempPath(), "ResxMergerTests" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_dir);
+        _temp = new TempDirectory("ResxMergerTests");
+        _dir = _temp.Root;
         _resx = Path.Combine(_dir, "Strings.resx");
         File.WriteAllText(
             _resx,
@@ -39,13 +41,7 @@ public sealed class ResxMergerTests
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_dir))
-        {
-            Directory.Delete(_dir, recursive: true);
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     [Test]
     public void Setting_a_key_writes_once_and_reports_no_change_the_second_time()

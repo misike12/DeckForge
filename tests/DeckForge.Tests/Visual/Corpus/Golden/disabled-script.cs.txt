@@ -1,0 +1,10 @@
+// ==== golden: disabled-script ====
+// Covers: A switched-off script among switched-on ones, which the emitter skips whole.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: live
+_logger.Information(VisualRuntime.LogTemplate("runs", context.Parameters));
+// script: parked
+// (disabled - skipped by the emitter and the interpreter)
+// script: last
+_logger.Information(VisualRuntime.LogTemplate("also runs", context.Parameters));

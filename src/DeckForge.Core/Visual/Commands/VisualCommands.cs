@@ -112,6 +112,25 @@ public static class VisualCommands
     /// <summary>Open the command palette.</summary>
     public const string OpenPalette = "canvas.command-palette";
 
+    /// <summary>
+    /// Select every block on the canvas, and clear the selection again.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added with the rubber band, and for the same reason the band needed a reason. Part 18.1 gives a
+    /// pointer gesture for selecting several blocks and nothing at all in §18.3 for the keyboard, and a
+    /// feature that only the mouse can reach is a defect this design calls out by name (§17.2 item 6, "every
+    /// operation, including structural moves, is reachable without a pointer").
+    /// </para>
+    /// <para>
+    /// <c>Ctrl+A</c> rather than something invented, because it is the chord every other editor on the
+    /// machine already means by this, and <see cref="Cancel"/> (<c>Esc</c>) already clears the selection —
+    /// so the pair is <c>Ctrl+A</c> then <c>Esc</c>, which is the same two gestures a rubber band and a
+    /// click on empty canvas are.
+    /// </para>
+    /// </remarks>
+    public const string SelectAll = "canvas.select-all";
+
     /// <summary>Run the selected script in the stage.</summary>
     public const string StageRun = "stage.run";
 
@@ -120,6 +139,25 @@ public static class VisualCommands
 
     /// <summary>Step into one block.</summary>
     public const string StageStepInto = "stage.step-into";
+
+    /// <summary>
+    /// Suspend a running script at the next block boundary, and resume one that is suspended.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One command rather than two, because they are one button. A debugger's transport shows Pause while
+    /// a run is going and Continue the moment it is not, and two commands with two gestures would have to
+    /// claim two chords for one state — and the table's own test forbids two commands sharing a gesture in
+    /// a scope, which is the right rule and would make this impossible to do honestly.
+    /// </para>
+    /// <para>
+    /// <c>F6</c> because the function keys around it are the transport: F5 runs, F9 sets a breakpoint, F10
+    /// steps, F11 steps in, Shift+F5 stops. F6 is the free key between Run and Breakpoint, and a chord
+    /// nobody has to be told is worth more here than a mnemonic — the sheet and the menu both print the
+    /// gesture, so the name has to agree with the key rather than the other way round.
+    /// </para>
+    /// </remarks>
+    public const string StagePause = "stage.pause";
 
     /// <summary>Stop the run.</summary>
     public const string StageStop = "stage.stop";
@@ -149,11 +187,19 @@ public static class VisualCommands
         new(Delete, "Delete block", "Delete", CommandScope.Canvas, ["remove", "erase"], NeedsSelection: true),
         new(PickUpOrDrop, "Pick up or drop", "Space", CommandScope.Canvas, ["move", "carry", "drag"]),
         new(Cancel, "Cancel", "Esc", CommandScope.Canvas, ["escape", "stop", "clear"]),
+        new(SelectAll, "Select every block", "Ctrl+A", CommandScope.Canvas, ["all", "everything", "rubber band", "marquee"]),
 
         new(StageRun, "Run", "F5", CommandScope.Stage, ["play", "start", "go"]),
         new(StageStep, "Step", "F10", CommandScope.Stage, ["over", "one block"]),
         new(StageStepInto, "Step into", "F11", CommandScope.Stage, ["inside", "one block"]),
-        new(ToggleBreakpoint, "Toggle breakpoint", "F9", CommandScope.Stage, ["break", "pause", "stop here"]),
+        new(StagePause, "Pause or resume", "F6", CommandScope.Stage,
+            ["pause", "resume", "continue", "suspend", "hold", "break"]),
+        new(ToggleBreakpoint, "Toggle breakpoint", "F9", CommandScope.Stage, ["break", "pause", "stop here"],
+            // Marked here and not when it was written. A breakpoint belongs to a block, and the page's F9
+            // handler already declines without one - so "refused with nothing selected" was always true and
+            // the table just said otherwise. Nothing read the flag until Part 18.5's stage menu arrived and
+            // wanted to grey the row out rather than offer a menu item that does nothing.
+            NeedsSelection: true),
         new(StageStop, "Stop", "Shift+F5", CommandScope.Stage, ["halt", "end"]),
         new(StageReset, "Reset stage", "", CommandScope.Stage, ["clear", "start over"]),
 
@@ -165,6 +211,27 @@ public static class VisualCommands
     /// <summary>The command with that id, or null.</summary>
     public static VisualCommand? Find(string id) =>
         All.FirstOrDefault(command => string.Equals(command.Id, id, StringComparison.Ordinal));
+
+    /// <summary>
+    /// The commands that belong to one place, in table order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added for Part 18.5's three context menus, which are the third reader of this table beside the
+    /// palette and the shortcut sheet. They were going to be written out as literal menu items, and a menu
+    /// written out is a menu that drifts: it would show "Undo Ctrl+Z" beside a key handler that had since
+    /// been rebound, and nothing in the build or the suite would notice — which is the exact defect
+    /// <c>VisualCommandsTests</c> exists to prevent for the sheet.
+    /// </para>
+    /// <para>
+    /// A filter rather than a second list on purpose. It means a menu can only ever offer commands that are
+    /// really in the table, and it means a new command appears in the menu that lists its scope without
+    /// anybody remembering to add it — the same property the sheet has.
+    /// </para>
+    /// </remarks>
+    /// <param name="scope">Where the menu was opened.</param>
+    public static IReadOnlyList<VisualCommand> InScope(CommandScope scope) =>
+        [.. All.Where(command => command.Scope == scope)];
 
     /// <summary>
     /// The command a gesture names, or null — and null is a legitimate answer.

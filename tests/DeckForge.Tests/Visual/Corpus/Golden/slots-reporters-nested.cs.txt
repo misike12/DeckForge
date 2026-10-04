@@ -1,0 +1,7 @@
+// ==== golden: slots-reporters-nested ====
+// Covers: Reporters four deep, with a variable, a literal and a nested reporter in every position.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("result"), VisualRuntime.Clamp(VisualRuntime.Round(VisualRuntime.ToNumber(VisualRuntime.ToNumber(VisualRuntime.Get("count")) + VisualRuntime.ToNumber(2)) * VisualRuntime.ToNumber(1.5)), 0, VisualRuntime.ToNumber(10) + VisualRuntime.ToNumber(VisualRuntime.Get("limit"))));
+await Task.Delay((int)(VisualRuntime.ToNumber(VisualRuntime.Divide(10, 4)) * 1000), context.CancellationToken);

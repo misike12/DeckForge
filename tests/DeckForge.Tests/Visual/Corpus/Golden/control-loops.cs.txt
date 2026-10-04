@@ -1,0 +1,29 @@
+// ==== golden: control-loops ====
+// Covers: Every loop form, with bodies, break, continue and a yield inside a loop.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+for (var _i0 = 0; _i0 < VisualRuntime.ToNumber(3); _i0++)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    _logger.Information(VisualRuntime.LogTemplate("tick", context.Parameters));
+}
+do
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    _logger.Information(VisualRuntime.LogTemplate("at least once", context.Parameters));
+}
+while (!VisualRuntime.Compare("1", VisualRuntime.ToText(">"), "2"));
+while (true)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    break;
+    _logger.Information(VisualRuntime.LogTemplate("never reached", context.Parameters));
+}
+while (!VisualRuntime.ToBool(true))
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    continue;
+    await Task.Yield();
+}
+_logger.Information(VisualRuntime.LogTemplate("after the loops", context.Parameters));

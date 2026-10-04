@@ -1,0 +1,21 @@
+// ==== golden: control-caps ====
+// Covers: Every cap: both stop blocks, both finish blocks, the throw, and every error code the menu offers.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+return ActionResult.Success();
+_logger.Information(VisualRuntime.LogTemplate("unreachable", context.Parameters));
+return ActionResult.Failed(ActionErrorCodes.NotConfigured, "failed with NotConfigured");
+return ActionResult.Failed(ActionErrorCodes.NotConnected, "failed with NotConnected");
+return ActionResult.Failed(ActionErrorCodes.PermissionDenied, "failed with PermissionDenied");
+return ActionResult.Failed(ActionErrorCodes.ProviderError, "failed with ProviderError");
+return ActionResult.Failed(ActionErrorCodes.ProviderRejected, "failed with ProviderRejected");
+return ActionResult.Failed(ActionErrorCodes.InvalidParameter, "failed with InvalidParameter");
+return ActionResult.Failed(ActionErrorCodes.NotFound, "failed with NotFound");
+return ActionResult.Failed(ActionErrorCodes.Timeout, "failed with Timeout");
+return ActionResult.Failed(ActionErrorCodes.Unavailable, "failed with Unavailable");
+return ActionResult.Accepted("still running");
+throw new InvalidOperationException(VisualRuntime.ToText("the action could not run"));
+// script: second script
+return ActionResult.Success();
+return ActionResult.Success();

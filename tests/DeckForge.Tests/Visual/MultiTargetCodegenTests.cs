@@ -187,13 +187,21 @@ public sealed class MultiTargetCodegenTests
         return ($"src/{projectName}/{fileName}", content);
     }
 
+    private static TempDirectory _projectSandbox = null!;
+
+    [OneTimeSetUp]
+    public void ReserveProjectSandbox() => _projectSandbox = new TempDirectory("deckforge-p9-shared");
+
+    [OneTimeTearDown]
+    public void RemoveProjectSandbox() => _projectSandbox.Dispose();
+
     private static NewProjectOptions Options() => new()
     {
         PluginName = "Multi Target Probe",
         PluginId = "com.example.multi-target-" + Guid.NewGuid().ToString("N")[..8],
         Publisher = "Example",
         Description = "Phase 9's targets, with canvas blocks in them.",
-        ParentDirectory = Path.GetTempPath(),
+        ParentDirectory = _projectSandbox.Root,
         ProjectName = "MultiTargetProbe" + Guid.NewGuid().ToString("N")[..8],
         Platforms = ["win-x64"],
     };
@@ -224,10 +232,8 @@ public sealed class MultiTargetCodegenTests
         IReadOnlyList<(string RelativePath, string Content)> extras,
         IReadOnlyDictionary<string, string>? resxEntries = null)
     {
-        var scoped = options with { ParentDirectory = Path.GetTempPath() };
-        var sandbox = Path.Combine(Path.GetTempPath(), "deckforge-p9-" + Guid.NewGuid().ToString("N")[..10]);
-        Directory.CreateDirectory(sandbox);
-        var scopedSandbox = scoped with { ParentDirectory = sandbox };
+        using var sandbox = new TempDirectory("deckforge-p9");
+        var scopedSandbox = options with { ParentDirectory = sandbox.Root };
 
         var services = new ServiceCollection().BuildServiceProvider();
         var generator = new PluginProjectGenerator(services, NullLogger<PluginProjectGenerator>.Instance);

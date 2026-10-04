@@ -1,0 +1,9 @@
+// ==== golden: declarations-variables-and-lists ====
+// Covers: A document that declares variables and lists of every type, and a script that uses them.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+var items = new List<string>();
+VisualRuntime.Set(VisualRuntime.ToText("size"), VisualRuntime.List(items).Count);
+VisualRuntime.Set(VisualRuntime.ToText("first"), VisualRuntime.Item(items, "1"));
+VisualRuntime.Set(VisualRuntime.ToText("count"), 1);

@@ -24,6 +24,18 @@ public enum ExecutionStepKind
     /// <summary>A breakpoint stopped the run.</summary>
     BreakpointHit,
 
+    /// <summary>
+    /// A pause stopped the run, and this is the block it had just finished.
+    /// </summary>
+    /// <remarks>
+    /// Its own kind rather than a reused <see cref="BreakpointHit"/>, because the two say opposite things
+    /// about the block they name. A breakpoint is recorded <em>before</em> the block runs and the block has
+    /// not happened; a pause is recorded <em>after</em> it, so the block has run and the trace must not
+    /// imply otherwise. Reusing one kind would put a line in the trace that reads "breakpoint at X" beside a
+    /// block that had already executed, and the next thing anybody does with that trace is believe it.
+    /// </remarks>
+    PausedAfter,
+
     /// <summary>The run stopped, and this is why.</summary>
     Error,
 }
@@ -55,6 +67,7 @@ public sealed record ExecutionStep(
         ExecutionStepKind.LogEmitted => $"log  {Label}",
         ExecutionStepKind.WaitElapsed => $"wait {Value} ms",
         ExecutionStepKind.BreakpointHit => $"breakpoint at {Label}",
+        ExecutionStepKind.PausedAfter => $"paused after {Label}",
         _ => Label ?? "error",
     };
 }

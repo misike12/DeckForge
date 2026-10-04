@@ -1,0 +1,11 @@
+// ==== golden: unknown-kind ====
+// Covers: A kind this build does not know, a deferred kind, and a kind that is only whitespace.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+_logger.Information(VisualRuntime.LogTemplate("before", context.Parameters));
+_logger.Information(VisualRuntime.LogTemplate("after", context.Parameters));
+
+// ==== problems the emitter reported ====
+// b2: "someone.elses.block" is not a block this build knows; it was skipped.
+// b3: "" is not a block this build knows; it was skipped.

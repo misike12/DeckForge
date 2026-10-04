@@ -55,7 +55,12 @@ public sealed partial class StageViewModel : ObservableObject
             {
                 action();
                 Project();
-            }));
+            }),
+            // Scoped to the target the editor is showing, from the first frame. The header's picker decides
+            // which target that is, and the stage has to be asking the same question — a stage that listed
+            // and ran every action's scripts underneath a picker that names one action is not a small
+            // disagreement, it produces a trace full of values the user never wrote.
+            editor.Target.Id);
     }
 
     /// <summary>The session, for a caller that needs something this class does not project.</summary>
@@ -129,6 +134,20 @@ public sealed partial class StageViewModel : ObservableObject
     /// <summary>Whether a run is in progress.</summary>
     public bool IsRunning => _session.IsRunning;
 
+    /// <summary>Whether a run is suspended part-way and can be carried on from there.</summary>
+    /// <remarks>
+    /// Not the same question as "is something paused", and the difference is the whole reason this is a
+    /// projection rather than a name the panel made up: a run stopped at a breakpoint is over, and the
+    /// answer to "carry on" there is Run, not Resume.
+    /// </remarks>
+    public bool IsPaused => _session.IsPaused;
+
+    /// <summary>Whether the transport's pause control can do anything right now.</summary>
+    public bool CanPause => _session.CanPause;
+
+    /// <summary>What the transport's pause control says: Pause while running, Resume once suspended.</summary>
+    public string PauseLabel => _session.PauseLabel;
+
     /// <summary>Whether there is a script to step.</summary>
     public bool CanStep => _session.CanStep;
 
@@ -191,6 +210,36 @@ public sealed partial class StageViewModel : ObservableObject
         Project();
     }
 
+    /// <summary>
+    /// Suspends a running script, or carries on from one that is suspended.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One command and one button, toggling, because that is how a debugger's transport has always done it
+    /// and because <see cref="VisualCommands"/> cannot hold two commands sharing one gesture — the rule that
+    /// keeps the shortcut sheet honest is also the rule that makes Pause and Resume one row.
+    /// </para>
+    /// <para>
+    /// The decision is the session's, not this class's. Asking "am I paused" here and branching would be a
+    /// second copy of the state machine in Core, and the copy is where a transport ends up offering Resume
+    /// for a run that has already finished.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private void Pause()
+    {
+        if (_session.IsPaused)
+        {
+            _session.Resume();
+        }
+        else
+        {
+            _session.Pause();
+        }
+
+        Project();
+    }
+
     /// <summary>Clears the trace, the host and the clock.</summary>
     [RelayCommand]
     private void Reset()
@@ -233,7 +282,10 @@ public sealed partial class StageViewModel : ObservableObject
     /// <summary>Re-reads the document, after an edit or a revert.</summary>
     public void Rebind()
     {
-        _session.Rebind(_editor.Document, _editor.Validation.Parameters);
+        // The target comes from the editor rather than being remembered here, because the header's picker is
+        // what owns that choice and a copy of it in the stage would be a second answer to "which action am I
+        // running" that nobody would remember to update.
+        _session.Rebind(_editor.Document, _editor.Validation.Parameters, _editor.Target.Id);
         Project();
     }
 
@@ -265,6 +317,9 @@ public sealed partial class StageViewModel : ObservableObject
         CurrentBlockIdValue = _session.CurrentBlockId;
 
         OnPropertyChanged(nameof(IsRunning));
+        OnPropertyChanged(nameof(IsPaused));
+        OnPropertyChanged(nameof(CanPause));
+        OnPropertyChanged(nameof(PauseLabel));
         OnPropertyChanged(nameof(CanStep));
         OnPropertyChanged(nameof(HasTrace));
         OnPropertyChanged(nameof(HasWatch));

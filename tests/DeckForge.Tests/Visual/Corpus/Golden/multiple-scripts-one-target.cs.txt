@@ -1,0 +1,16 @@
+// ==== golden: multiple-scripts-one-target ====
+// Covers: Three scripts in one target, one of them switched off, with one procedure called from two of them.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task sharedAsync(object? n)
+{
+    VisualRuntime.Set("n", n);
+    _logger.Information(VisualRuntime.LogTemplate("n", context.Parameters));
+}
+// script: first
+await sharedAsync("1");
+// script: parked
+// (disabled - skipped by the emitter and the interpreter)
+// script: third
+await sharedAsync("");

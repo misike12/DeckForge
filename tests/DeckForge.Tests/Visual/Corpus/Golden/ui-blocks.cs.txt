@@ -1,0 +1,29 @@
+// ==== golden: ui-blocks ====
+// Covers: Every Ui block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+if (context.Ui is null || context.Interactions is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.Unavailable, "No client surface is available yet.");
+}
+
+// script: main
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Title = VisualRuntime.ToText("title"), Message = VisualRuntime.ToText("message") });
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Level = MacroDeck.Sdk.Notifications.UserNotificationLevel.Info, Title = VisualRuntime.ToText("title"), Message = VisualRuntime.ToText("message") });
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Key = VisualRuntime.ToText("key"), Title = VisualRuntime.ToText("title"), Message = VisualRuntime.ToText("message") });
+_integration.Notifications.Dismiss(VisualRuntime.ToText("key"));
+await context.Ui.ShowModalAsync(context.OriginClientId, new MacroDeck.Sdk.Ui.ModalDefinition { ViewId = VisualRuntime.ToText("view"), Title = VisualRuntime.ToText("title") }, context.CancellationToken);
+await context.Ui.ShowModalAsync(context.OriginClientId, new MacroDeck.Sdk.Ui.ModalDefinition { ViewId = VisualRuntime.ToText("view"), Title = VisualRuntime.ToText("title"), Data = VisualRuntime.Data(VisualRuntime.ToText("data")) }, context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await context.Ui.ShowModalAsync<string>(context.OriginClientId, new MacroDeck.Sdk.Ui.ModalDefinition { ViewId = VisualRuntime.ToText("view") }, context.CancellationToken));
+_logger.Information(VisualRuntime.LogTemplate("template", context.Parameters));
+_logger.Information(VisualRuntime.LogTemplate("template", context.Parameters), VisualRuntime.ToText(VisualRuntime.Parameter(context, VisualRuntime.ToText("param"))));
+await _integration.Widgets.InvalidateIconAsync(VisualRuntime.ToText("widget"), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Widgets.Exists(VisualRuntime.ToText("widget")));
+await VisualRuntime.RegisterAssetAsync(_integration, VisualRuntime.ToText("name"), VisualRuntime.ToText("path"), context.CancellationToken);
+context.Interactions.RequestItemPicker(context.OriginClientId, VisualRuntime.ToText("instance"), MacroDeck.Sdk.MusicPlayer.MusicPlayerCatalogItemKind.Track, VisualRuntime.ToText("prompt"));
+context.Interactions.RequestDevicePicker(context.OriginClientId, VisualRuntime.ToText("instance"), false, VisualRuntime.ToText("prompt"));

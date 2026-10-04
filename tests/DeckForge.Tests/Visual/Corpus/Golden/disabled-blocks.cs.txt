@@ -1,0 +1,9 @@
+// ==== golden: disabled-blocks ====
+// Covers: A disabled statement, a disabled container with children in it, and a disabled block carrying a comment.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+// log {level} {template} (disabled)
+// repeat {count} (disabled)
+// kept for the next release
+_logger.Information(VisualRuntime.LogTemplate("annotated", context.Parameters));

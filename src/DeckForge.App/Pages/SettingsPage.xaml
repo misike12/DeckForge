@@ -58,6 +58,168 @@
                 </StackPanel>
             </Border>
 
+            <!--
+                Visual editor.
+
+                Fourteen rows, written out one at a time rather than generated from the catalogue. The
+                generated version would have been a third of the markup, and it would also have made every
+                row the same row: a snap radius, a boolean and a three-way choice do not want the same
+                control, and a template that tries to serve all three ends up with a data grid or a row of
+                radio buttons for a font size.
+
+                The prose is not here. Each row binds its description to SettingCatalog through the view
+                model, so there is one copy of it in the product. What is here is which rows exist, and
+                that a test reads this file to check.
+
+                Language="en-US" on the six number boxes, and that is not decoration. A two-way binding to a
+                double parses the text with the culture of the element it is on, and this machine's
+                regional settings are not en-US: the box would have shown "13,5" for the 13.5 that the file
+                holds, and a user typing the dot the range hint uses would have had the keystroke silently
+                ignored. The file is written in invariant culture, so the box reads and writes it the same
+                way - the number on screen is always the number in settings.json.
+            -->
+            <TextBlock Text="Visual editor" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,4" />
+            <TextBlock Text="The block canvas's own settings. Every key on this page is written to settings.json and checked against its range when the file is read; the sentence under each one says whether anything reads it yet, because most of them do not."
+                       FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,0,0,8"
+                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <CheckBox Content="{Binding VisualSnapEnabledInfo.Name}"
+                              IsChecked="{Binding VisualSnapEnabled}" />
+                    <TextBlock Text="{Binding VisualSnapEnabledInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="{Binding VisualSnapRadiusInfo.Name}" FontSize="13" FontWeight="Medium" />
+                    <ui:TextBox Language="en-US" Text="{Binding VisualSnapRadius, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                HorizontalAlignment="Left" Width="140" Margin="0,4,0,0"
+                                PlaceholderText="40" />
+                    <TextBlock Text="{Binding VisualSnapRadiusInfo.Range}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <CheckBox Content="{Binding VisualSnapToGridInfo.Name}"
+                              IsChecked="{Binding VisualSnapToGrid}" />
+                    <TextBlock Text="{Binding VisualSnapToGridInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="{Binding VisualGridSizeInfo.Name}" FontSize="13" FontWeight="Medium" />
+                    <ui:TextBox Language="en-US" Text="{Binding VisualGridSize, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                HorizontalAlignment="Left" Width="140" Margin="0,4,0,0"
+                                PlaceholderText="16" />
+                    <TextBlock Text="{Binding VisualGridSizeInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="{Binding VisualDefaultZoomInfo.Name}" FontSize="13" FontWeight="Medium" />
+                    <ui:TextBox Language="en-US" Text="{Binding VisualDefaultZoom, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                HorizontalAlignment="Left" Width="140" Margin="0,4,0,0"
+                                PlaceholderText="100" />
+                    <TextBlock Text="{Binding VisualDefaultZoomInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <CheckBox Content="{Binding VisualMinimapVisibleInfo.Name}"
+                              IsChecked="{Binding VisualMinimapVisible}" />
+                    <TextBlock Text="{Binding VisualMinimapVisibleInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <CheckBox Content="{Binding VisualPaletteShowDeprecatedInfo.Name}"
+                              IsChecked="{Binding VisualPaletteShowDeprecated}" />
+                    <TextBlock Text="{Binding VisualPaletteShowDeprecatedInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="{Binding VisualAutosaveSecondsInfo.Name}" FontSize="13" FontWeight="Medium" />
+                    <ui:TextBox Language="en-US" Text="{Binding VisualAutosaveSeconds, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                HorizontalAlignment="Left" Width="140" Margin="0,4,0,0"
+                                PlaceholderText="0" />
+                    <TextBlock Text="{Binding VisualAutosaveSecondsInfo.Range}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,2"
+                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                    <TextBlock Text="{Binding VisualAutosaveSecondsInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,0,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="{Binding VisualBlockTextSizeInfo.Name}" FontSize="13" FontWeight="Medium" />
+                    <ui:TextBox Language="en-US" Text="{Binding VisualBlockTextSize, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                HorizontalAlignment="Left" Width="140" Margin="0,4,0,0"
+                                PlaceholderText="13.5" />
+                    <TextBlock Text="{Binding VisualBlockTextSizeInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <CheckBox Content="{Binding VisualShowBlockCodeInfo.Name}"
+                              IsChecked="{Binding VisualShowBlockCode}" />
+                    <TextBlock Text="{Binding VisualShowBlockCodeInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <CheckBox Content="{Binding VisualOnboardingSeenInfo.Name}"
+                              IsChecked="{Binding VisualOnboardingSeen}" />
+                    <TextBlock Text="{Binding VisualOnboardingSeenInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="{Binding StoredOnlyNote}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left"
+                               Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!--
+                Accessibility. The one section whose key is read by something.
+
+                Three radios and a sentence, because the sentence is the answer: "System" on its own does
+                not tell a user whether motion is currently being suppressed, and the resolved line is
+                computed by MotionPolicy so the page and the window cannot disagree about it.
+            -->
+            <TextBlock Text="Accessibility" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,4" />
+            <TextBlock Text="Applies immediately, and is undone immediately when you change it back - no restart."
+                       FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,0,0,8"
+                       Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <TextBlock Text="{Binding VisualReduceMotionInfo.Name}" FontSize="13" FontWeight="Medium" />
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <RadioButton Content="Follow the system" Tag="System" Margin="0,0,16,0" GroupName="ReduceMotion"
+                                     IsChecked="{Binding VisualReduceMotion, Mode=TwoWay, Converter={StaticResource EnumToMotionPreferenceConverter}, ConverterParameter=System}" />
+                        <RadioButton Content="Always reduce motion" Tag="Always" Margin="0,0,16,0" GroupName="ReduceMotion"
+                                     IsChecked="{Binding VisualReduceMotion, Mode=TwoWay, Converter={StaticResource EnumToMotionPreferenceConverter}, ConverterParameter=Always}" />
+                        <RadioButton Content="Never reduce motion" Tag="Never"
+                                     IsChecked="{Binding VisualReduceMotion, Mode=TwoWay, Converter={StaticResource EnumToMotionPreferenceConverter}, ConverterParameter=Never}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding ResolvedMotion}" FontSize="12" TextWrapping="Wrap"
+                               TextAlignment="Left" Margin="0,6,0,0"
+                               Foreground="{DynamicResource Liquid.AccentStrongBrush}" />
+                    <TextBlock Text="{Binding MotionScope}" FontSize="11.5" TextWrapping="Wrap"
+                               TextAlignment="Left" Margin="0,8,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                </StackPanel>
+            </Border>
+
+            <!-- Simulator -->
+            <TextBlock Text="Simulator" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,4" />
+            <Border Style="{StaticResource LiquidCard}">
+                <StackPanel>
+                    <CheckBox Content="{Binding VisualStageAllowNetworkInfo.Name}"
+                              IsChecked="{Binding VisualStageAllowNetwork}" />
+                    <TextBlock Text="{Binding VisualStageAllowNetworkInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,10"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+
+                    <TextBlock Text="{Binding VisualStageStepDelayMsInfo.Name}" FontSize="13" FontWeight="Medium" />
+                    <ui:TextBox Language="en-US" Text="{Binding VisualStageStepDelayMs, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                HorizontalAlignment="Left" Width="140" Margin="0,4,0,0"
+                                PlaceholderText="120" />
+                    <TextBlock Text="{Binding VisualStageStepDelayMsInfo.Description}"
+                               FontSize="11.5" TextWrapping="Wrap" TextAlignment="Left" Margin="0,2,0,0"
+                               Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                </StackPanel>
+            </Border>
+
             <!-- Projects -->
             <TextBlock Text="Projects" FontSize="17" FontWeight="SemiBold" Margin="0,20,0,8" />
             <Border Style="{StaticResource LiquidCard}">

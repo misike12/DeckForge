@@ -18,27 +18,19 @@ public sealed class PaletteStoreTests
 {
     private static string Root => _root;
 
+    private static TempDirectory _temp = null!;
+
     private static string _root = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "deckforge-palette-" + Guid.NewGuid().ToString("N")[..10]);
-        Directory.CreateDirectory(_root);
+        _temp = new TempDirectory("deckforge-palette");
+        _root = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        try
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-        catch (IOException)
-        {
-            // A leftover temp directory is not worth failing a green suite over.
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     [Test]
     public void A_workspace_with_no_file_starts_with_an_empty_palette_rather_than_an_error()

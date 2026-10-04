@@ -1,0 +1,15 @@
+// ==== golden: statement-in-a-slot ====
+// Covers: A statement put in a value slot, and one put in a boolean slot: both reported, neither emitted as code.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - When a slot holds a block that is not a reporter, the emitter reports the problem and returns a bare `string.Empty` - without the coercion the slot asked for. A Boolean slot then reads `if (string.Empty)`, which is CS0029. The diagnostic is correct; the substitution is not.
+// script: main
+await Task.Delay((int)(VisualRuntime.ToNumber(string.Empty) * 1000), context.CancellationToken);
+if (string.Empty)
+{
+}
+VisualRuntime.Set(VisualRuntime.ToText("x"), _integration.Deck.GetClients().Count);
+
+// ==== problems the emitter reported ====
+// b2: "log {level} {template}" is a statement, and statements cannot be values.
+// b4: "repeat {count}" is a statement, and statements cannot be values.
+// b7: "{a} + {b}" produces a value; nothing here reads it.

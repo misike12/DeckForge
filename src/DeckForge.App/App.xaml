@@ -21,6 +21,7 @@
             <conv:DoctorCheckInstallableToVisibilityConverter x:Key="DoctorCheckInstallableToVisibilityConverter" />
             <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
             <conv:EnumToAppThemeConverter x:Key="EnumToAppThemeConverter" />
+            <conv:EnumToMotionPreferenceConverter x:Key="EnumToMotionPreferenceConverter" />
             <conv:IntToVisibilityConverter x:Key="IntToVisibilityConverter" />
             <conv:SeverityToBrushConverter x:Key="SeverityToBrushConverter" />
 

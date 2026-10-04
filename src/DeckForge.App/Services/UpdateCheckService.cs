@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using DeckForge.Core.Plugins;
+using DeckForge.Core.Settings;
 
 namespace DeckForge.App.Services;
 

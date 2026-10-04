@@ -1,0 +1,8 @@
+// ==== golden: unicode-comment-with-newline ====
+// Covers: A comment block whose text carries a newline, which the emitter writes into the comment verbatim.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - A `control.comment` writes its text straight after `//`, so a newline in that text becomes a bare line of C# in the region - `second line`, uncommented, which is CS0101. Snapshot-only until the emitter splits the comment the way it splits an attached one; the defect is visible in the golden file, one line below the header.
+// script: main
+// first line
+second line
+_logger.Information(VisualRuntime.LogTemplate("after the comment", context.Parameters));

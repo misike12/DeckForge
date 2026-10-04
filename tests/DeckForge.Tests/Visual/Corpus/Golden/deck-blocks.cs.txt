@@ -1,0 +1,23 @@
+// ==== golden: deck-blocks ====
+// Covers: Every Deck block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+// script: main
+await _integration.Deck.ChangeFolderAsync(VisualRuntime.ToText("folder"), context.OriginClientId, context.CancellationToken);
+await _integration.Deck.ChangeFolderAsync(VisualRuntime.ToText("folder"), VisualRuntime.ToText("client"), context.CancellationToken);
+await _integration.Deck.GoToParentAsync(context.OriginClientId, context.CancellationToken);
+await _integration.Deck.GoBackAsync(context.OriginClientId, context.CancellationToken);
+await _integration.Deck.ChangeProfileAsync(VisualRuntime.ToText("profile"), context.OriginClientId, context.CancellationToken);
+await _integration.Widgets.InvalidateIconAsync(VisualRuntime.ToText("action"), context.CancellationToken);
+await _integration.Widgets.SetStateAsync(VisualRuntime.ToText("widget"), VisualRuntime.ToText("state"), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().FirstOrDefault(_c => _c.ClientId == context.OriginClientId)?.FolderId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().FirstOrDefault(_c => _c.ClientId == context.OriginClientId)?.ProfileId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().FirstOrDefault(_c => _c.ClientId == VisualRuntime.ToText("client"))?.FolderId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().Count);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(_integration.Deck.GetClients().Select(_c => _c.ClientId)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().Any(_c => _c.ClientId == VisualRuntime.ToText("client")));

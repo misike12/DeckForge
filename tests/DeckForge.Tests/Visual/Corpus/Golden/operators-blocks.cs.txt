@@ -1,0 +1,36 @@
+// ==== golden: operators-blocks ====
+// Covers: Every Operators block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+var items = new List<string>();
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber("a") + VisualRuntime.ToNumber("b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber("a") - VisualRuntime.ToNumber("b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber("a") * VisualRuntime.ToNumber("b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Divide("a", "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Modulo("a", "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Round("value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("abs"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Clamp("value", "low", "high"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Random("from", "to"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.RandomItem(items));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("="), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToBool(true) && VisualRuntime.ToBool(true));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToBool(true) || VisualRuntime.ToBool(true));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), !VisualRuntime.ToBool(true));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("a") + VisualRuntime.ToText("b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.JoinList(items, VisualRuntime.ToText("separator")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.LetterOf("index", "text"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("text").Length);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("text").Contains(VisualRuntime.ToText("part"), StringComparison.Ordinal));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Substring("text", "start", "length"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("text").Replace(VisualRuntime.ToText("find"), VisualRuntime.ToText("replace"), StringComparison.Ordinal));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("text").ToUpperInvariant());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("text").ToLowerInvariant());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText("text").Trim());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Split("text", VisualRuntime.ToText("separator")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Format(VisualRuntime.ToText("template"), VisualRuntime.ToText("args")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), Uri.EscapeDataString(VisualRuntime.ToText("text")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(VisualRuntime.ToText("text"))));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Base64Decode(VisualRuntime.ToText("text")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.JsonGet(VisualRuntime.ToText("text"), VisualRuntime.ToText("path")));

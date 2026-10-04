@@ -21,7 +21,7 @@ namespace DeckForge.Tests;
 [TestFixture]
 public sealed class CapabilityPresetContributorTests
 {
-    private static NewProjectOptions Options(params string[] presets) => new()
+    private NewProjectOptions Options(params string[] presets) => new()
     {
         PluginName = "Preset probe",
         PluginId = "com.example.presetprobe",
@@ -32,14 +32,28 @@ public sealed class CapabilityPresetContributorTests
         CapabilityPresets = presets,
     };
 
-    private static string Sandbox()
+    /// <summary>A fresh directory for one sandbox, disposed by the fixture.</summary>
+    private readonly List<TempDirectory> _sandboxes = [];
+
+    private string Sandbox()
     {
-        var root = Path.Combine(Path.GetTempPath(), "deckforge-preset-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(root);
-        return root;
+        var sandbox = new TempDirectory("deckforge-preset");
+        _sandboxes.Add(sandbox);
+        return sandbox.Root;
     }
 
-    private static ProjectContentBuilder Build(params string[] presets)
+    [TearDown]
+    public void TearDown()
+    {
+        foreach (var sandbox in _sandboxes)
+        {
+            sandbox.Dispose();
+        }
+
+        _sandboxes.Clear();
+    }
+
+    private ProjectContentBuilder Build(params string[] presets)
     {
         var services = new ServiceCollection();
         services.AddSingleton<CapabilityPresetContributor>();
@@ -226,7 +240,7 @@ public sealed class CapabilityPresetContributorTests
             "The generated manifest is not valid JSON.");
     }
 
-    private static ProjectContentBuilder BuildWith(Func<NewProjectOptions, NewProjectOptions> adjust)
+    private ProjectContentBuilder BuildWith(Func<NewProjectOptions, NewProjectOptions> adjust)
     {
         var services = new ServiceCollection();
         return new PluginProjectGenerator(

@@ -1,0 +1,12 @@
+// ==== golden: lists-blocks ====
+// Covers: Every Lists block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+var items = new List<string>();
+var items0 = new List<string>();
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Item(items, "index"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.IndexOf(items, "item"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(items).Count);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(items).Contains(VisualRuntime.ToText("item"), StringComparer.Ordinal));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(items));

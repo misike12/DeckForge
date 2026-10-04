@@ -16,23 +16,19 @@ namespace DeckForge.Tests.Visual;
 [TestFixture]
 public sealed class ResxTextLookupTests
 {
+    private TempDirectory _temp = null!;
+
     private string _directory = string.Empty;
 
     [SetUp]
     public void SetUp()
     {
-        _directory = Path.Combine(Path.GetTempPath(), "deckforge-blocklabels-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_directory);
+        _temp = new TempDirectory("deckforge-blocklabels");
+        _directory = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_directory))
-        {
-            Directory.Delete(_directory, recursive: true);
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     private static BlockDescriptor Row(string kind) =>
         BlockCatalog.Find(kind) ?? throw new InvalidOperationException($"{kind} is not in the catalogue");

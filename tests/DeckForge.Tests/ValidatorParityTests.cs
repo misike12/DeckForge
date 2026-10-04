@@ -14,26 +14,19 @@ namespace DeckForge.Tests;
 [TestFixture]
 public sealed class ValidatorParityTests
 {
+    private TempDirectory _temp = null!;
+
     private string _root = "";
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "validators-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_root);
+        _temp = new TempDirectory("validators");
+        _root = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        try
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-        catch (IOException)
-        {
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     private string WriteResx(string name, params (string Key, string Value)[] entries)
     {

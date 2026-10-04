@@ -54,14 +54,28 @@ public sealed class ScriptInterpreter
     private bool _running;
     private bool _paused;
 
-    public ScriptInterpreter(VisualProject project, IVisualHost host, int seed = 20240601)
+    public ScriptInterpreter(VisualProject project, IVisualHost host, int seed = 20240601, string? targetId = null)
     {
         Project = project ?? throw new ArgumentNullException(nameof(project));
         Host = host ?? throw new ArgumentNullException(nameof(host));
         _random = new Random(seed);
 
         Seed = seed;
-        Steps = [.. project.Targets.SelectMany(target => target.Scripts)];
+        TargetId = targetId;
+
+        // Scoped to one target when the caller names one, and to the whole document when it does not.
+        //
+        // Null rather than "the first target", because the second is what this was before: a stage whose
+        // script picker was set to an action's second script listed and ran that action's *and* every other
+        // action's, and the header had no way to say which target was being edited at all. A caller that
+        // genuinely wants everything - the batch Run of a test, the dry-run tracer over a whole document -
+        // still gets everything, which is why this is a filter and not a default.
+        var targets = targetId is null
+            ? project.Targets
+            : [.. project.Targets.Where(candidate =>
+                string.Equals(candidate.Id, targetId, StringComparison.Ordinal))];
+
+        Steps = [.. targets.SelectMany(target => target.Scripts)];
         // First one wins, rather than throwing on the second. Two procedures with the same name should be
         // impossible - the editor refuses the rename that would make it so - but a document can arrive from
         // a file that predates the rule or from a hand edit, and a duplicate key here threw out of a WPF
@@ -86,6 +100,16 @@ public sealed class ScriptInterpreter
 
     /// <summary>The seed, so a trace can be reproduced exactly.</summary>
     public int Seed { get; }
+
+    /// <summary>
+    /// The one target this run is allowed to touch, or null when it may touch them all.
+    /// </summary>
+    /// <remarks>
+    /// Published rather than kept private because a stage that lists scripts from three actions and says
+    /// it is showing one target's trace is lying about where the numbers came from, and the only thing that
+    /// can check is whatever is asking the session what it is running.
+    /// </remarks>
+    public string? TargetId { get; }
 
     /// <summary>The scripts, in document order.</summary>
     public IReadOnlyList<VisualScript> Steps { get; }
@@ -148,6 +172,89 @@ public sealed class ScriptInterpreter
     /// <summary>The block's own label, so the stage can say what it stopped in front of.</summary>
     public string PausedAtBreakpointLabel { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Whether somebody has asked the run to stop at the next block boundary.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A flag rather than a cancellation token, and the difference matters. A
+    /// <see cref="CancellationToken"/> means "abandon this run": the interpreter returns
+    /// <see cref="RunOutcome.Cancelled"/>, the stage says the run was stopped, and nothing about the
+    /// stack is kept. That is the wrong verb for Pause, which has to leave the run able to carry on from
+    /// exactly where it stopped — which is why <see cref="Continue"/> exists at all and why the body stack
+    /// survives a pause.
+    /// </para>
+    /// <para>
+    /// Also not a thread-blocking wait. Core has no threads and no dispatcher, and a "pause" implemented by
+    /// parking the calling thread would freeze whichever thread called <see cref="Run"/> — in this
+    /// application, the UI thread, which is the one thing that has to stay free to answer the button.
+    /// </para>
+    /// </remarks>
+    public bool PauseRequested { get; private set; }
+
+    /// <summary>
+    /// Whether the run stopped because somebody asked it to, rather than because of a breakpoint.
+    /// </summary>
+    /// <remarks>
+    /// Asked separately from <see cref="PausedAtBreakpoint"/> because both end in
+    /// <see cref="RunOutcome.Paused"/> and a caller that only looked at the outcome could not tell a
+    /// deliberate pause from a breakpoint it did not know about — which is the difference between resuming
+    /// where the user left off and stopping again on the next line.
+    /// </remarks>
+    public bool PausedOnRequest { get; private set; }
+
+    /// <summary>The block the run had just finished when a requested pause stopped it.</summary>
+    public string? PausedAfterBlockId { get; private set; }
+
+    /// <summary>That block's label, so the stage can say where the run is standing.</summary>
+    public string PausedAfterBlockLabel { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Asks the run to stop once the block it is executing has finished.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Honoured at a boundary and never inside one, which is the whole contract. Core cannot unwind half an
+    /// executed block from the outside — by the time this returns the block has already written to the
+    /// host's variables, moved the clock and appended to the trace — so the earliest honest moment to stop
+    /// is between two blocks, and the earliest is also the only one that leaves the document and the host in
+    /// a state a Resume can continue from.
+    /// </para>
+    /// <para>
+    /// A no-op when nothing is running, rather than a stored request that fires on the next Run. That
+    /// version reads fine while you are testing it and is maddening in the application: press Pause before
+    /// Run, then press Run, and the very first block runs and the run stops again — a Pause that appears to
+    /// do nothing and then stops a run the user never paused.
+    /// </para>
+    /// </remarks>
+    public void RequestPause()
+    {
+        PauseRequested = _running;
+    }
+
+    /// <summary>
+    /// Takes the request back without stopping anything, for a caller that changed its mind.
+    /// </summary>
+    public void ClearPause() => PauseRequested = false;
+
+    /// <summary>
+    /// Drops every mark a pause left, without touching the run itself.
+    /// </summary>
+    /// <remarks>
+    /// For the caller that ends a run some other way — Stop, a script selection, a panel closing. Without
+    /// it the stage's <c>IsPaused</c> keeps answering "yes, resume it" after the user pressed Stop, because
+    /// nothing between here and there had any reason to clear a flag nobody was reading any more.
+    /// <see cref="Reset"/> and <see cref="Step"/> already do this for themselves; this is the version for
+    /// the paths that are not starting, continuing or resetting.
+    /// </remarks>
+    public void ForgetPause()
+    {
+        PauseRequested = false;
+        PausedOnRequest = false;
+        PausedAfterBlockId = null;
+        PausedAfterBlockLabel = string.Empty;
+    }
+
     /// <summary>Blocks executed by the current run.</summary>
     public int Executed { get; private set; }
 
@@ -208,6 +315,13 @@ public sealed class ScriptInterpreter
         }
 
         _paused = false;
+
+        // Same reason as Continue: a step is a deliberate move on from wherever the run is, so the marks of
+        // the stop it is leaving behind are history rather than state.
+        PausedOnRequest = false;
+        PausedAfterBlockId = null;
+        PausedAfterBlockLabel = string.Empty;
+
         return Pump(_script!, cancellation, stopAtBreakpoints: true, singleBlock: true, stepInto: intoContainer);
     }
 
@@ -220,6 +334,14 @@ public sealed class ScriptInterpreter
         }
 
         _paused = false;
+
+        // The markers from the pause being left, or the next stop would be reported as the previous one.
+        // A stage that reads <see cref="PausedOnRequest"/> to decide whether its transport shows Pause or
+        // Resume would otherwise offer Resume forever, because nothing ever put the flag back.
+        PausedOnRequest = false;
+        PausedAfterBlockId = null;
+        PausedAfterBlockLabel = string.Empty;
+
         return Pump(_script!, cancellation, stopAtBreakpoints: false);
     }
 
@@ -245,6 +367,12 @@ public sealed class ScriptInterpreter
         _paused = false;
         PausedAtBreakpoint = null;
         PausedAtBreakpointLabel = string.Empty;
+
+        // The pause state goes too. A request that survived a Reset would stop the first block of the next
+        // run, which is the same trap as leaving a pause armed while nothing is running - and Reset is
+        // exactly when a user who was about to press Pause presses Reset instead.
+        ForgetPause();
+
         LastOutcome = RunOutcome.Completed;
     }
 
@@ -358,6 +486,15 @@ public sealed class ScriptInterpreter
                     return LastOutcome = RunOutcome.Paused;
                 }
 
+                // Still a boundary, even though a body was pushed: the container's own step is written and
+                // nothing inside it has run. Stopping here rather than one block deeper is the difference
+                // between pausing "after repeat 10" and pausing "after repeat 10, then after its first
+                // statement", and only the first is what the user asked for.
+                if (HonourPause(block))
+                {
+                    return LastOutcome = RunOutcome.Paused;
+                }
+
                 continue;
             }
 
@@ -365,11 +502,65 @@ public sealed class ScriptInterpreter
 
             if (singleBlock)
             {
-                return LastOutcome = _running && bodies.Count == 0
-                    ? RunOutcome.Completed
-                    : RunOutcome.Paused;
+                if (_running && bodies.Count == 0)
+                {
+                    // The run is over, so there is nothing a pause could be holding up. Honoured anyway it
+                    // would leave the stage offering to resume a script that has already finished.
+                    return LastOutcome = RunOutcome.Completed;
+                }
+
+                // Checked here as well, and this is the line that makes the stage's Pause work at all.
+                //
+                // A paced run is *not* one long pump: StageSession asks for one block at a time, so the
+                // only pump there is to break out of is this one. An earlier version checked the request
+                // only in the multi-block path — the right instinct, since a stepped pump has already
+                // suspended — and the consequence was that the transport's Pause button armed a request
+                // nothing ever read, and the run carried on at full speed with the button now reading
+                // "Resume".
+                HonourPause(block);
+
+                return LastOutcome = RunOutcome.Paused;
+            }
+
+            // Checked after the block, never before it: a pause pressed between two of a stage's ticks
+            // has to let the tick in flight finish, or the button looks like it did nothing and the run
+            // stops a moment later for no stated reason.
+            if (HonourPause(block))
+            {
+                return LastOutcome = RunOutcome.Paused;
             }
         }
+    }
+
+    /// <summary>
+    /// Stops the run if a pause was asked for, and says where it stopped.
+    /// </summary>
+    /// <param name="block">The block that has just finished.</param>
+    /// <returns>Whether the pump should return.</returns>
+    /// <remarks>
+    /// The request is consumed here rather than left set, because it has now been acted on: leaving it
+    /// would make the next <see cref="Continue"/> stop again one block later, and a Resume that only advances
+    /// one block is indistinguishable from a second pause.
+    /// </remarks>
+    private bool HonourPause(Block block)
+    {
+        if (!PauseRequested)
+        {
+            return false;
+        }
+
+        PauseRequested = false;
+        _paused = true;
+        PausedOnRequest = true;
+        PausedAfterBlockId = block.Id;
+        PausedAfterBlockLabel = Label(block);
+
+        // In the trace, in the same place a breakpoint writes its line. A pause with no trace line looks
+        // exactly like a run that stopped on its own, and the trace is where a user goes to find out why.
+        Trace.Add(new ExecutionStep(
+            ExecutionStepKind.PausedAfter, block.Id, Label(block), Millisecond: Host.Clock.ElapsedMilliseconds));
+
+        return true;
     }
 
     /// <summary>
@@ -974,49 +1165,15 @@ public sealed class ScriptInterpreter
     }
 
     /// <summary>The block's label with its holes filled.</summary>
-    private string Label(Block block)
-    {
-        var descriptor = BlockCatalog.Find(block.Kind);
-        if (descriptor is null)
-        {
-            return block.Kind;
-        }
-
-        var text = descriptor.Label;
-
-        foreach (var (name, input) in block.Inputs)
-        {
-            var shown = input.Block is { } nested
-                ? NestedLabel(nested)
-                : Values.Text(input.Text ?? input.Variable ?? input.Number?.ToString(CultureInfo.InvariantCulture));
-
-            text = text.Replace("{" + name + "}", shown);
-        }
-
-        // Menus come out of Fields, not Inputs, and a hole this forgets to fill shows the marker itself -
-        // so a trace line read "log {level} Action ran" for a block that had chosen a level. Every other
-        // reader of a label (the tile, the SVG export) reads Fields; this one did not.
-        foreach (var (name, value) in block.Fields)
-        {
-            if (descriptor.Menu(name) is { } menu)
-            {
-                text = text.Replace("{" + name + "}", BlockLabel.MenuText(descriptor, menu, value, NoTranslations.Instance));
-            }
-        }
-
-        return text;
-    }
-
-    /// <summary>How a nested block reads in a label, or its kind when this build does not know it.</summary>
     /// <remarks>
-    /// The null-forgiving version of this threw out of the timer callback when a document named a block kind
-    /// this build has - which is exactly what a canvas written by a newer DeckForge looks like. Three other
-    /// readers of the same situation already fall back to the kind; this one now does too.
+    /// Delegated to <see cref="BlockAnnouncement.Label"/>, which is the same reading. It used to be a
+    /// second implementation living here: two copies of "what does this block say" in one assembly is how
+    /// the trace and the screen reader end up describing different blocks, and neither of them is the one
+    /// the tile draws. The nested-block case moved with it, which is also why the null-forgiving call that
+    /// threw out of a timer callback when a document named a kind this build does not know is gone - the
+    /// shared version falls back to the kind, as the three other readers of a label already did.
     /// </remarks>
-    private static string NestedLabel(Block nested) =>
-        BlockCatalog.Find(nested.Kind) is { } descriptor
-            ? BlockLabel.PreviewText(descriptor) + "…"
-            : nested.Kind;
+    private string Label(Block block) => BlockAnnouncement.Label(block, NoTranslations.Instance);
 
     /// <summary>
     /// The trace, which tells an observer as it grows.

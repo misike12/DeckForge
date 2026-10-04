@@ -70,10 +70,31 @@ public static class BlockThemePalette
     /// other way and measured 1.68:1 on Control.
     /// </para>
     /// </remarks>
-    public static BlockThemeTokens For(BlockCategory category, bool dark)
-    {
-        var hue = BlockCatalog.Category(category).Hue;
+    public static BlockThemeTokens For(BlockCategory category, bool dark) =>
+        For(BlockCatalog.Category(category).Hue, dark);
 
+    /// <summary>
+    /// The colours for one hue, for a category the built-in catalogue does not describe.
+    /// </summary>
+    /// <param name="hue">The category's base colour, as <c>#RRGGBB</c>.</param>
+    /// <param name="dark">Whether the dark theme is in use.</param>
+    /// <remarks>
+    /// <para>
+    /// Added when third-party block providers arrived (Part 23). The category-taking overload reads its hue
+    /// from <see cref="BlockCatalog.Categories"/>, which is the closed table — so a provider that added a
+    /// category got <see cref="BlockCatalog.Category"/>'s neutral grey back, and its blocks would have been
+    /// drawn in a colour that had never been checked against the contrast rules it was about to be held to.
+    /// That is the shape of the defect the whole file exists to prevent: a colour nobody measured.
+    /// </para>
+    /// <para>
+    /// The requirement decides the colour, so the *hue* is the only thing a caller has to supply and the
+    /// answer is the same whether that hue came from the built-in table or from a provider. One
+    /// implementation rather than a parallel one is the point: a second set of thresholds would drift from
+    /// the first, and the provider's blocks would be the ones nobody looked at.
+    /// </para>
+    /// </remarks>
+    public static BlockThemeTokens For(string hue, bool dark)
+    {
         if (dark)
         {
             var fill = ContrastRatio.AdjustUntil(hue, 0, DarkInk, ContrastRatio.TextMinimum, DarkFillStart);

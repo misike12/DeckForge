@@ -1,0 +1,11 @@
+// ==== golden: slots-literals ====
+// Covers: The three literal kinds side by side in one Any slot each, plus the boolean literal.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("text"), "hello");
+VisualRuntime.Set(VisualRuntime.ToText("number"), 2.5);
+VisualRuntime.Set(VisualRuntime.ToText("flag"), true);
+VisualRuntime.Set(VisualRuntime.ToText("negative"), -0.125);
+VisualRuntime.Set(VisualRuntime.ToText("big"), 1E+21);
+VisualRuntime.Change(VisualRuntime.ToText("count"), 0);

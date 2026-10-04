@@ -45,6 +45,27 @@ public partial class BlockWorkspace : UserControl
     private DragController? _drag;
     private DragAdorner? _adorner;
     private AutoScroll? _scroll;
+    private RubberBandAdorner? _band;
+
+    /// <summary>
+    /// Where a rubber-band press began, in surface coordinates, or null when none is in progress.
+    /// </summary>
+    /// <remarks>
+    /// The whole of the band's state, and it is one nullable point rather than a small object with an
+    /// <c>IsActive</c>. A press on empty canvas has exactly two outcomes — a click that clears the
+    /// selection, or a drag that draws a rectangle — and they are the same press seen at different sizes,
+    /// so the state that decides between them is the distance between two points.
+    /// </remarks>
+    private Point? _bandPress;
+
+    /// <summary>The band as of the last pointer move, or null when it has not moved far enough to be one.</summary>
+    private BlockBand? _bandRect;
+
+    /// <summary>The ids the band covers right now, for the count drawn inside it.</summary>
+    private IReadOnlyList<string> _bandPreview = [];
+
+    /// <summary>Whether the band owns the pointer, which suppresses the auto-scroller and the block drag.</summary>
+    private bool Banding => _bandPress is not null;
 
     public BlockWorkspace()
     {
@@ -172,6 +193,70 @@ public partial class BlockWorkspace : UserControl
     /// coordinate system the method does not know, which is how a drag ends up starting 180 pixels off.
     /// </remarks>
     public FrameworkElement SurfaceElement => Surface;
+
+    /// <summary>
+    /// Builds the menu for empty canvas, each time one opens.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A factory rather than a menu, because a menu's rows depend on the state at the moment it opens: Part
+    /// 18.5's canvas menu greys "Duplicate block" when nothing is selected, and a menu built once — when the
+    /// page was constructed and nothing was selected — would keep every row greyed for the rest of the
+    /// session. That is the defect this shape exists to prevent, and it is invisible until a user opens the
+    /// menu on a selected block and finds it does nothing.
+    /// </para>
+    /// <para>
+    /// Supplied by the page and called here rather than declared in this control's markup, because the
+    /// menu's items are commands and the commands belong to a view model this control does not have — it is
+    /// created in markup, several levels down, before any page could hand it one. The page builds the menu
+    /// and hands over the recipe, which is the same arrangement <see cref="View"/> uses for zoom and pan.
+    /// </para>
+    /// <para>
+    /// One <see cref="ContextMenu"/> instance on three elements, which is safe because
+    /// <see cref="ContextMenuService"/> reassigns <c>PlacementTarget</c> each time it opens. The three are
+    /// the scroller, the grid behind the columns and the drag surface, because <c>ContextMenu</c> is an
+    /// ordinary dependency property and is <em>not</em> inherited: a menu set on the <c>UserControl</c>
+    /// would be invisible on all three.
+    /// </para>
+    /// </remarks>
+    public Func<ContextMenu>? CanvasMenuFactory
+    {
+        get => _canvasMenuFactory;
+        set
+        {
+            _canvasMenuFactory = value;
+
+            // One empty menu, wired to ask the factory each time. The tile does exactly this, and for the
+            // same reason: the menu is a fresh object per tile there and a shared one here, but the fill-in
+            // has to happen on every open in both.
+            _canvasMenu ??= new ContextMenu();
+            _canvasMenu.ContextMenuOpening -= OnCanvasMenuOpening;
+            _canvasMenu.ContextMenuOpening += OnCanvasMenuOpening;
+
+            Scroller.ContextMenu = _canvasMenu;
+            SurfaceGrid.ContextMenu = _canvasMenu;
+            Surface.ContextMenu = _canvasMenu;
+        }
+    }
+
+    private Func<ContextMenu>? _canvasMenuFactory;
+    private ContextMenu? _canvasMenu;
+
+    /// <summary>Refills the canvas menu from the factory, so its greyed rows match the moment it opened.</summary>
+    private void OnCanvasMenuOpening(object? sender, ContextMenuEventArgs args)
+    {
+        if (sender is not ContextMenu menu || CanvasMenuFactory?.Invoke() is not { } built)
+        {
+            return;
+        }
+
+        menu.Items.Clear();
+        foreach (var item in built.Items)
+        {
+            menu.Items.Add(item);
+        }
+    }
+
 
     /// <summary>
     /// The canvas's zoom and pan, as Core's value.
@@ -317,6 +402,31 @@ public partial class BlockWorkspace : UserControl
         Surface.ReleaseMouseCapture();
     }
 
+    /// <summary>
+    /// Decides which of the canvas's three pointer gestures a press has started.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The rule:</strong> left-drag on a tile is a block drag; left-drag on empty canvas is a rubber
+    /// band; middle-drag anywhere is a pan. Nothing else is claimed by anything else, and the third is
+    /// handled on the scroller rather than here so it keeps working while the pointer is over a block.
+    /// </para>
+    /// <para>
+    /// The arbitration is by <em>what is under the press</em>, not by which button, and that is the only
+    /// rule that can work. Part 18.1 lists a left-drag on a tile and a left-drag on empty canvas as two
+    /// gestures on one button, so the button cannot decide; and a modifier cannot either, because the one
+    /// modifier Part 18.1 spends on the canvas — Alt, to narrow a stack drag to the block under the pointer —
+    /// already has a job on the other branch of the same press.
+    /// </para>
+    /// <para>
+    /// The wrong version of this was "left press always starts a drag, and a press that hits nothing falls
+    /// through to the band". That reads the same on an empty canvas and is wrong the moment a band is drawn
+    /// across a block: the drag controller takes the press over the block <em>underneath</em> the press,
+    /// picks up whatever run that block belongs to, and the band becomes a drag that moves a script the user
+    /// never touched. Both gestures are left-press-on-canvas, so the hit test is the only thing available to
+    /// tell them apart, and it is checked once, here, before either branch runs.
+    /// </para>
+    /// </remarks>
     private void OnPreviewMouseDown(object sender, MouseButtonEventArgs args)
     {
         var point = ToSurface(args.GetPosition(Surface));
@@ -331,8 +441,17 @@ public partial class BlockWorkspace : UserControl
 
         if (hit is not { } node)
         {
+            // Empty canvas. The band takes the press; nothing is cleared yet, because Part 18.1 gives the
+            // *click* on empty canvas the job of clearing the selection and a click is only known on the
+            // release. Clearing here would make the selection flash away every time a drag began.
+            BeginBand(point);
+            AttachBand();
+            Surface.CaptureMouse();
+            args.Handled = true;
             return;
         }
+
+        EndBand();
 
         _drag.Press(node, point, single);
         _vm.Select(node);
@@ -354,6 +473,13 @@ public partial class BlockWorkspace : UserControl
 
     private void OnPreviewMouseMove(object sender, MouseEventArgs args)
     {
+        if (Banding)
+        {
+            MoveBand(args.GetPosition(Surface));
+            args.Handled = true;
+            return;
+        }
+
         if (_drag is { Payload: not null } && _vm is not null)
         {
             var point = ToSurface(args.GetPosition(Surface));
@@ -369,6 +495,16 @@ public partial class BlockWorkspace : UserControl
 
     private void OnPreviewMouseUp(object sender, MouseButtonEventArgs args)
     {
+        if (Banding)
+        {
+            // Re-resolved against the release, for the same reason the block drag re-resolves: on a fast
+            // drag the release can arrive with no move event after the last one, and selecting the blocks
+            // the pointer passed through is not what anybody means.
+            EndBand(args.GetPosition(Surface));
+            args.Handled = true;
+            return;
+        }
+
         if (_drag is not { Payload: not null } || _vm is null)
         {
             return;
@@ -390,6 +526,163 @@ public partial class BlockWorkspace : UserControl
 
         Abort();
         args.Handled = true;
+    }
+
+    // ---- the rubber band ------------------------------------------------------------------------------
+
+    /// <summary>Records the press a band will be drawn from, and captures the pointer for it.</summary>
+    /// <param name="point">Where the press began, in surface coordinates.</param>
+    private void BeginBand(Point point)
+    {
+        _bandPress = point;
+        _bandRect = null;
+        _bandPreview = [];
+    }
+
+    /// <summary>
+    /// Moves the band, and says how many blocks it now covers.
+    /// </summary>
+    /// <param name="point">Where the pointer is now, in surface coordinates.</param>
+    /// <remarks>
+    /// <para>
+    /// The band exists from the press, not from the first move past the threshold: it is drawn from the
+    /// very first pixel of movement so the user can see that the press was taken. What waits for the
+    /// threshold is the <em>selection</em>, which is what makes a click a click.
+    /// </para>
+    /// <para>
+    /// The live count is recomputed as the band grows, rather than only on the release, because a rubber
+    /// band that selects silently until you let go is the thing people distrust: they cannot find out they
+    /// have got the wrong block until the press has to be taken back. It is guarded on the rectangle having
+    /// actually changed by a pixel, because <see cref="CanvasHitTest.Rects"/> walks the whole visual tree
+    /// and builds a dictionary, and a pointer that reports the same position three times must not pay for it
+    /// three times — which is the same budget <see cref="Candidates"/> is written against.
+    /// </para>
+    /// </remarks>
+    private void MoveBand(Point point)
+    {
+        if (_bandPress is not { } press)
+        {
+            return;
+        }
+
+        var band = RubberBand.Between(press.X, press.Y, point.X, point.Y);
+
+        if (_bandRect is { } drawn &&
+            Math.Abs(drawn.X - band.X) < 0.5 &&
+            Math.Abs(drawn.Y - band.Y) < 0.5 &&
+            Math.Abs(drawn.Width - band.Width) < 0.5 &&
+            Math.Abs(drawn.Height - band.Height) < 0.5)
+        {
+            return;
+        }
+
+        // Drawn whatever its size; selected only once it is bigger than a click. Drawing a zero-width
+        // rectangle is a hairline at the pointer, which is the honest picture of "a press, not a drag yet".
+        _bandRect = band;
+        _bandPreview = RubberBand.Selected(band, CanvasHitTest.Rects(Surface));
+
+        _band?.InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Finishes a band: selects what it covered, or clears the selection if it was a click.
+    /// </summary>
+    /// <param name="point">Where the pointer was released, in surface coordinates.</param>
+    /// <remarks>
+    /// <para>
+    /// Part 18.1: a click on empty canvas clears the selection, and a drag selects every block the band
+    /// touches. One release, two meanings, and the threshold is what tells them apart — the same four pixels
+    /// the block drag uses, from Core, so the two halves of one press cannot disagree about how far is far
+    /// enough.
+    /// </para>
+    /// <para>
+    /// A band over nothing selects nothing rather than keeping what was selected. That is what makes the
+    /// gesture a way of saying "I meant these and not that", and it is also what a user who draws a band by
+    /// accident expects: the mistake is undone by the next click, not by a second one somewhere else.
+    /// </para>
+    /// </remarks>
+    private void EndBand(Point point)
+    {
+        if (_bandPress is not { } press || _vm is null)
+        {
+            EndBand();
+            return;
+        }
+
+        var band = RubberBand.Between(press.X, press.Y, point.X, point.Y);
+        var hits = RubberBand.Selected(band, CanvasHitTest.Rects(Surface));
+
+        EndBand();
+
+        if (band.IsTiny)
+        {
+            _vm.ClearSelection();
+            _vm.Report("Selection cleared. Drag on empty canvas to select several blocks.");
+            return;
+        }
+
+        _vm.SelectBlocks(hits);
+
+        _vm.Report(hits.Count == 0
+            ? "Nothing there. The band has to touch a block to select it."
+            : hits.Count == 1
+                ? "1 block selected."
+                : $"{hits.Count} blocks selected.");
+    }
+
+    /// <summary>
+    /// Drops the band and takes its adorner away, without applying anything.
+    /// </summary>
+    /// <remarks>
+    /// Two callers rather than one: the release, which has already applied the selection, and
+    /// <see cref="OnMouseLeave"/>, which has not and must not. A pointer that leaves the canvas mid-band
+    /// abandoning the selection silently is correct — nothing was selected yet — and reusing the release path
+    /// there would select everything the band happened to pass over on the way out.
+    /// <para>
+    /// Deliberately not called from <c>LostMouseCapture</c>, for the reason the drag beside it is not
+    /// aborted there either: WPF releases the capture as part of handling the button-up, and that
+    /// notification can arrive before the up event reaches this element. Treating it as the end of the band
+    /// would discard the rectangle and then apply nothing on the release — a band that silently selects
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    private void EndBand()
+    {
+        var wasBanding = _bandPress is not null;
+
+        _bandPress = null;
+        _bandRect = null;
+        _bandPreview = [];
+
+        if (_band is not null && AdornerLayer.GetAdornerLayer(Surface) is { } layer)
+        {
+            layer.Remove(_band);
+            _band = null;
+        }
+
+        // Only when there really was a band. This method is also called on the block-drag branch of the
+        // press, where giving the pointer back would cancel a capture the next line is about to take.
+        if (wasBanding && Surface.IsMouseCaptureWithin)
+        {
+            Surface.ReleaseMouseCapture();
+        }
+    }
+
+    /// <summary>Puts the band in the adorner layer, once one exists.</summary>
+    /// <remarks>
+    /// The band reads its rectangle and its count through functions rather than holding either, because the
+    /// drag state lives here and an adorner that cached it would draw a rectangle for a drag that had already
+    /// ended — which is the same class of bug as the ghost outliving its capture.
+    /// </remarks>
+    private void AttachBand()
+    {
+        if (_band is not null || AdornerLayer.GetAdornerLayer(Surface) is not { } layer)
+        {
+            return;
+        }
+
+        _band = new RubberBandAdorner(Surface, () => _bandRect, () => _bandPreview);
+        layer.Add(_band);
     }
 
 
@@ -650,15 +943,27 @@ public partial class BlockWorkspace : UserControl
     /// Cancels a drag in progress when the pointer leaves the canvas entirely.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The alternative is a drag that survives its own mouse capture: the pointer is released outside the
-    /// window, the capture ends, and a drag controller still holding a run would apply it on the next
-    /// click anywhere in the application.
+    /// window, the capture ends, and a drag controller still holding a run would apply it on the next click
+    /// anywhere in the application.
+    /// </para>
+    /// <para>
+    /// The band goes the same way and for a different reason: a rectangle left drawn on a canvas the pointer
+    /// has left is a selection the user never made and cannot see the end of. Nothing is applied — the band
+    /// has not selected anything yet, so abandoning it is not undoing a choice.
+    /// </para>
     /// </remarks>
     protected override void OnMouseLeave(MouseEventArgs args)
     {
         if (_drag is { IsDragging: true })
         {
             Abort();
+        }
+
+        if (Banding)
+        {
+            EndBand();
         }
 
         base.OnMouseLeave(args);

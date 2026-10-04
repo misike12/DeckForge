@@ -64,7 +64,13 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid>
+    <!--
+        The root grid carries a transparent background so that a right-click in the gaps between the four
+        columns finds something. A Grid with no background is transparent to the mouse, so without this the
+        stage's menu would only open over the text and the buttons - and Part 18.5's stage menu is exactly
+        the thing a user opens on empty space.
+    -->
+    <Grid x:Name="Root" Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -80,27 +86,42 @@
         </StackPanel>
 
         <!--
-            The transport. Run, Step, Step into, Stop and Reset, then the script picker and the speed.
+            The transport. Run, Step, Step into, Pause, Stop and Reset, then the script picker and the speed.
 
             Step into is next to Step rather than hidden in a menu because the two answer different
             questions about the same script - "what does this do" and "what does this do when it loops" -
             and a user debugging a loop presses Step into forty times before they ever press Run.
+
+            Pause is here for the same reason rather than only in the stage's context menu: Part 10.3 lists
+            it in the transport, and a transport control that exists only behind a right-click is one a
+            keyboard user never finds. One button whose label and F6 both toggle, because a debugger's
+            transport has always shown Pause while running and Continue the moment it is not, and
+            VisualCommands cannot hold two commands sharing one gesture - the rule that keeps the shortcut
+            sheet honest is also what makes these one row rather than two.
+
+            IsEnabled is CanPause rather than nothing, so the button is visible and disabled while nothing is
+            running: a Pause that is merely absent is a Pause that has to be found again to be brought back,
+            and a disabled one can carry a tooltip saying why.
         -->
-        <WrapPanel Grid.Row="1" Margin="12,8,12,0" VerticalAlignment="Center">
+        <WrapPanel x:Name="TransportRow" Grid.Row="1" Margin="12,8,12,0" VerticalAlignment="Center"
+                   Background="Transparent">
             <ComboBox ItemsSource="{Binding Scripts}" SelectedItem="{Binding SelectedScript}"
                       MinWidth="240" Padding="6,3" FontSize="11.5"
                       ToolTip="Which script to run" />
 
             <ui:Button Content="Run" Padding="10,4" Margin="8,0,0,0"
-                       Command="{Binding RunCommand}" ToolTip="Run from the top, or resume from a breakpoint" />
+                       Command="{Binding RunCommand}" ToolTip="Run from the top, or resume from a breakpoint (F5)" />
             <ui:Button Content="Step" Padding="10,4" Margin="6,0,0,0"
                        Command="{Binding StepCommand}" IsEnabled="{Binding CanStep}"
-                       ToolTip="One block, then stop" />
+                       ToolTip="One block, then stop (F10)" />
             <ui:Button Content="Step into" Padding="10,4" Margin="6,0,0,0"
                        Command="{Binding StepIntoCommand}" IsEnabled="{Binding CanStep}"
-                       ToolTip="One block, stopping inside a loop's body if it meets one" />
+                       ToolTip="One block, stopping inside a loop's body if it meets one (F11)" />
+            <ui:Button Content="{Binding PauseLabel}" Padding="10,4" Margin="6,0,0,0"
+                       Command="{Binding PauseCommand}" IsEnabled="{Binding CanPause}"
+                       ToolTip="Suspend a running script at the next block boundary, and carry on from there (F6)" />
             <ui:Button Content="Stop" Padding="10,4" Margin="6,0,0,0"
-                       Command="{Binding StopCommand}" ToolTip="Stop where it stands" />
+                       Command="{Binding StopCommand}" ToolTip="Stop where it stands (Shift+F5)" />
             <ui:Button Content="Reset" Padding="10,4" Margin="6,0,0,0"
                        Command="{Binding ResetCommand}"
                        ToolTip="Clear the trace, the variables and the clock" />
@@ -121,7 +142,7 @@
             request from a canned table looks exactly like one that asked the internet, and a user who
             builds a button on top of that belief has built a button that will do nothing on a deck.
         -->
-        <StackPanel Grid.Row="2" Margin="12,6,12,0">
+        <StackPanel x:Name="StatePanel" Grid.Row="2" Margin="12,6,12,0" Background="Transparent">
             <TextBlock Text="{Binding Outcome}" FontSize="11" TextWrapping="Wrap" />
             <WrapPanel Margin="0,2,0,0">
                 <TextBlock Text="{Binding ClockText}" FontSize="10"
@@ -223,7 +244,8 @@
                 <TextBlock DockPanel.Dock="Top" Text="What each block did, in order. The red line names the block that stopped the run."
                            TextWrapping="Wrap" FontSize="9.5" Margin="0,0,0,4"
                            Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer x:Name="TraceScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                              Background="Transparent">
                     <ItemsControl ItemsSource="{Binding Trace}" ItemTemplate="{StaticResource TraceRow}" />
                 </ScrollViewer>
                 <TextBlock DockPanel.Dock="Bottom" Text="Nothing has run. Press Step to walk one block at a time."

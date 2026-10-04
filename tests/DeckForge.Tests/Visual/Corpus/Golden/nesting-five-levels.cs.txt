@@ -1,0 +1,24 @@
+// ==== golden: nesting-five-levels ====
+// Covers: The five levels of nesting §28.1 asks for, each level holding the next.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+while (true)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    for (var _i0 = 0; _i0 < VisualRuntime.ToNumber(2); _i0++)
+{
+        context.CancellationToken.ThrowIfCancellationRequested();
+        if (VisualRuntime.Compare("left", VisualRuntime.ToText("="), "right"))
+{
+            if (VisualRuntime.Compare("left", VisualRuntime.ToText("!="), "right"))
+{
+                _logger.Information(VisualRuntime.LogTemplate("five deep", context.Parameters));
+}
+            else
+{
+                _logger.Information(VisualRuntime.LogTemplate("also five deep", context.Parameters));
+}
+}
+}
+}

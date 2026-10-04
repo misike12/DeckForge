@@ -83,8 +83,109 @@ Editor = new DocumentEditor(Document);
     /// </remarks>
     public InspectorViewModel Inspector { get; }
 
-/// <summary>The target whose scripts are on the canvas.</summary>
-    public VisualTarget Target => Document.Targets[0];
+    /// <summary>
+    /// One target in the header's picker.
+    /// </summary>
+    /// <param name="Target">The target itself, which is what the picker selects.</param>
+    /// <param name="DisplayName">What the row says.</param>
+    /// <remarks>
+    /// A projection rather than binding straight to <see cref="VisualTarget"/>, because the row has to say
+    /// two things — the action's name and what kind of artefact it is — and a <c>ComboBox</c> can only be
+    /// told to display one property. Adding a <c>DisplayName</c> to the model would put a formatting
+    /// decision in the document format, where a second build with different wording would serialise it.
+    /// </remarks>
+    public sealed record TargetChoice(VisualTarget Target, string DisplayName);
+
+    /// <summary>Every target in the document, for the header's picker.</summary>
+    public ObservableCollection<TargetChoice> TargetChoices { get; private set; } = [];
+
+    /// <summary>
+    /// Whether the picker can do anything, which is only when the document has more than one target.
+    /// </summary>
+    /// <remarks>
+    /// Drives the picker's enabled state rather than its visibility, which is this project's stated
+    /// preference: a control that is hidden is one that has to be found again to be brought back, and a
+    /// disabled one can say why it is off. A plugin with a single action shows the picker greyed with the
+    /// reason underneath, so the next plugin the user opens is not a new thing to discover.
+    /// </remarks>
+    public bool HasTargetPicker => TargetChoices.Count > 1;
+
+    /// <summary>The line under the picker, saying what it does or why it cannot.</summary>
+    public string TargetPickerHint => HasTargetPicker
+        ? "Which target the canvas, the script strip and the diagnostics are showing. Ctrl+Tab steps through them."
+        : "This plugin has one target, so there is nothing to choose between.";
+
+    private TargetChoice? _selectedTarget;
+
+    /// <summary>
+    /// The target the canvas is editing, chosen by the user.
+    /// </summary>
+    /// <remarks>
+    /// Null is ignored rather than honoured, and that is the whole reason this setter is not the obvious
+    /// one. A <c>ComboBox</c> clears its own selection whenever its <c>ItemsSource</c> is replaced, and
+    /// <see cref="Build"/> replaces it on every keystroke — so honouring the null would reset the picker to
+    /// the first target the moment the user typed in a field, and the canvas would swap to a different
+    /// action's scripts under their hands.
+    /// </remarks>
+    public TargetChoice? SelectedTarget
+    {
+        get => _selectedTarget;
+        set
+        {
+            if (value is null || ReferenceEquals(_selectedTarget, value))
+            {
+                return;
+            }
+
+            _selectedTarget = value;
+            _targetId = value.Target.Id;
+
+            Build();
+
+            // The header names the target in two places — the picker's own text and the document line under
+            // it — and both have to change together, or the user reads one and believes the other.
+            OnPropertyChanged(nameof(SelectedTarget));
+            OnPropertyChanged(nameof(Target));
+            OnPropertyChanged(nameof(TargetName));
+            OnPropertyChanged(nameof(DocumentLine));
+        }
+    }
+
+    /// <summary>The id of the chosen target, or null to mean the document's first one.</summary>
+    private string? _targetId;
+
+    /// <summary>
+    /// The target whose scripts are on the canvas.
+    /// </summary>
+    /// <remarks>
+    /// Part 9.7's header picker, and the difference from what it replaced is not cosmetic. This used to be
+    /// <c>Document.Targets[0]</c> with no way to change it, so a plugin with three actions could only ever
+    /// be edited one action at a time — by hand-editing the json — while the header said "1 target" whatever
+    /// the document actually held.
+    /// </remarks>
+    public VisualTarget Target =>
+        (_targetId is null ? null : Document.FindTarget(_targetId)) ?? Document.Targets[0];
+
+    /// <summary>
+    /// Moves the canvas to the next target, for the keyboard.
+    /// </summary>
+    /// <remarks>
+    /// Not strictly needed — a <c>ComboBox</c> is reachable with Tab and the arrows, which is why the header
+    /// holds one — and it exists anyway, because §17.2 item 6 promises every operation is reachable without
+    /// a pointer and the cheapest reading of that promise is a chord that steps through what a header
+    /// offers.
+    /// </remarks>
+    public void SelectNextTarget()
+    {
+        if (!HasTargetPicker)
+        {
+            return;
+        }
+
+        var index = _selectedTarget is null ? -1 : TargetChoices.IndexOf(_selectedTarget);
+        SelectedTarget = TargetChoices[(index + 1) % TargetChoices.Count];
+    }
+
 
     /// <summary>The canvas's zoom, pan and minimap, once the page has asked for them.</summary>
     /// <remarks>
@@ -159,6 +260,33 @@ Editor = new DocumentEditor(Document);
     }
 
     /// <summary>
+    /// Rebuilds the sentence each tile's automation peer will announce.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Part 9.8's per-tile announcement, stamped on every rebuild rather than once, because the position in
+    /// it is a fact about the whole canvas and changes whenever anything is inserted or removed above it. A
+    /// stamped-once announcement would put "block 4 of 11" on a tile that is now the ninth of seventeen, and
+    /// a screen-reader user following a position through a trace would be following a position from a
+    /// document that no longer exists.
+    /// </para>
+    /// <para>
+    /// Walked rather than counted during the walk in <see cref="AllNodes"/> because the count is not known
+    /// until the walk has finished, and an announcement that says "of 0" is worse than one with no count at
+    /// all — which is what a single pass would have produced.
+    /// </para>
+    /// </remarks>
+    public void StampAnnouncements()
+    {
+        var nodes = AllNodes();
+
+        for (var index = 0; index < nodes.Count; index++)
+        {
+            nodes[index].Announce(index + 1, nodes.Count);
+        }
+    }
+
+    /// <summary>
     /// Moves the "the stage is here" mark to one block, or clears it.
     /// </summary>
     /// <remarks>
@@ -216,7 +344,33 @@ Editor = new DocumentEditor(Document);
     public bool HasNoProcedures => Procedures.Count == 0;
 
     /// <summary>Everything wrong with the document, sorted worst first.</summary>
+    /// <remarks>
+    /// <em>This target's</em> findings, since Part 9.7's picker arrived. Every row here has to name a block
+    /// the user can select and centre, and that is only true of blocks on the canvas the picker is showing —
+    /// see <see cref="Build"/> for what was wrong with it before.
+    /// </remarks>
     public ObservableCollection<VisualDiagnostic> Diagnostics { get; private set; } = [];
+
+    /// <summary>How many findings the other targets are holding, kept so the pane can admit to them.</summary>
+    private int _otherTargetDiagnostics;
+
+    /// <summary>
+    /// The line that says the pane is not showing the whole document.
+    /// </summary>
+    /// <remarks>
+    /// Said rather than hidden, because a filtered pane that looks identical to an unfiltered one is how a
+    /// user concludes their second action is clean. It names the other target rather than a count, because
+    /// the count is the thing they care about and the name is what makes it a place they can go.
+    /// </remarks>
+    public string DiagnosticsElsewhereText => _otherTargetDiagnostics <= 0
+        ? string.Empty
+        : HasTargetPicker
+            ? $"{_otherTargetDiagnostics} more in the other target(s). Choose another above to see them."
+            : $"{_otherTargetDiagnostics} more in the rest of the document.";
+
+    /// <summary>Whether the pane has something to say about the rest of the document.</summary>
+    public bool HasDiagnosticsElsewhere => _otherTargetDiagnostics > 0;
+
 
     /// <summary>The block the inspector is showing.</summary>
     public BlockNodeViewModel? Selected { get; private set; }
@@ -224,9 +378,17 @@ Editor = new DocumentEditor(Document);
     /// <summary>What the header says about the target.</summary>
     public string TargetName => $"{Target.Name} ({Target.Kind})";
 
-    /// <summary>What the header says about the document.</summary>
+    /// <summary>What the header says about the document, and about which part of it is on screen.</summary>
+    /// <remarks>
+    /// Counting the whole document and describing the open target separately, because before the picker
+    /// this said "1 target" about a file that held three — which is not a rounding error, it is the header
+    /// disagreeing with the file in front of the user about how much of it there is.
+    /// </remarks>
     public string DocumentLine =>
-        $"{Document.Targets.Count} target · {Scripts.Count} scripts · {Target.Blocks().Count()} blocks";
+        $"{TargetChoices.Count} target{(TargetChoices.Count == 1 ? string.Empty : "s")} · "
+        + $"{Scripts.Count} script{(Scripts.Count == 1 ? string.Empty : "s")} here · "
+        + $"{Target.Blocks().Count()} blocks";
+
 
     /// <summary>Whether there is a block selected for the inspector.</summary>
     public bool HasSelection => Selected is not null;
@@ -490,7 +652,11 @@ var result = VisualStore.Save(workspace, Document);
 
         var result = VisualStore.Load(workspace);
 
-        _pendingLoadMessage = result.Recovered || !result.Ok ? result.Message : null;
+        // Read-only counts as something to say. It arrived with the data rather than as a refusal, so it
+        // fails the `Recovered || !Ok` test below and the sentence explaining why Save is disabled never
+        // reached the status line - which left a read-only canvas looking exactly like an editable one with
+        // a greyed button, and "why is Save grey" is the first question that raises.
+        _pendingLoadMessage = result.Recovered || result.ReadOnly || !result.Ok ? result.Message : null;
 
         // A file this build cannot read is also a file this build must not write. The load says so in a
         // message; without this the page showed the sample document with Save enabled, and one press put the
@@ -530,6 +696,17 @@ public bool IsCanvasReadOnly => _readOnlyCanvas;
     /// </remarks>
     public void Build()
     {
+        // The picker first, because Target resolves through it and everything below projects from Target.
+        // Assigned to the field rather than through the setter, because the setter rebuilds - and a rebuild
+        // from inside a rebuild is how this used to be able to run twice per keystroke.
+        TargetChoices =
+        [
+            .. Document.Targets.Select(target => new TargetChoice(target, $"{target.Name} ({target.Kind})")),
+        ];
+
+        _selectedTarget = TargetChoices.FirstOrDefault(choice => choice.Target.Id == Target.Id)
+            ?? TargetChoices.FirstOrDefault();
+
         Scripts = new ObservableCollection<ScriptViewModel>(Target.Scripts.Select(script => new ScriptViewModel(script)));
         Procedures = new ObservableCollection<ProcedureViewModel>(
             Document.Procedures.Select(procedure => new ProcedureViewModel(procedure)));
@@ -537,21 +714,36 @@ public bool IsCanvasReadOnly => _readOnlyCanvas;
 Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
 
         StampBreakpoints();
+        StampAnnouncements();
         Stage.Rebind();
 
         OnPropertyChanged(nameof(Scripts));
         OnPropertyChanged(nameof(Procedures));
         OnPropertyChanged(nameof(Columns));
         OnPropertyChanged(nameof(HasNoProcedures));
+        OnPropertyChanged(nameof(TargetChoices));
+        OnPropertyChanged(nameof(SelectedTarget));
+        OnPropertyChanged(nameof(HasTargetPicker));
+        OnPropertyChanged(nameof(TargetPickerHint));
+        OnPropertyChanged(nameof(Target));
         OnPropertyChanged(nameof(TargetName));
         OnPropertyChanged(nameof(DocumentLine));
 
+        var every = VisualValidator.Validate(Document, Validation);
+
+        // Scoped to the target on screen, so every row in the pane names a block the user can click. Before
+        // the picker that was not true: the canvas always drew the first target, so a document with three
+        // actions listed findings about two actions' blocks that no user could select, centre, or fix.
+        var mine = VisualValidator.ForTarget(Document, Target, Validation);
+        _otherTargetDiagnostics = every.Count - mine.Count;
+
         Diagnostics = new ObservableCollection<VisualDiagnostic>(
-            VisualValidator.Validate(Document, Validation)
-                .OrderByDescending(diagnostic => diagnostic.Severity));
+            mine.OrderByDescending(diagnostic => diagnostic.Severity));
         OnPropertyChanged(nameof(Diagnostics));
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(DiagnosticsElsewhereText));
         OnPropertyChanged(nameof(IsClean));
+
 
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
@@ -1053,11 +1245,20 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
 
     /// <summary>The run a copy or a cut would take: the selected block and everything below it.</summary>
     /// <remarks>
+    /// <para>
     /// The same rule as a stack drag with nothing held down, because copy means the same thing as picking
     /// up and putting down somewhere else. Copying one block out of the middle of a five-block stack
     /// would be a surprise; <c>Duplicate</c> is the command that narrows to one.
+    /// </para>
+    /// <para>
+    /// Public because Part 25.2 puts two payloads on the clipboard — the envelope and "a bitmap for pasting
+    /// into a chat app" — and they have to be the same run. The page cannot ask for the text alone and then
+    /// work out what the picture should be of: that is two reads of the selection around a clipboard write,
+    /// and a selection the user changes in between would put a picture of one run next to the text of
+    /// another. <see cref="CopySelected"/> is still what the page writes; this is what it draws.
+    /// </para>
     /// </remarks>
-    private IReadOnlyList<Block>? SelectedRun() =>
+    public IReadOnlyList<Block>? SelectedRun() =>
         Selected?.Block is { } block
         && DocumentLists.Locate(Document, block) is { } where
             ? Editor.RunFrom(where, block, wholeStack: true)
@@ -1354,34 +1555,111 @@ var result = Editor.Execute(command);
     /// Wiring only. Selection is what the diagnostics pane's "click to select and centre the block"
     /// needs (Part 9.7), what Phase 5's inspector hangs off, and what Phase 4's keyboard traversal
     /// moves, so the page owns it rather than each of them.
+    /// <para>
+    /// Now a single-block selection rather than a flag on one object, because Part 18.1's rubber band has to
+    /// be able to select several. It compares the whole selection rather than only the primary block,
+    /// because a user who has a band of five blocks selected and then clicks one of them means "just this
+    /// one" — and a check that only compared the primary would leave the other four selected.
+    /// </para>
     /// </remarks>
     public void Select(BlockNodeViewModel? block)
     {
-        if (ReferenceEquals(Selected, block))
+        if (ReferenceEquals(Selected, block) && SelectedIds.Count <= (block is null ? 0 : 1))
         {
             return;
         }
 
-        if (Selected is { } previous)
+        SelectBlocks(block is null ? [] : [block.Id]);
+    }
+
+    /// <summary>
+    /// Selects exactly these blocks and nothing else, in canvas order.
+    /// </summary>
+    /// <param name="blockIds">The blocks to select, by id.</param>
+    /// <remarks>
+    /// <para>
+    /// The one place the selection is written, so there is one answer to "what is selected" rather than a
+    /// flag per tile that can disagree with a <c>Selected</c> pointer. Ids that are no longer in the
+    /// document are dropped rather than refused: a band released after an edit, or a stale id from a control
+    /// that has not been rebuilt, should narrow the selection rather than throw out of a pointer handler.
+    /// </para>
+    /// <para>
+    /// The first block in <em>canvas</em> order becomes <see cref="Selected"/> whatever order the ids
+    /// arrived in, because that is the block the inspector shows and the one the arrow keys walk from. A
+    /// rubber band drawn from the bottom of a script upwards would otherwise leave the inspector showing
+    /// whichever block the geometry walk happened to reach first, which is the bottom one — nowhere near
+    /// where the user started looking.
+    /// </para>
+    /// </remarks>
+    public void SelectBlocks(IReadOnlyList<string> blockIds)
+    {
+        ArgumentNullException.ThrowIfNull(blockIds);
+
+        var nodes = AllNodes();
+        var wanted = new HashSet<string>(blockIds, StringComparer.Ordinal);
+
+        foreach (var node in nodes)
         {
-            previous.IsSelected = false;
+            node.IsSelected = wanted.Contains(node.Id);
         }
 
-        Selected = block;
-
-        if (Selected is { } current)
-        {
-            current.IsSelected = true;
-        }
+        _selectedIds = [.. nodes.Where(node => node.IsSelected).Select(node => node.Id)];
+        Selected = _selectedIds.Count == 0 ? null : nodes.First(node => node.Id == _selectedIds[0]);
 
         OnPropertyChanged(nameof(Selected));
         OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(SelectedIds));
 
         // The inspector rebuilds on selection as well as on edit. Wiring it only to the editor's Changed
         // leaves the panel showing the previous block's rows, which is invisible until a user selects a
         // second block and finds the first one's fields still on screen.
         Inspector.Build(Selected);
     }
+
+    /// <summary>Adds one block to whatever is selected.</summary>
+    /// <param name="block">The block, or null for nothing.</param>
+    /// <remarks>
+    /// Part 18.1 has no gesture for this, and the automation peer's selection-item pattern needs it: a
+    /// UI-automation client can add a tile to the selection but not if the only verb is "select this one".
+    /// </remarks>
+    public void AddToSelection(BlockNodeViewModel? block)
+    {
+        if (block is null || SelectedIds.Contains(block.Id, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        SelectBlocks([.. SelectedIds, block.Id]);
+    }
+
+    /// <summary>Takes one block out of the selection.</summary>
+    /// <param name="block">The block, or null for nothing.</param>
+    public void RemoveFromSelection(BlockNodeViewModel? block)
+    {
+        if (block is null)
+        {
+            return;
+        }
+
+        SelectBlocks([.. SelectedIds.Where(id => !string.Equals(id, block.Id, StringComparison.Ordinal))]);
+    }
+
+    /// <summary>Selects every block on the canvas, which is <see cref="VisualCommands.SelectAll"/>.</summary>
+    /// <remarks>
+    /// The keyboard's half of Part 18.1's rubber band. §18.3 gives the band no key, and a feature only the
+    /// pointer can reach is a defect this design names; so the two are a pair, and <c>Esc</c> — which is
+    /// already "cancel" in the table — clears it again.
+    /// </remarks>
+    public void SelectAllBlocks() => SelectBlocks([.. AllNodes().Select(node => node.Id)]);
+
+    /// <summary>Selects nothing, which is what a click on empty canvas does.</summary>
+    public void ClearSelection() => SelectBlocks([]);
+
+    private IReadOnlyList<string> _selectedIds = [];
+
+    /// <summary>The blocks currently selected, in canvas order.</summary>
+    public IReadOnlyList<string> SelectedIds => _selectedIds;
+
 
     /// <summary>Selects by block id, for a keyboard move or a diagnostic click.</summary>
     public void SelectById(string blockId) => Select(AllNodes().FirstOrDefault(node => node.Id == blockId));
@@ -1451,35 +1729,40 @@ var result = Editor.Execute(command);
             }
         }
     }
-
     /// <summary>
-    /// Keeps the selection pointed at the same block after a rebuild.
+    /// Keeps the selection pointed at the same blocks after a rebuild.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every id, not just the primary block. A rebuild replaces every view model, so a selection that
+    /// re-pointed only <see cref="Selected"/> would keep a band of nine blocks looking like one the moment
+    /// the user typed a character — and the eight tiles that lost their rings are the ones a user is about
+    /// to drag.
+    /// </para>
+    /// <para>
+    /// Dropping ids the document no longer holds is the honest answer: undoing the add of a selected block
+    /// leaves nothing to point at, and keeping the old object would show an inspector for a block that is no
+    /// longer there.
+    /// </para>
+    /// </remarks>
     private void Reselect()
     {
-        if (Selected is not { } previous)
+        if (_selectedIds.Count == 0)
         {
             return;
         }
 
-        var replacement = AllNodes().FirstOrDefault(node => node.Id == previous.Id);
-        if (replacement is null)
+        var nodes = AllNodes();
+        var stillThere = new HashSet<string>(_selectedIds, StringComparer.Ordinal);
+        var replacement = nodes.Where(node => stillThere.Contains(node.Id)).Select(node => node.Id).ToList();
+
+        if (replacement.Count == 0)
         {
-            // Undoing the delete of the selected block, or of something containing it, leaves nothing to
-            // point at. Dropping the selection is the honest answer; keeping the old object would show an
-            // inspector for a block that is no longer in the document.
-            Select(null);
+            // Undoing the delete of the selected block, or of something containing it.
+            SelectBlocks([]);
             return;
         }
 
-        Selected.IsSelected = false;
-        Selected = replacement;
-        Selected.IsSelected = true;
-        OnPropertyChanged(nameof(Selected));
-        OnPropertyChanged(nameof(HasSelection));
-
-        // The replacement is a different object, so the inspector's rows are built over different view
-        // models and every one of them has to be rebuilt rather than reused.
-        Inspector.Build(Selected);
+        SelectBlocks(replacement);
     }
 }

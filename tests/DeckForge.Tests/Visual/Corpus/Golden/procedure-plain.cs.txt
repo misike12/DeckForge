@@ -1,0 +1,11 @@
+// ==== golden: procedure-plain ====
+// Covers: A procedure with no parameters and no return value, called as a statement.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task announceAsync()
+{
+    _logger.Information(VisualRuntime.LogTemplate("announced", context.Parameters));
+}
+// script: main
+await announceAsync();

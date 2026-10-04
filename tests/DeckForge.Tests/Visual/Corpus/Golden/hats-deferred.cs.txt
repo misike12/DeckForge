@@ -1,0 +1,14 @@
+// ==== golden: hats-deferred ====
+// Covers: Every deferred hat kind, which the catalog deliberately does not carry.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+
+// ==== problems the emitter reported ====
+// b1: "hat.event-received" is not a block this build knows; it was skipped.
+// b2: "hat.key-pressed" is not a block this build knows; it was skipped.
+// b3: "hat.client-connected" is not a block this build knows; it was skipped.
+// b4: "hat.client-disconnected" is not a block this build knows; it was skipped.
+// b5: "hat.profile-changed" is not a block this build knows; it was skipped.
+// b6: "hat.folder-opened" is not a block this build knows; it was skipped.
+// b7: "hat.message-received" is not a block this build knows; it was skipped.

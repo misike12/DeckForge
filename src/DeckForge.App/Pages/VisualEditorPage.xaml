@@ -115,6 +115,52 @@
                     <TextBlock Text="Nothing needs a mouse: arrows walk the stack, Ctrl+arrows move a block, Space picks it up, Tab and the arrows choose where it goes, Enter drops it, Escape puts it back."
                                TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" FontSize="11.5"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+
+                    <!--
+                        The target picker, above the document line rather than beside it.
+
+                        Part 9.7's header: target picker, script name, Save, export, undo, zoom, overflow.
+                        Before this the target was implicit — the canvas always drew Document.Targets[0] and
+                        the header said "1 target" whatever the file held — so a plugin with three actions
+                        could only be edited one at a time, and only by hand-editing the json. A picker is a
+                        dropdown, and the whole of the feature is that it switches the script strip, the
+                        canvas and the diagnostics to the chosen target.
+
+                        In this column rather than in the button row on the right, and that is a layout
+                        decision rather than an aesthetic one: all four of those text lines share the
+                        header's first column with a button row that needs about 460 pixels, so in the narrow
+                        layout the first column gets about sixty. A 200-pixel picker there would take the
+                        orientation sentences down to three words each, which is worse than losing the end
+                        of a sentence.
+
+                        IsEnabled rather than collapsed when there is only one target: a control that is
+                        hidden has to be found again to be brought back, and a disabled one can say why in
+                        the hint underneath — which is the shape this project uses for every other control
+                        that cannot currently do anything.
+
+                        A WrapPanel rather than a horizontal StackPanel, and that is the load-bearing part.
+                        The header's first column shares its width with a button row that needs about 460
+                        pixels, so in the narrow layout it gets about sixty; a horizontal panel does not
+                        wrap, it clips, and a clipped picker is a picker a user cannot see exists — which is
+                        worse than not having one, because the canvas still changes target. Wrapping puts
+                        the hint on a second line instead, which costs nothing.
+                    -->
+                    <WrapPanel Margin="0,6,0,0" VerticalAlignment="Top" HorizontalAlignment="Left">
+                        <TextBlock Text="Editing" FontSize="11.5" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Liquid.TextSecondaryBrush}" />
+                        <ComboBox x:Name="TargetPicker"
+                                  ItemsSource="{Binding TargetChoices}"
+                                  SelectedItem="{Binding SelectedTarget}"
+                                  DisplayMemberPath="DisplayName"
+                                  MinWidth="200" MaxWidth="320" Padding="6,2" Margin="8,0,0,0"
+                                  FontSize="11.5" VerticalAlignment="Center"
+                                  IsEnabled="{Binding HasTargetPicker}"
+                                  ToolTip="Which target the canvas, the script strip and the diagnostics are showing" />
+                        <TextBlock Text="{Binding TargetPickerHint}" FontSize="10.5" Margin="10,3,0,0"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420"
+                                   Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                    </WrapPanel>
+
                     <TextBlock Text="{Binding DocumentLine}" FontSize="11.5" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"
                                Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
 
@@ -167,9 +213,26 @@
                     <ui:Button Content="Revert" Padding="10,4" Margin="8,0,0,0" Click="Revert_Click"
                                IsEnabled="{Binding HasWorkspace}"
                                ToolTip="Discard the canvas on screen and read the saved file back" />
+                    <!--
+                        The two exports, as two buttons rather than one menu.
+
+                        They answer different questions - SVG is what to embed or print, PNG is what to
+                        paste into a chat app - and a shared menu would make the common one a click longer
+                        and hide the other. Both are in the header beside Save because both write a file the
+                        user names, and a save dialog is a thing you should be able to find.
+
+                        The PNG one is new, and §28.5 records why it did not exist: "a third-party encoder in
+                        Core would make the export untestable". The encoder stayed out of Core and the export
+                        came in anyway, because the decisions - the geometry, the 2x scale, the padding, the
+                        captions and the colours - are all in Core and all readable by a test, and this
+                        button is the thin adapter that turns them into pixels.
+                    -->
                     <ui:Button Content="Export SVG" Padding="10,4" Margin="8,0,0,0"
                                Click="ExportSvg_Click"
                                ToolTip="Write the canvas as a vector image, beside the workspace" />
+                    <ui:Button Content="Export PNG" Padding="10,4" Margin="8,0,0,0"
+                               Click="ExportPng_Click"
+                               ToolTip="Write the canvas as a picture at 2x, transparent, for pasting somewhere" />
 
                     <!--
                         The command palette and the shortcut sheet, as buttons.
@@ -273,7 +336,7 @@
             <Border x:Name="StagePanel" CornerRadius="12" Margin="0,10,0,0"
                     Background="{DynamicResource Liquid.AcrylicBrush}"
                     BorderBrush="{DynamicResource Liquid.BorderBrush}" BorderThickness="1">
-                <blocks:StagePanel DataContext="{Binding Stage}" />
+                <blocks:StagePanel x:Name="Stage" DataContext="{Binding Stage}" />
             </Border>
 
             <!--
@@ -643,6 +706,20 @@
                                         <TextBlock Text="{Binding StatusText}" FontSize="11"
                                                    Margin="0,2,0,0" TextWrapping="Wrap"
                                                    Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                                        <!--
+                                            The count the pane is holding back, said out loud.
+
+                                            The diagnostics list is scoped to the target the header's picker is
+                                            showing, which is what makes every row in it clickable - but a
+                                            filtered list that looks identical to an unfiltered one is how a
+                                            user concludes their second action is clean. Both places with a
+                                            diagnostics heading get the line, because there are two of them and
+                                            a user only ever sees one at a time.
+                                        -->
+                                        <TextBlock Text="{Binding DiagnosticsElsewhereText}" FontSize="10.5"
+                                                   Margin="0,2,0,0" TextWrapping="Wrap"
+                                                   Foreground="{DynamicResource Liquid.WarningBrush}"
+                                                   Visibility="{Binding HasDiagnosticsElsewhere, Converter={StaticResource TrueVisible}}" />
                                         <ItemsControl ItemsSource="{Binding Diagnostics}" ItemTemplate="{StaticResource DiagnosticRow}" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </StackPanel>
@@ -660,6 +737,10 @@
                             <TextBlock Text="{Binding StatusText}" FontSize="11" Margin="0,2,0,0"
                                        TextWrapping="Wrap"
                                        Foreground="{DynamicResource Liquid.TextTertiaryBrush}" />
+                            <TextBlock Text="{Binding DiagnosticsElsewhereText}" FontSize="10.5"
+                                       Margin="0,2,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Liquid.WarningBrush}"
+                                       Visibility="{Binding HasDiagnosticsElsewhere, Converter={StaticResource TrueVisible}}" />
                             <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                                       MaxHeight="520">
                                 <ItemsControl ItemsSource="{Binding Diagnostics}" ItemTemplate="{StaticResource DiagnosticRow}" Margin="0,4,0,0" />

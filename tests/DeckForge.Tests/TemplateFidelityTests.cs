@@ -17,30 +17,26 @@ namespace DeckForge.Tests;
 [TestFixture]
 public sealed class TemplateFidelityTests
 {
+    private TempDirectory _temp = null!;
+
     private string _root = "";
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "deckforge-fidelity-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_root);
+        _temp = new TempDirectory("deckforge-fidelity");
+        _root = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
-    private static NewProjectOptions Options() => new()
+    private NewProjectOptions Options() => new()
     {
         PluginName = "Fidelity",
         PluginId = "com.example.fidelity",
         Publisher = "Example",
-        ParentDirectory = Path.GetTempPath(),
+        ParentDirectory = _root,
         ProjectName = "Fidelity",
         InitGit = false,
     };

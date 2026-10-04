@@ -322,6 +322,17 @@ public static class BlockProgramJson
         JsonSerializer.Deserialize<BlockProgram>(json, CreateOptions()) ?? new BlockProgram();
 
     /// <summary>Reads a canvas, returning false rather than throwing on malformed input.</summary>
+    /// <remarks>
+    /// <c>NotSupportedException</c> is caught alongside <see cref="JsonException"/> because a
+    /// <see cref="BlockStatement"/> list is polymorphic and carries its own type discriminator: a file that
+    /// has a <c>statements</c> array whose entries name no known kind is JSON, and structurally this shape,
+    /// and still not something this reader can produce. Catching only <see cref="JsonException"/> let that
+    /// escape — which was unreachable while the only caller was handed a file it had already decided was a
+    /// legacy canvas, and stopped being unreachable the moment anything went <em>looking</em> for one. A
+    /// file called <c>something.blocks.json</c> that turns out to be somebody's own JSON is the ordinary
+    /// case in a plugin directory, and taking the Visual page down over it would be a worse answer than
+    /// saying the file is not one.
+    /// </remarks>
     public static bool TryDeserialize(string json, out BlockProgram program)
     {
         try
@@ -329,7 +340,7 @@ public static class BlockProgramJson
             program = Deserialize(json);
             return true;
         }
-        catch (JsonException)
+        catch (Exception error) when (error is JsonException or NotSupportedException)
         {
             program = new BlockProgram();
             return false;

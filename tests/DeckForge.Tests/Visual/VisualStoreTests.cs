@@ -22,30 +22,20 @@ namespace DeckForge.Tests.Visual;
 [TestFixture]
 public sealed class VisualStoreTests
 {
+    private TempDirectory _temp = null!;
+
     private string _root = string.Empty;
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "deckforge-store-tests", Guid.NewGuid().ToString("n")[..8]);
+        _temp = new TempDirectory("deckforge-store-tests");
+        _root = _temp.Root;
         Directory.CreateDirectory(Path.Combine(_root, "src", "TestPlugin"));
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        try
-        {
-            if (Directory.Exists(_root))
-            {
-                Directory.Delete(_root, recursive: true);
-            }
-        }
-        catch (IOException)
-        {
-            // A leftover temp directory is not worth failing a test over.
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     [Test]
     public void A_saved_canvas_comes_back_exactly_as_it_went_in()

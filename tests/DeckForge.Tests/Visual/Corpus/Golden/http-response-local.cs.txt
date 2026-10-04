@@ -1,0 +1,13 @@
+// ==== golden: http-response-local ====
+// Covers: A request whose response local is read back by the blocks that consume it.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+var response = await VisualRuntime.HttpAsync(VisualRuntime.ToText("https://example.com/api"), "GET", null, null, context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("status"), VisualRuntime.StatusCode(response));
+if (VisualRuntime.IsSuccess(response))
+{
+    VisualRuntime.Set(VisualRuntime.ToText("body"), VisualRuntime.ResponseBody(response));
+    _logger.Information(VisualRuntime.LogTemplate("status ${status}", context.Parameters));
+}
+VisualRuntime.Set(VisualRuntime.ToText("type"), VisualRuntime.ResponseHeader(response, VisualRuntime.ToText("content-type")));

@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using DeckForge.App.Pages;
+using DeckForge.Core.Settings;
 using Microsoft.Win32;
 using ShellMessenger = DeckForge.App.Services.ShellMessenger;
 
@@ -200,8 +201,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     /// Re-applies the theme when the OS switches between light and dark.
     /// </summary>
     /// <remarks>
-    /// Only honoured when the setting is <c>System</c>. An explicit Light or Dark is a choice, and
-    /// overriding it because the machine changed at sunset would be ignoring the user.
+    /// Each of the two things that follow the OS is followed only when the user asked for that, and they
+    /// are asked separately because the answer is different. The theme setting is "System"; the
+    /// reduced-motion setting is "System" only if the user left it there, and "Always" or "Never" overrules
+    /// the OS on purpose - so re-applying motion unconditionally would make a user who pinned it watch their
+    /// choice change at sunset. Overruling a pinned Light or Dark would be the same mistake in reverse.
     /// </remarks>
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {
@@ -215,13 +219,21 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             return;
         }
 
-        var settings = App.Services.GetService(typeof(Services.SettingsService)) as Services.SettingsService;
-        if (settings?.Settings.Theme != Services.AppTheme.System)
+        var settings = App.Services.GetService(typeof(SettingsService)) as SettingsService;
+        if (settings is null)
         {
             return;
         }
 
-        App.ReapplyTheme(settings);
+        if (settings.Settings.Theme == AppTheme.System)
+        {
+            App.ReapplyTheme(settings);
+        }
+
+        if (settings.Settings.VisualReduceMotion == MotionPreference.System)
+        {
+            App.ReapplyMotion(settings);
+        }
     }
 
     /// <summary>Shows a recovered crash in the banner, on the UI thread.</summary>

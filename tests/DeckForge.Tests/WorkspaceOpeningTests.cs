@@ -16,23 +16,19 @@ namespace DeckForge.Tests;
 [TestFixture]
 public sealed class WorkspaceOpeningTests
 {
+    private TempDirectory _temp = null!;
+
     private string _root = "";
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "deckforge-ws-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_root);
+        _temp = new TempDirectory("deckforge-ws");
+        _root = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     private string WriteSolution(string name, params string[] pluginFolders)
     {

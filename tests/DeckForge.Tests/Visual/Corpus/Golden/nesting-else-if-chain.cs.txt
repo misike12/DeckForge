@@ -1,0 +1,9 @@
+// ==== golden: nesting-else-if-chain ====
+// Covers: A five-arm chain of else-if, the shape that is one chain in C# and five containers on the canvas.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+if (VisualRuntime.Compare("left", VisualRuntime.ToText("="), "right"))
+{
+    _logger.Information(VisualRuntime.LogTemplate("arm 0", context.Parameters));
+}

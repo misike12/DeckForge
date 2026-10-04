@@ -18,7 +18,9 @@ namespace DeckForge.Core.Visual;
 /// Deliberately not a PNG writer. A PNG needs a rasteriser, and the honest options are a WPF render or a
 /// third-party encoder — neither of which belongs in Core, and both of which would make this untestable.
 /// The SVG is the vector export; the PNG is the same geometry rasterised by the caller, which already has a
-/// drawing surface.
+/// drawing surface: <see cref="PngExportPlan"/> holds that geometry and the application draws it. The two
+/// now share <see cref="BlockExport"/> for a block's words, its category and its escaping, which is what
+/// makes "the two renders cannot disagree" a fact rather than a hope.
 /// </para>
 /// <para>
 /// What goes in is labels and literals only. §27.2's rule is that an export must not carry data the user
@@ -39,12 +41,13 @@ public static class SvgRenderer
     public static string Render(VisualProject project, VisualScript script, string? background = null)
     {
         var rects = StackLayout.LayoutRun(script.Body);
+        var index = BlockExport.Index(script);
         var (width, height) = Sized(rects);
 
         var svg = new StringBuilder();
         OpenDocument(svg, width, height, background);
 
-        foreach (var group in rects.GroupBy(pair => BlockOf(script, pair.Key)))
+        foreach (var group in rects.GroupBy(pair => BlockOf(index, pair.Key)))
         {
             svg.AppendLine($"  <g fill=\"{FillOf(group.Key)}\" stroke=\"{StrokeOf()}\" stroke-width=\"1\">");
 
@@ -60,7 +63,7 @@ public static class SvgRenderer
         // left of its own block, in the gutter, overlapping whatever was above it. The document path passes
         // `column.OffsetX + Margin`, which is why only this entry point was wrong - and only the page's
         // single-script preview ever used it, which is why nothing showed it.
-        WriteLabels(svg, script, rects, Margin, Margin);
+        WriteLabels(svg, index, rects, Margin, Margin);
 
         CloseDocument(svg);
 
@@ -78,7 +81,7 @@ public static class SvgRenderer
     /// <param name="background">The colour behind the blocks, or null for none.</param>
     public static string RenderDocument(VisualProject project, string? background = null)
     {
-        var columns = new List<(VisualScript Script, IReadOnlyDictionary<string, BlockRect> Rects, double OffsetX)>();
+        var columns = new List<(VisualScript Script, IReadOnlyDictionary<string, Block> Index, IReadOnlyDictionary<string, BlockRect> Rects, double OffsetX)>();
 
         var offsetX = 0d;
         foreach (var script in project.Targets.SelectMany(target => target.Scripts))
@@ -86,7 +89,7 @@ public static class SvgRenderer
             var rects = StackLayout.LayoutRun(script.Body);
             var (width, _) = Sized(rects);
 
-            columns.Add((script, rects, offsetX));
+            columns.Add((script, BlockExport.Index(script), rects, offsetX));
             offsetX += width;
         }
 
@@ -107,14 +110,14 @@ public static class SvgRenderer
 
             foreach (var (id, rect) in column.Rects)
             {
-                var block = BlockOf(column.Script, id);
+                var block = BlockOf(column.Index, id);
 
                 svg.AppendLine(
                     $"    <rect {Box(rect, column.OffsetX + Margin, 24)} rx=\"6\" fill=\"{FillOf(block)}\" "
                     + $"stroke=\"{StrokeOf()}\" stroke-width=\"1\" />");
             }
 
-            WriteLabels(svg, column.Script, column.Rects, column.OffsetX + Margin, 24, "    ");
+            WriteLabels(svg, column.Index, column.Rects, column.OffsetX + Margin, 24, "    ");
         }
 
         svg.AppendLine("  </g>");
@@ -166,7 +169,7 @@ public static class SvgRenderer
     /// </remarks>
     private static void WriteLabels(
         StringBuilder svg,
-        VisualScript script,
+        IReadOnlyDictionary<string, Block> index,
         IReadOnlyDictionary<string, BlockRect> rects,
         double offsetX,
         double offsetY,
@@ -176,7 +179,7 @@ public static class SvgRenderer
 
         foreach (var (id, rect) in rects)
         {
-            var label = Escape(Label(BlockOf(script, id)));
+            var label = Escape(BlockExport.Label(BlockOf(index, id)));
             if (label.Length == 0)
             {
                 continue;
@@ -191,80 +194,15 @@ public static class SvgRenderer
     }
 
     /// <summary>The block a layout id names, or null when the document no longer has it.</summary>
+    /// <param name="index">The script's blocks by id.</param>
+    /// <param name="id">The layout's key.</param>
     /// <remarks>
     /// The layout model keys its rects by block id, so the id is the way back to the block. Putting the id on
     /// the rect instead — the obvious thing, and what this did first — asks the layout to populate a field
     /// it has no reason to, and then every caller has to agree about it.
     /// </remarks>
-    private static Block? BlockOf(VisualScript script, string id) =>
-        script.Blocks().FirstOrDefault(block => string.Equals(block.Id, id, StringComparison.Ordinal));
-
-    /// <summary>
-    /// A block's label with its own words, its dropdowns and the user's literals in their holes.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The user's literals have to be in here. §27.2 says an export carries "block labels and the user's
-    /// literals", and an image of a script that says <c>log {template}</c> instead of <c>log Total 6</c> is a
-    /// picture of a template rather than of a script.
-    /// </para>
-    /// <para>
-    /// A nested reporter is shown as its own label rather than its value, because rendering the value would
-    /// mean running the interpreter — and an export must not depend on whether a run would succeed.
-    /// </para>
-    /// </remarks>
-    private static string Label(Block? block)
-    {
-        if (block is null || BlockCatalog.Find(block.Kind) is not { } descriptor)
-        {
-            return string.Empty;
-        }
-
-        return string.Join(
-            " ",
-            BlockLabel.Plan(descriptor).Select(run => run.Kind switch
-            {
-                BlockLabelRunKind.Text => run.Text,
-                BlockLabelRunKind.Menu => block.Fields.TryGetValue(run.Menu!.Name, out var chosen) ? chosen : run.Menu.Default,
-                _ when block.Inputs.TryGetValue(run.Slot!.Name, out var input) => Literal(block, input),
-                _ => BlockLabel.Hole(run.Slot),
-            }));
-    }
-
-    /// <summary>
-    /// What one filled hole says, or what an empty one says.
-    /// </summary>
-    /// <remarks>
-    /// A variable slot is shown as its *name* and not as its value, for the same reason the interpreter's
-    /// table writes it down: a value is a run's business, and an export happens whether or not one has
-    /// happened. A name is in the document and is what the reader recognises.
-    /// </remarks>
-    private static string Literal(Block block, BlockInput input)
-    {
-        if (input.Block is { } nested)
-        {
-            return BlockCatalog.Find(nested.Kind) is { } descriptor
-                ? BlockLabel.PreviewText(descriptor) + "…"
-                : nested.Kind;
-        }
-
-        if (input.Variable is { } variable)
-        {
-            return variable;
-        }
-
-        if (input.Number is { } number)
-        {
-            return number.ToString("0.##", CultureInfo.InvariantCulture);
-        }
-
-        if (input.Boolean is { } boolean)
-        {
-            return boolean ? "true" : "false";
-        }
-
-        return string.IsNullOrEmpty(input.Text) ? string.Empty : input.Text;
-    }
+    private static Block? BlockOf(IReadOnlyDictionary<string, Block> index, string id) =>
+        index.GetValueOrDefault(id);
 
     /// <summary>
     /// A category's fill, as an SVG colour.
@@ -275,31 +213,13 @@ public static class SvgRenderer
     /// application. The App derives its theme from the same catalogue row, so the two agree without either
     /// depending on the other.
     /// </remarks>
-    private static string FillOf(Block? block)
-    {
-        var category = block is null || BlockCatalog.Find(block.Kind) is not { } descriptor
-            ? BlockCategory.Control
-            : descriptor.Category;
-
-        return BlockCatalog.Category(category).Hue;
-    }
+    private static string FillOf(Block? block) => BlockCatalog.Category(BlockExport.Category(block)).Hue;
 
     /// <summary>A block's outline, dark enough to read against a category fill.</summary>
     private static string StrokeOf() => "#00000040";
 
-    /// <summary>
-    /// Escapes text for XML.
-    /// </summary>
-    /// <remarks>
-    /// A block label can hold anything the user typed, including a literal called <c>a &amp; b</c> or a
-    /// parameter called <c>&lt;x&gt;</c>. Without this the export is not a document and not a picture, and
-    /// the failure lands in whatever opens it.
-    /// </remarks>
-    private static string Escape(string text) => text
-        .Replace("&", "&amp;", StringComparison.Ordinal)
-        .Replace("<", "&lt;", StringComparison.Ordinal)
-        .Replace(">", "&gt;", StringComparison.Ordinal)
-        .Replace("\"", "&quot;", StringComparison.Ordinal);
+    /// <summary>Escapes a label for XML, through the helper both exports share.</summary>
+    private static string Escape(string text) => BlockExport.EscapeXml(text);
 
     /// <summary>A number with the invariant separator, because an SVG is not a locale.</summary>
     private static string Round(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);

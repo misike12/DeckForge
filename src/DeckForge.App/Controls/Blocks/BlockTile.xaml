@@ -7,7 +7,11 @@
              Background="Transparent"
              Focusable="False"
              UseLayoutRounding="True"
-             SnapsToDevicePixels="True">
+             SnapsToDevicePixels="True"
+             AutomationProperties.AutomationId="{Binding Id}"
+             AutomationProperties.Name="{Binding AutomationName}"
+             AutomationProperties.HelpText="{Binding Summary}"
+             AutomationProperties.ItemStatus="{Binding Title}">
 
     <!--
         One tile, laid out for every shape.
@@ -21,6 +25,20 @@
         The body template's item template is this same tile, referenced by key. That reference is
         resolved when the template is *applied*, not when this dictionary is parsed, which is the only
         reason a resource can refer to itself.
+
+        The four AutomationProperties on the root are Part 9.8's per-tile peer, declared here rather than
+        set in code so that what a screen reader will say is visible in the markup:
+
+          * Name         — "repeat 10, C block, 3 statements inside", computed in Core so a test can pin it.
+          * AutomationId — the block's own id, so a UI-automation test addresses a block by name and not by
+            its position on screen, which changes the moment anything is inserted above it.
+          * HelpText     — the one-line summary, which is what "more information" reads out.
+          * ItemStatus   — the block's own name without its holes, which some screen readers read as the
+            "status" a tile's tooltip would otherwise be lost as.
+
+        Nothing is said about offscreen detection. WPF's default already marks the tiles a scrolled canvas
+        has pushed out of view, which is what a screen reader walking a five-hundred-block canvas needs;
+        overriding it to "always on screen" would make it read all five hundred.
     -->
     <UserControl.Resources>
         <conv:BoolToVisibilityConverter x:Key="TrueVisible" />

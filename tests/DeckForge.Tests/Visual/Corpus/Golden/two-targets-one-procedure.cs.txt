@@ -1,0 +1,17 @@
+// ==== golden: two-targets-one-procedure ====
+// Covers: Two action targets on one document, with a procedure called from both and one only from the first.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task bothAsync()
+{
+    _logger.Information(VisualRuntime.LogTemplate("both", context.Parameters));
+}
+
+async Task firstOnlyAsync()
+{
+    _logger.Information(VisualRuntime.LogTemplate("first only", context.Parameters));
+}
+// script: first
+await bothAsync();
+await firstOnlyAsync();

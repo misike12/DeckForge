@@ -55,7 +55,12 @@ public sealed class DocsSnapshotPathTests
     [Test]
     public void No_remote_path_can_resolve_outside_the_snapshot_directory()
     {
-        var root = Path.Combine(Path.GetTempPath(), "docsroot");
+        // This one used a fixed "docsroot" under TEMP with no GUID, which is the only name in the suite
+        // two parallel runs could land on together. It never wrote anything, so the hazard was latent
+        // rather than actual - but it was the one place in the suite where two runs shared a path, and
+        // a directory that is safe only because nothing puts a file in it is not a safe directory.
+        using var temp = new TempDirectory("deckforge-docsroot");
+        var root = temp.Root;
         var attempts = new[]
         {
             "../../../Windows/System32/evil.html",
@@ -328,23 +333,19 @@ public sealed class DocsSnapshotPathTests
     private static string? RelativePath(string url) => DocsSnapshotService.RelativePathForTest(url);
 
     /// <summary>A service with its own store, so these tests never touch %LOCALAPPDATA%.</summary>
+    private TempDirectory _temp = null!;
+
     private string _root = "";
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "deckforge-docs-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_root);
+        _temp = new TempDirectory("deckforge-docs");
+        _root = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     private DocsSnapshotService CreateService() => new() { RootOverride = _root };
 

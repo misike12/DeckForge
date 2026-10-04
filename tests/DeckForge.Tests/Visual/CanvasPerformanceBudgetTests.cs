@@ -15,9 +15,14 @@ namespace DeckForge.Tests.Visual;
 /// measured.
 /// </para>
 /// <para>
-/// The other half, WPF arranging and drawing a thousand tiles, is measured by the user-driver harness
-/// against the real window. A unit test cannot see it, and a test that claimed to be a frame rate would be
-/// a fiction.
+/// The other half, WPF arranging and drawing five hundred tile-shaped elements, is measured by
+/// <see cref="CanvasTileLayoutBudgetTests"/> in this same assembly. It used to be measured only by the
+/// user-driver harness against the real window, and §28.5 recorded it as unmeasured; that is no longer
+/// true, and the reason it could be measured is that the test host targets <c>net10.0-windows</c>.
+/// </para>
+/// <para>
+/// What it still cannot do is claim a frame rate: it draws through a software rasteriser rather than
+/// the compositor, so it reports a cost rather than a rate.
 /// </para>
 /// </remarks>
 [TestFixture]

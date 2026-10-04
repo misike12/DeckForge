@@ -22,12 +22,14 @@ public sealed class BlockProgramWriterTests
 {
     private static string _projectRoot = "";
 
+    private static TempDirectory _projectSandbox = null!;
+
     [OneTimeSetUp]
     public void GenerateProject()
     {
         var services = new ServiceCollection();
-        var root = Path.Combine(Path.GetTempPath(), "blocks-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(root);
+        _projectSandbox = new TempDirectory("blocks");
+        var root = _projectSandbox.Root;
 
         _projectRoot = new PluginProjectGenerator(
             services.BuildServiceProvider(),
@@ -41,6 +43,9 @@ public sealed class BlockProgramWriterTests
             InitGit = false,
         });
     }
+
+    [OneTimeTearDown]
+    public void RemoveProject() => _projectSandbox.Dispose();
 
     private string ActionFile => Path.Combine(_projectRoot, "src", "Blocks", "LogMessageAction.cs");
 
@@ -730,12 +735,12 @@ public sealed class BlockProgramWriterTests
         // The assertion that matters. Every earlier test in this fixture checks the source the
         // writer produced; this one builds it, against the real SDK. A canvas that names a field
         // nobody declared, or drops an await into a method that cannot hold one, only fails here.
-        var sandbox = Path.Combine(Path.GetTempPath(), "blocks-build-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(sandbox);
+        using var sandbox = new TempDirectory("blocks-build");
 
         var root = new PluginProjectGenerator(
             new ServiceCollection().BuildServiceProvider(),
-            NullLogger<PluginProjectGenerator>.Instance).Generate(Options() with { ParentDirectory = sandbox });
+            NullLogger<PluginProjectGenerator>.Instance)
+            .Generate(Options() with { ParentDirectory = sandbox.Root });
 
         var actionFile = Path.Combine(root, "src", "Blocks", "LogMessageAction.cs");
 
@@ -800,7 +805,7 @@ public sealed class BlockProgramWriterTests
         PluginName = "Blocks",
         PluginId = "com.example.blocks",
         Publisher = "Example",
-        ParentDirectory = Path.GetTempPath(),
+        ParentDirectory = _projectSandbox.Root,
         ProjectName = "Blocks",
         InitGit = false,
     };

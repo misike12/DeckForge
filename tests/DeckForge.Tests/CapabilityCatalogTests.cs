@@ -28,11 +28,13 @@ public sealed class CapabilityCatalogTests
         //     ever. The suite reported 848 passed, 0 failed and 0 skipped while 849 tests had been
         //     discovered - a gate on a whole defect class, since a typo'd glyph renders as a blank box,
         //     that had never once checked a name.
-        //   - It then named a WPF *control* to reach the enum, which fails at runtime for a different
-        //     reason: this project targets net10.0, so PresentationFramework is not loadable here.
+        //   - It then named a WPF *control* to reach the enum, which failed at runtime for a different
+        //     reason: the project targeted net10.0, so PresentationFramework was not referenced at all.
+        //     The host is net10.0-windows now, so that particular reason is gone - but the reflection is
+        //     kept anyway, because reading an enum does not need a WPF control and needing less is better.
         //
         // So: the assembly is loaded from disk and only the enum is asked for. An enum's base is
-        // System.Enum, which is why this works without the WPF assemblies being present at all.
+        // System.Enum, which is why this works with no WPF type named anywhere.
         try
         {
             var path = System.IO.Path.Combine(AppContext.BaseDirectory, "Wpf.Ui.dll");

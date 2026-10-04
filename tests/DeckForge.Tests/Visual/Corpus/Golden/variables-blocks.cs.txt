@@ -1,0 +1,18 @@
+// ==== golden: variables-blocks ====
+// Covers: Every Variables block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("var"), "value");
+VisualRuntime.Change(VisualRuntime.ToText("var"), "amount");
+VisualRuntime.Set(VisualRuntime.ToText("var"), VisualRuntime.ReadParameter(context, VisualRuntime.ToText("param"), VisualRuntime.ToText("Text"), VisualRuntime.ToBool("false")));
+VisualRuntime.Set(VisualRuntime.ToText("var"), await VisualRuntime.HostVariableAsync(_integration, VisualRuntime.ToText("name"), context.CancellationToken));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Get("var"));
+VisualRuntime.Watch(VisualRuntime.ToText("var"));
+VisualRuntime.Unwatch(VisualRuntime.ToText("var"));
+VisualRuntime.ClearLocals();

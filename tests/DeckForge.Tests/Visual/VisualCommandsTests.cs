@@ -79,6 +79,11 @@ public sealed class VisualCommandsTests
             ["F11"] = VisualCommands.StageStepInto,
             ["F9"] = VisualCommands.ToggleBreakpoint,
             ["Shift+F5"] = VisualCommands.StageStop,
+
+            // Not in Part 18.3, which is the point: the transport's Pause is Part 10.3 and §18.6 records
+            // that it was not built. It went on F6 because that is the free key between Run and Breakpoint,
+            // and a transport whose pause had no chord would be a feature only its own button could reach.
+            ["F6"] = VisualCommands.StagePause,
         };
 
         foreach (var (gesture, id) in expected)
@@ -86,6 +91,100 @@ public sealed class VisualCommandsTests
             var found = VisualCommands.ForGesture(gesture, CommandScope.Stage);
             Assert.That(found?.Id, Is.EqualTo(id), $"{gesture} is listed in Part 18.3 as something else");
         }
+    }
+
+    [Test]
+    public void Pause_and_Resume_are_one_command_because_the_transport_shows_one_control()
+    {
+        // Two commands with two gestures would have to claim two chords for one state, and
+        // No_gesture_is_claimed_by_two_commands_in_the_same_scope forbids exactly that. So the table names
+        // one thing, and the sheet has to say so in words a user can act on.
+        var pause = VisualCommands.Find(VisualCommands.StagePause);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pause, Is.Not.Null);
+            Assert.That(pause!.Title, Does.Contain("Pause").IgnoreCase);
+            Assert.That(pause.Title, Does.Contain("resume").IgnoreCase,
+                "the sheet is read by somebody deciding which key to press, and \"Pause\" alone would not "
+                + "tell them how to get out of the pause they just asked for");
+            Assert.That(pause.SearchTerms, Does.Contain("resume"),
+                "and the palette finds it by the other half of its name, because the button reads Resume "
+                + "at the moment they would be searching for it");
+            Assert.That(pause.Gesture, Is.EqualTo("F6"));
+        });
+    }
+
+    [Test]
+    public void The_rubber_band_has_a_keyboard_sibling_because_a_pointer_only_feature_is_a_defect()
+    {
+        // Part 18.1 gives selecting several blocks a drag gesture and §18.3 gives it no key at all.
+        // §17.2 item 6 promises every operation is reachable without a pointer, so the chord has to exist
+        // and has to be discoverable - which means it has to be in this table, not only in a key handler.
+        var selectAll = VisualCommands.Find(VisualCommands.SelectAll);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(selectAll?.Gesture, Is.EqualTo("Ctrl+A"));
+            Assert.That(
+                VisualCommands.ForGesture("Ctrl+A", CommandScope.Canvas)?.Id,
+                Is.EqualTo(VisualCommands.SelectAll));
+            Assert.That(
+                selectAll?.SearchTerms,
+                Does.Contain("rubber band"),
+                "a user who has just been told about the drag searches for the word the drag is called in "
+                + "the docs, not for \"select all\"");
+        });
+    }
+
+    [Test]
+    public void A_menu_that_lists_a_scope_reads_the_table_rather_than_its_own_list()
+    {
+        // Part 18.5's three context menus are the table's third reader, beside the palette and the sheet.
+        // A menu written out as literal items is a menu that drifts: it would print "Undo Ctrl+Z" beside a
+        // handler that had since been rebound, and nothing in the build or this suite would notice - which
+        // is the exact defect the sheet's tests exist to prevent.
+        Assert.Multiple(() =>
+        {
+            Assert.That(
+                VisualCommands.InScope(CommandScope.Stage).Select(command => command.Id),
+                Is.EqualTo(new[]
+                {
+                    VisualCommands.StageRun,
+                    VisualCommands.StageStep,
+                    VisualCommands.StageStepInto,
+                    VisualCommands.StagePause,
+                    VisualCommands.ToggleBreakpoint,
+                    VisualCommands.StageStop,
+                    VisualCommands.StageReset,
+                }),
+                "which is Part 18.5's stage menu, minus the clear-trace, clock and network items §18.6 "
+                + "records as deliberately unreachable");
+
+            Assert.That(
+                VisualCommands.InScope(CommandScope.Canvas).Select(command => command.Id),
+                Does.Contain(VisualCommands.SelectAll),
+                "so a canvas menu that lists its scope cannot go stale against the table");
+            Assert.That(
+                VisualCommands.InScope(CommandScope.Stage).Where(command => command.Scope != CommandScope.Stage),
+                Is.Empty,
+                "and a scope never leaks another scope's commands in");
+        });
+    }
+
+    [Test]
+    public void Every_command_a_menu_would_offer_has_a_gesture_the_sheet_can_print()
+    {
+        // A menu item shows its own chord beside its name. Reset is the one command with a blank gesture,
+        // and the sheet already knows that; what must not happen is a second one, because the menu would
+        // then print an empty column where a key should be and the two views would disagree about why.
+        var blank = VisualCommands.InScope(CommandScope.Stage)
+            .Concat(VisualCommands.InScope(CommandScope.Canvas))
+            .Where(command => command.Gesture.Length == 0)
+            .Select(command => command.Id)
+            .ToList();
+
+        Assert.That(blank, Is.EqualTo(new[] { VisualCommands.StageReset }));
     }
 
     [Test]
@@ -159,13 +258,17 @@ public sealed class VisualCommandsTests
                     VisualCommands.Paste,
                     VisualCommands.ExportBlock,
                     VisualCommands.ImportBlock,
+                    VisualCommands.SelectAll,
                     VisualCommands.StageStep,
                     VisualCommands.StageStepInto,
                 }),
                 "and a title that merely contains it. \"Search blocks\" is here and \"Stop\" is not, which "
                 + "is the difference between matching a word and matching a letter. Every clipboard command "
                 + "is here too, which is the point of the substring tier: somebody who types \"bloc\" "
-                + "wanting the clipboard is not made to remember which of the five says so in its title");
+                + "wanting the clipboard is not made to remember which of the five says so in its title. "
+                + "\"Select every block\" is here for the same reason and by the same accident - it has "
+                + "nothing to do with the clipboard, and its keyword \"rubber band\" is what a user who "
+                + "wants the selection actually types");
 
             // Keyword: no command is *called* cheatsheet.
             Assert.That(

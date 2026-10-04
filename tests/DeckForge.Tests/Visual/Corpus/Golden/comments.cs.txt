@@ -1,0 +1,19 @@
+// ==== golden: comments ====
+// Covers: Block comments: one line, several lines, a unicode comment, and a comment on a block that is then disabled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+// one line
+_logger.Information(VisualRuntime.LogTemplate("first", context.Parameters));
+// three lines
+// second
+// third
+_logger.Information(VisualRuntime.LogTemplate("second", context.Parameters));
+// log {level} {template} (disabled)
+// a comment on the container
+for (var _i0 = 0; _i0 < VisualRuntime.ToNumber(1); _i0++)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    // and one on the child
+    _logger.Information(VisualRuntime.LogTemplate("child", context.Parameters));
+}

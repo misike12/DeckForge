@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using DeckForge.App.Services;
+using DeckForge.Core.Settings;
 
 namespace DeckForge.App.Themes;
 

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Media;
 using DeckForge.App.ViewModels.Visual;
@@ -35,6 +36,18 @@ public partial class BlockTile : UserControl
     /// <summary>How tall the lit band along the top of a block is.</summary>
     private const double SheenHeight = BlockOutline.HeaderHeight / 2;
 
+    /// <summary>
+    /// The menu this tile opens on a right-click, or null until one is needed.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="FrameworkElement.ContextMenu"/> on purpose. That property is left in place
+    /// because removing it would change what a right-click means for assistive technology and for the
+    /// automation tree, but nothing reads it: the tile opens <em>this</em> one from
+    /// <see cref="OnPreviewMouseRightButtonDown"/>. Two menus on one route is the ambiguity this whole
+    /// arrangement exists to avoid, so only one of them is ever populated and only one is ever shown.
+    /// </remarks>
+    private ContextMenu? _menu;
+
     public BlockTile()
     {
         InitializeComponent();
@@ -52,7 +65,180 @@ public partial class BlockTile : UserControl
         // symptom is a canvas where selection visibly works and the keyboard visibly does nothing.
         Focusable = true;
         IsTabStop = true;
+
+        // A context menu, empty. Not built here and not built in markup, because the tile lives four
+        // template levels down and cannot reach the editor that owns the commands from its own data context.
+        // The menu raises a routed event and the page — the one ancestor of every tile — fills it in. The
+        // same shape as SelectionRequestedEvent, and for the same reason: WPF builds a routed event's route
+        // from Source, and an object that is not in the tree is delivered to nobody, silently.
+        //
+        // Created here rather than on the first right-click because a lazy one races: WPF decides which
+        // element to open a menu for as part of handling the right-button release, and a menu assigned
+        // during the press is a menu this build cannot prove opens. The cost is one empty ContextMenu per
+        // tile, which is a Popup that owns no window until it is shown — small beside the UserControl,
+        // the two ItemsControls and the label row the tile already allocates.
+        ContextMenu = new ContextMenu();
+        ContextMenu.ContextMenuOpening += OnContextMenuOpening;
+
+        // ...and the menu is opened from here rather than left to ContextMenuService, because relying on
+        // the service was a guess and the guess was wrong. Driving the real window: right-clicking a block
+        // did nothing at all - no menu, and the block was not even selected, so OnContextMenuOpening had
+        // plainly never run. The service was never reaching this control's menu, and the reason is that
+        // BlockWorkspace puts *its* menu on three elements that are all ancestors of every tile (the
+        // scroller, the grid, and the drag surface the tiles are children of). Which of two ContextMenus
+        // on the same route wins is not something this code controls, and no test can see it: a menu that
+        // does not open fails silently and identically to a menu with nothing in it.
+        //
+        // So the tile handles the right button itself, asks the page to fill a menu it owns, and opens it.
+        // One event, one menu, no dependence on which ancestor wins - and the block is selected first, so
+        // a right-click behaves like a left-click for selection as well as for the menu, which is what
+        // every other editor does and what Part 9.5's "right click | block | the tile's menu" assumes.
+        PreviewMouseRightButtonDown += OnPreviewMouseRightButtonDown;
     }
+
+    /// <summary>
+    /// Fills the tile's own menu and opens it, on the right button.
+    /// </summary>
+    /// <param name="sender">The tile.</param>
+    /// <param name="e">The press. Handled, because the menu this opens is the whole point of the gesture.</param>
+    /// <remarks>
+    /// The routed event is raised first so the page can populate <see cref="_menu"/>, and the menu is
+    /// opened afterwards rather than from <c>ContextMenuOpening</c> - a handler that opens a menu from
+    /// inside the opening event is opening it while WPF is still deciding how big it is, which is how a
+    /// menu appears with no items in it.
+    /// </remarks>
+    private void OnPreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (Node is not { } node)
+        {
+            return;
+        }
+
+        // One menu per tile, reused. A fresh ContextMenu per right-click would be a Popup per gesture, and
+        // the reason the original code allocated one per tile in the constructor was to avoid exactly that.
+        _menu ??= new ContextMenu();
+        _menu.Items.Clear();
+
+        RaiseEvent(new BlockMenuRequestedEventArgs(MenuRequestedEvent, this, node, _menu));
+
+        if (_menu.Items.Count == 0)
+        {
+            return;
+        }
+
+        _menu.PlacementTarget = this;
+        _menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        _menu.IsOpen = true;
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Asks the page to fill in this tile's context menu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Raised from <see cref="ContextMenu.ContextMenuOpening"/> and deliberately <em>not</em> marking the
+    /// event handled. WPF opens the menu itself once this returns, and the argument type is
+    /// <see cref="ContextMenuEventArgs"/> rather than a plain routed one precisely so a handler can veto it —
+    /// so marking it handled here would have been the one thing guaranteed to stop the menu opening, with no
+    /// error anywhere.
+    /// </para>
+    /// <para>
+    /// The event is not marked handled because there is nothing to stop. The tile's own menu is the one WPF
+    /// is about to open and the one this event is about; a sibling handler that wanted a different menu
+    /// would have replaced <see cref="Control.ContextMenu"/> before this fired, not fought over the event.
+    /// </para>
+    /// </remarks>
+    private void OnContextMenuOpening(object? sender, ContextMenuEventArgs args)
+    {
+        if (Node is not { } node)
+        {
+            return;
+        }
+
+        RaiseEvent(new BlockMenuRequestedEventArgs(MenuRequestedEvent, this, node, (ContextMenu)sender!));
+    }
+
+    /// <summary>
+    /// Raised when a tile's context menu is about to open, bubbling so one handler on the page can fill in
+    /// every tile's.
+    /// </summary>
+    /// <remarks>
+    /// A bubbling event carrying the menu itself rather than a request the page has to find, because the
+    /// menu is a fresh object per tile and the only thing that knows which one is opening is the tile.
+    /// </remarks>
+    public static readonly RoutedEvent MenuRequestedEvent = EventManager.RegisterRoutedEvent(
+        "MenuRequested",
+        RoutingStrategy.Bubble,
+        typeof(RoutedEventHandler),
+        typeof(BlockTile));
+
+    /// <summary>
+    /// Selects this block the way a click does, for a keyboard or an automation client.
+    /// </summary>
+    /// <remarks>
+    /// Public because <see cref="BlockTileAutomationPeer"/> is not in the visual tree and cannot raise a
+    /// routed event by walking up from a <c>Source</c> it does not own — and a UI-automation client pressing
+    /// a tile is a user, not a test.
+    /// </remarks>
+    public void RequestSelection()
+    {
+        TakeFocus();
+
+        if (Node is { } node)
+        {
+            RaiseEvent(new BlockSelectedEventArgs(SelectionRequestedEvent, this, node));
+        }
+    }
+
+    /// <summary>
+    /// Raised when something that is not a click wants the selection changed, carrying which way.
+    /// </summary>
+    /// <remarks>
+    /// A separate event from <see cref="SelectionRequestedEvent"/> rather than a flag on it, because "add
+    /// this to what is selected" is a different gesture from "this is now the selection". The page's click
+    /// handler must keep meaning the second, and a flag it had to read would put one boolean in the path of
+    /// every click on the canvas.
+    /// </remarks>
+    public static readonly RoutedEvent SelectionModeRequestedEvent = EventManager.RegisterRoutedEvent(
+        "SelectionModeRequested",
+        RoutingStrategy.Bubble,
+        typeof(RoutedEventHandler),
+        typeof(BlockTile));
+
+    /// <summary>
+    /// Adds this block to the selection without dropping what is already selected.
+    /// </summary>
+    /// <remarks>
+    /// The selection-item pattern's second verb, and it needs the editor to own a multi-selection at all.
+    /// It did not: Part 18.1's rubber band has nowhere to put the blocks it touches, so this is what makes
+    /// the peer's pattern more than a decoration.
+    /// </remarks>
+    public void RequestAddToSelection() => RaiseSelectionMode(BlockSelectionMode.Add);
+
+    /// <summary>Removes this block from the selection.</summary>
+    public void RequestRemoveFromSelection() => RaiseSelectionMode(BlockSelectionMode.Remove);
+
+    /// <summary>Raises <see cref="SelectionModeRequestedEvent"/> with the mode asked for.</summary>
+    private void RaiseSelectionMode(BlockSelectionMode mode)
+    {
+        if (Node is { } node)
+        {
+            RaiseEvent(new BlockSelectionModeEventArgs(SelectionModeRequestedEvent, this, node, mode));
+        }
+    }
+
+    /// <summary>
+    /// This tile's peer, so a screen reader and a UI-automation test can find the block by name.
+    /// </summary>
+    /// <remarks>
+    /// Part 9.8 asks for a peer per tile and this is the whole of it. Without the override WPF supplies a
+    /// peer for <see cref="UserControl"/>, which reports the element's type name as its name — so a screen
+    /// reader read "user control" a hundred times down a stack, and a UI-automation test could not tell one
+    /// block from another except by its position on screen.
+    /// </remarks>
+    protected override AutomationPeer OnCreateAutomationPeer() => new BlockTileAutomationPeer(this);
 
     /// <summary>
     /// Moves keyboard focus onto this block, for a click or for Tab.

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using DeckForge.App.Services;
 using DeckForge.App.ViewModels.Visual;
 using DeckForge.Core.Visual;
@@ -54,6 +55,25 @@ AddHandler(
         AddHandler(
             Controls.Blocks.BlockTile.BreakpointRequestedEvent,
             new RoutedEventHandler(Tile_BreakpointRequested));
+
+        // Part 18.5's tile menu, and the selection-item verbs an automation peer needs. Both bubble from
+        // every tile, so one handler here covers the whole canvas; the alternative — each tile reaching for
+        // the editor — cannot work, because a tile holds a block and the editor lives four template levels
+        // above it.
+        AddHandler(
+            Controls.Blocks.BlockTile.MenuRequestedEvent,
+            new RoutedEventHandler(Tile_MenuRequested));
+
+        AddHandler(
+            Controls.Blocks.BlockTile.SelectionModeRequestedEvent,
+            new RoutedEventHandler(Tile_SelectionModeRequested));
+
+        // The canvas and stage menus are built here and handed to the two controls that host them, because
+        // a menu's items are commands and the commands are reached through Dispatch below - one table, one
+        // key handler, one command palette and now three menus. See VisualMenus for why they are built in
+        // code rather than declared in markup, and why they are factories rather than menus.
+        Workspace.CanvasMenuFactory = () => Controls.Blocks.VisualMenus.ForCanvas(_vm, Dispatch);
+        Stage.StageMenuFactory = () => Controls.Blocks.VisualMenus.ForStage(_vm.Stage, _vm, Dispatch);
 
         // Two events rather than four handlers: a chosen command and a dismissal, whatever raised them.
         PaletteOverlay.CommandChosen += Palette_CommandChosen;
@@ -400,6 +420,82 @@ AddHandler(
     }
 
     /// <summary>
+    /// Fills in a tile's context menu from Core's command table.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The handler is on the page because the page is the one ancestor of every tile and the one thing that
+    /// knows how a command is carried out — the same reason <see cref="Tile_SelectionRequested"/> is here.
+    /// The tile creates the menu and asks; it does not build it, because a tile's data context is a block
+    /// and a menu's items are commands, and those two live in different objects entirely.
+    /// </para>
+    /// <para>
+    /// The right-click selects the block first, which is the opposite of what a menu usually does and the
+    /// only useful behaviour here: "Duplicate block" in a menu opened on a block that is not the selection
+    /// would duplicate whatever happened to be selected, and the user has no way to see which one that was.
+    /// A click does not select a tile in WPF — the handler is on <c>MouseLeftButtonDown</c> — so without
+    /// this the tile menu would act on a stale selection.
+    /// </para>
+    /// <para>
+    /// Rebuilt on every open rather than once, because the greyed rows depend on whether anything is
+    /// selected and a menu built when the page opened has nothing selected.
+    /// </para>
+    /// </remarks>
+    private void Tile_MenuRequested(object sender, RoutedEventArgs args)
+    {
+        if (args is not Controls.Blocks.BlockMenuRequestedEventArgs requested)
+        {
+            return;
+        }
+
+        _vm.Select(requested.Block);
+
+        requested.Menu.Items.Clear();
+        foreach (var item in Controls.Blocks.VisualMenus.ForTile(requested.Block, _vm, Dispatch).Items)
+        {
+            requested.Menu.Items.Add(item);
+        }
+    }
+
+    /// <summary>
+    /// Changes the selection from something that is not a click: the automation peer's verbs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Part 9.8's peer can find a block by name, but a peer that can only <em>select</em> a block is half a
+    /// selection pattern — a UI-automation client has to be able to add one to what is already selected,
+    /// which is what the rubber band does for a person.
+    /// </para>
+    /// <para>
+    /// No scrolling, unlike the click handler. A client that adds forty tiles to the selection would
+    /// otherwise scroll the canvas forty times, ending up looking at the last one it touched rather than at
+    /// the selection.
+    /// </para>
+    /// </remarks>
+    private void Tile_SelectionModeRequested(object sender, RoutedEventArgs args)
+    {
+        if (args is not Controls.Blocks.BlockSelectionModeEventArgs mode)
+        {
+            return;
+        }
+
+        switch (mode.Mode)
+        {
+            case Controls.Blocks.BlockSelectionMode.Only:
+                _vm.Select(mode.Block);
+                break;
+
+            case Controls.Blocks.BlockSelectionMode.Add:
+                _vm.AddToSelection(mode.Block);
+                break;
+
+            case Controls.Blocks.BlockSelectionMode.Remove:
+                _vm.RemoveFromSelection(mode.Block);
+                break;
+        }
+    }
+
+    /// <summary>
     /// Selects the block that owns a clicked hole, and asks the inspector for that slot's row.
     /// </summary>
     /// <remarks>
@@ -521,6 +617,83 @@ private void Slot_Clicked(object sender, RoutedEventArgs args)
             _vm.Report($"Could not write {dialog.FileName}: {error.Message}");
         }
     }
+
+    /// <summary>
+    /// Writes the canvas as a raster image, beside the vector one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A button beside "Export SVG" rather than a replacement for it, because they answer different
+    /// questions: SVG is what to embed or print, PNG is what to paste into a chat app. The same save dialog,
+    /// the same reporting, and the same refusal — including naming the path, because "could not save" with no
+    /// file name beside it leaves the user looking for whatever it tried to write.
+    /// </para>
+    /// <para>
+    /// What is planned here and drawn in <c>BlockImageRenderer</c> is the whole of it. The layout, the
+    /// scale, the padding, the captions and the colours are Core's, which is the only reason this can be
+    /// tested at all: §28.5 refused PNG because "a third-party encoder in Core would make the export
+    /// untestable", and the answer was to keep the encoder out of Core rather than to keep the export out of
+    /// the product.
+    /// </para>
+    /// </remarks>
+    private void ExportPng_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export the canvas as PNG",
+            FileName = "canvas.png",
+            DefaultExt = ".png",
+            Filter = "PNG image (*.png)|*.png",
+        };
+
+        if (dialog.ShowDialog() is not true)
+        {
+            _vm.Report("Export cancelled. Nothing was written.");
+            return;
+        }
+
+        var plan = PngExportPlan.ForDocument(_vm.Document, PngOptions());
+
+        if (!BlockImageRenderer.TryRender(plan, out var bitmap, out var problem))
+        {
+            // The path, then the reason. The user has a dialog open on a filename and deserves both, and the
+            // reason alone ("the surface is too big") would be a complaint about the application rather than
+            // about what they just asked for.
+            _vm.Report($"Could not draw {dialog.FileName}: {problem} Nothing was written.");
+            return;
+        }
+
+        try
+        {
+            File.WriteAllBytes(dialog.FileName, BlockImageRenderer.EncodePng(bitmap!));
+
+            _vm.Report(
+                $"Exported {_vm.Document.Targets.Sum(target => target.Scripts.Count)} script(s) to "
+                + $"{dialog.FileName} ({plan.Width}x{plan.Height} at {plan.Scale:0.##}x).");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            _vm.Report($"Could not write {dialog.FileName}: {error.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The settings the page's two raster paths draw with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The vector export's 16-unit margin, so the two exports of one document differ by a file format rather
+    /// than by a border. The scale is left at <see cref="PngExportOptions.DefaultScale"/> and the caption at
+    /// Core's default, which is the script's name in the target it belongs to — Part 25.3's "a caption line
+    /// naming the target", and something a user pasting into a chat app needs more than a colour does.
+    /// </para>
+    /// <para>
+    /// Named rather than written twice because the file export and the clipboard's picture are the same
+    /// picture, and a second copy of these numbers is a second place for the two to differ — which is how
+    /// somebody ends up pasting a picture into a channel and exporting a different one to a folder.
+    /// </para>
+    /// </remarks>
+    private static PngExportOptions PngOptions() => new() { Padding = 16 };
 
     /// <summary>
     /// Saves the canvas, or says why it could not be saved.
@@ -888,6 +1061,30 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
             return;
         }
 
+        // The keyboard's half of Part 18.1's rubber band. §18.3 gives the band no key of its own, and a
+        // gesture only the pointer can perform is a defect this design names; Ctrl+A is the chord every
+        // other editor on the machine already means by it, and Esc - already "Cancel" in the table - clears
+        // it again, so the pair behaves like the band and a click on empty canvas do.
+        //
+        // Refused while a field has focus, like every other canvas chord: Ctrl+A inside a text box is
+        // select-all-text, and a canvas that swallowed it would make the field's own shortcut unreachable.
+        if (ctrl && e.Key == Key.A && !editing)
+        {
+            _vm.SelectAllBlocks();
+            e.Handled = true;
+            return;
+        }
+
+        // The target picker, for the keyboard. Tab reaches the ComboBox and the arrows move inside it, so
+        // this is a shortcut rather than the only route — and it is here because §17.2 item 6 promises every
+        // operation is reachable without a pointer, and the cheapest reading of that is a chord.
+        if (ctrl && e.Key == Key.Tab)
+        {
+            _vm.SelectNextTarget();
+            e.Handled = true;
+            return;
+        }
+
         if (_vm.IsCarrying)
         {
             if (HandleCarryingKey(e))
@@ -966,6 +1163,7 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
         var name = key switch
         {
             Key.F5 => "F5",
+            Key.F6 => "F6",
             Key.F9 => "F9",
             Key.F10 => "F10",
             Key.F11 => "F11",
@@ -1001,6 +1199,12 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
                 _vm.Stage.StopCommand.Execute(null);
                 break;
 
+            case VisualCommands.StagePause:
+                // One command, because the table cannot hold two commands sharing a gesture and the
+                // transport has one button. The session decides which of the two it is.
+                _vm.Stage.PauseCommand.Execute(null);
+                break;
+
             case VisualCommands.StageReset:
                 _vm.Stage.ResetCommand.Execute(null);
                 break;
@@ -1028,6 +1232,7 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
     /// Puts text on the system clipboard, and survives it being closed.
     /// </summary>
     /// <param name="text">What to copy.</param>
+    /// <param name="image">A picture of the same run, or null when there is none.</param>
     /// <returns>Whether it landed.</returns>
     /// <remarks>
     /// <para>
@@ -1040,14 +1245,40 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
     /// Retried once, because the common case really is the transient one: another process had it a
     /// moment ago and has let go by the time the second attempt runs.
     /// </para>
+    /// <para>
+    /// Both payloads go in through one <see cref="DataObject"/> rather than a <c>SetText</c> followed by a
+    /// <c>SetImage</c>, because the clipboard is replaced rather than added to: two writes means two
+    /// round trips in which another process can take the lock, and the second one would clear the text the
+    /// first had put there. Part 25.2 asks for both at once, and the text is the primary one — it is what a
+    /// paste back into DeckForge reads — so it is written first and the picture only rides along.
+    /// </para>
+    /// <para>
+    /// The image is a parameter and not something looked up here, because the caller has to be able to say
+    /// it has none rather than have this decide: the picture is drawn from a layout walk that can be refused
+    /// (a document too large to rasterise), and a refusal must not stop the text.
+    /// </para>
     /// </remarks>
-    private bool WriteClipboard(string text)
+    private bool WriteClipboard(string text, BitmapSource? image)
     {
+        var payload = new DataObject();
+
+        // Text first, and unconditionally: a caller that has no picture gets exactly what it had before any
+        // of this, and a caller whose picture could not be drawn still pastes into DeckForge.
+        payload.SetText(text);
+
+        if (image is not null)
+        {
+            payload.SetImage(image);
+        }
+
         for (var attempt = 0; attempt < 2; attempt++)
         {
             try
             {
-                Clipboard.SetText(text);
+                // copy: true, so the clipboard outlives the window. A chat app is a different process that
+                // may ask for the image long after DeckForge has been closed, and an unflushed clipboard
+                // would be empty by then — which is the one place a copy has to be told to persist.
+                Clipboard.SetDataObject(payload, true);
                 return true;
             }
             catch (Exception error) when (error is System.Runtime.InteropServices.COMException or System.Runtime.InteropServices.ExternalException)
@@ -1057,6 +1288,105 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// A picture of a run, for the clipboard to carry alongside the envelope.
+    /// </summary>
+    /// <param name="run">The blocks being copied.</param>
+    /// <returns>The image, and why there is not one if there is not.</returns>
+    /// <remarks>
+    /// <para>
+    /// Drawn from the layout model by <see cref="PngExportPlan"/>, not captured from the canvas: a capture
+    /// would be a picture of the window at the window's zoom, cropped to the window, and would show nothing
+    /// at all of a run the user had scrolled off screen to reach. This is the same geometry the vector
+    /// export uses, so the picture in a chat message and the file in a folder are the same drawing.
+    /// </para>
+    /// <para>
+    /// A null bitmap is an ordinary answer here, and it is allowed to be. Part 25.2's picture is the second
+    /// payload — the envelope is what a paste back into DeckForge reads — so a run too large to rasterise
+    /// must not stop the text copy. The reason comes back with it so the caller can say what happened rather
+    /// than leaving the user to discover that a chat app pasted words.
+    /// </para>
+    /// </remarks>
+    private static (BitmapSource? Bitmap, string? Problem) ClipboardImage(
+        IReadOnlyList<Block> run) =>
+        BlockImageRenderer.TryRender(
+            PngExportPlan.ForRun(run, PngOptions()),
+            out var bitmap,
+            out var problem)
+            ? (bitmap, null)
+            : (null, problem);
+
+    /// <summary>
+    /// Ctrl+C and Ctrl+X: one copy, and in the cut's case a delete afterwards.
+    /// </summary>
+    /// <param name="cut">Whether the blocks are removed once the clipboard has them.</param>
+    /// <remarks>
+    /// <para>
+    /// One method for two commands, because they are one operation: a cut is a copy that has already been
+    /// agreed to, and the parts that matter — the run that is chosen, the envelope, the picture, and the
+    /// order they happen in — must not be allowed to differ between them.
+    /// </para>
+    /// <para>
+    /// The order is the whole design. The run is read once and both payloads are built from that one read,
+    /// so the envelope and the picture cannot be of different runs; the picture is drawn first, so a
+    /// document too large to rasterise cannot stop the envelope; the clipboard is written before anything is
+    /// deleted, so a copy that did not land leaves the blocks where they are; and the delete is last, so a
+    /// cut reports what actually happened rather than what it meant to. A cut reads the run a second time,
+    /// inside <c>CutSelected</c>, and cannot come back with a different one: drawing a picture does not move
+    /// a selection.
+    /// </para>
+    /// </remarks>
+    private void CopySelectedRun(bool cut)
+    {
+        if (_vm.SelectedRun() is not { Count: > 0 } run)
+        {
+            _vm.ReportProblem(cut ? "Select a block to cut." : "Select a block to copy.");
+            return;
+        }
+
+        var (picture, drawing) = ClipboardImage(run);
+
+        string? text;
+        bool deleted;
+
+        if (cut)
+        {
+            (text, deleted) = _vm.CutSelected();
+        }
+        else
+        {
+            text = VisualClipboard.Write(run);
+            deleted = false;
+        }
+
+        if (text is null)
+        {
+            _vm.ReportProblem(cut ? "Select a block to cut." : "Select a block to copy.");
+            return;
+        }
+
+        if (!WriteClipboard(text, picture))
+        {
+            _vm.ReportProblem(cut
+                ? "The clipboard would not take it. The blocks are still here - undo is one Ctrl+Z away."
+                : "The clipboard would not take it, so nothing was copied.");
+            return;
+        }
+
+        // Said after the copy, not before it, and as an answer rather than a refusal: the copy happened and
+        // the user should know what they got. Part 25.2 asks for a bitmap as well as the text, so a copy
+        // that quietly produced only text is not what was promised.
+        if (picture is null)
+        {
+            _vm.Report($"Copied the blocks, but there was no picture to go with them: {drawing}");
+        }
+
+        if (cut && !deleted)
+        {
+            _vm.ReportProblem("Copied, but the blocks could not be removed.");
+        }
     }
 
     /// <summary>The clipboard's text, or null when it holds none or cannot be read.</summary>
@@ -1232,32 +1562,11 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
                 break;
 
             case VisualCommands.Copy:
-                if (_vm.CopySelected() is { } copy)
-                {
-                    WriteClipboard(copy);
-                }
-                else
-                {
-                    _vm.ReportProblem("Select a block to copy.");
-                }
-
+                CopySelectedRun(cut: false);
                 break;
 
             case VisualCommands.Cut:
-                var (text, deleted) = _vm.CutSelected();
-                if (text is null)
-                {
-                    _vm.ReportProblem("Select a block to cut.");
-                }
-                else if (!WriteClipboard(text))
-                {
-                    _vm.ReportProblem("The clipboard would not take it. The blocks are still here - undo is one Ctrl+Z away.");
-                }
-                else if (!deleted)
-                {
-                    _vm.ReportProblem("Copied, but the blocks could not be removed.");
-                }
-
+                CopySelectedRun(cut: true);
                 break;
 
             case VisualCommands.Paste:
@@ -1293,6 +1602,10 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
                 _vm.CancelKeyboardDrag();
                 break;
 
+            case VisualCommands.SelectAll:
+                _vm.SelectAllBlocks();
+                break;
+
             case VisualCommands.Save:
                 _vm.SaveCommand.Execute(null);
                 break;
@@ -1310,6 +1623,7 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
             case VisualCommands.StageStep:
             case VisualCommands.StageStepInto:
             case VisualCommands.StageStop:
+            case VisualCommands.StagePause:
             case VisualCommands.StageReset:
             case VisualCommands.ToggleBreakpoint:
                 RunStageCommand(id);

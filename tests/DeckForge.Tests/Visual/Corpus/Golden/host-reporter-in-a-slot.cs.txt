@@ -1,0 +1,7 @@
+// ==== golden: host-reporter-in-a-slot ====
+// Covers: A reporter that reaches for _integration, used inside a slot, in a document whose only other block is hostless.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - The host guard is noted by the statement emitter, so a reporter nested in a slot never asks for one: this document dereferences `_integration` with no `if (_integration is null)` above it, which is CS8602 in a plugin with nullable enabled and a NullReferenceException in one without. A document that also has a host-touching statement happens to get the guard by accident, which is why this needs its own document to be visible at all.
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().Count);
+VisualRuntime.Set(VisualRuntime.ToText("folder"), _integration.Deck.GetClients().FirstOrDefault(_c => _c.ClientId == context.OriginClientId)?.FolderId);

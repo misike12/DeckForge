@@ -6,6 +6,7 @@ using DeckForge.CliAdapter.Processes;
 using DeckForge.CliAdapter.Tools;
 using DeckForge.CodeGen.Generation;
 using DeckForge.Core.Workspace;
+using DeckForge.Core.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Wpf.Ui.Appearance;
@@ -28,6 +29,18 @@ public partial class App : Application
     /// </remarks>
     public static ILogger Logger => Log;
     public static IServiceProvider Services { get; private set; } = null!;
+
+    /// <summary>
+    /// The one controller that owns what reduced motion has changed in this window.
+    /// </summary>
+    /// <remarks>
+    /// A field rather than a new controller per call, and that is the whole reason this class exists as a
+    /// class rather than as a static method: it keeps a record of the transition values it overwrote so
+    /// they can be put back. A controller created fresh each time would have nothing to undo, and turning
+    /// the setting off would leave the shell with no page transitions rather than with the theme's own -
+    /// which reads as a bug in the theme rather than as a preference that was turned off.
+    /// </remarks>
+    private static MotionController Motion { get; set; } = null!;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -124,9 +137,21 @@ services.AddSingleton<ViewModels.Visual.VisualEditorViewModel>();
         settings.Load();
         settings.LoadFailed += message =>
             Log.LogError("Settings could not be read, so the defaults are in use: {Message}", message);
+        settings.SettingsRepaired += message =>
+            Log.LogWarning("A settings value was outside what this build accepts: {Message}", message);
         ApplyTheme(settings);
 
-        settings.SettingsChanged += () => ApplyTheme(settings);
+        // Reduced motion, applied as soon as there is a window to apply it to. The controller is a field
+        // rather than a local because the same instance has to survive to undo what it did: a fresh one
+        // would hold no record of the values it overwrote, so turning the setting back off would leave the
+        // shell with no transitions rather than with the theme's own.
+        Motion = new MotionController();
+
+        settings.SettingsChanged += () =>
+        {
+            ApplyTheme(settings);
+            ApplyMotion(settings);
+        };
 
         // The Environment page gates on the CLI version the user has pinned, rather than on the
         // constant this build was compiled with.
@@ -144,6 +169,10 @@ services.AddSingleton<ViewModels.Visual.VisualEditorViewModel>();
         MainWindow = window;
         window.Show();
         _mainWindowShown = true;
+
+        // After the window is up, because that is when there is anything to stop. Before it, this would
+        // be a no-op that reported success.
+        ApplyMotion(settings);
 
 
         // CheckForUpdatesOnStart had nothing to switch on: the check lived in the Settings page's
@@ -198,6 +227,60 @@ services.AddSingleton<ViewModels.Visual.VisualEditorViewModel>();
         if (settings is not null)
         {
             ApplyTheme(settings);
+        }
+    }
+
+    /// <summary>
+    /// Re-applies reduced motion, for when the OS changes its own answer while the app is open.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="ReapplyTheme"/> rather than folded into it, because the two settings are
+    /// followed for different reasons and only when the user asked for that. A machine that switches to
+    /// dark at sunset must not also change how the app animates unless <c>VisualReduceMotion</c> is set to
+    /// follow the system, and a user who pinned one must not have it overruled by the other.
+    /// </remarks>
+    internal static void ReapplyMotion(SettingsService settings)
+    {
+        if (settings is not null)
+        {
+            ApplyMotion(settings);
+        }
+    }
+
+    /// <summary>
+    /// Turns the reduced-motion setting into what the window actually does, and records what happened.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not fatal. This runs from <c>SettingsChanged</c>, so an exception here would land in
+    /// the middle of a settings save and take a preference change down with it. The window keeps whatever
+    /// transitions it had, which is the outcome before the setting existed.
+    /// </remarks>
+    private static void ApplyMotion(SettingsService settings)
+    {
+        try
+        {
+            var report = Motion.Apply(settings.Settings);
+
+            // "Reduced motion is on" and "reduced motion did something" are different claims, and only the
+            // second is what a user is asking about. Logging the count is what makes the difference
+            // answerable from the log rather than from a guess - including the case where the answer is
+            // "there was nothing on screen to stop", which is true at startup and on the first page.
+            var nothingToStop = report.Reduced && !report.DidSomething;
+
+            Log.LogInformation(
+                "Motion: {Summary} (system asks to reduce: {System}; {Count} control(s) changed)",
+                report.Summary,
+                report.SystemAsksToReduce,
+                report.ControlsChanged);
+
+            if (nothingToStop)
+            {
+                Log.LogInformation("Motion: nothing was on screen to stop, so nothing changed");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogError(ex, "Reduced motion could not be applied; the window keeps whatever transitions it had");
         }
     }
 

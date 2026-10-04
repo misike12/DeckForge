@@ -16,23 +16,19 @@ namespace DeckForge.Tests;
 [TestFixture]
 public sealed class OpenFindingsTests
 {
+    private static TempDirectory _temp = null!;
+
     private static string _root = "";
 
     [SetUp]
     public void SetUp()
     {
-        _root = Path.Combine(Path.GetTempPath(), "openfindings-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_root);
+        _temp = new TempDirectory("openfindings");
+        _root = _temp.Root;
     }
 
     [TearDown]
-    public void TearDown()
-    {
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
-    }
+    public void TearDown() => _temp.Dispose();
 
     [Test]
     public void A_plugin_outside_src_still_gets_paths_that_exist()

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using DeckForge.App.Services;
 using DeckForge.CodeGen.Generation;
 using DeckForge.Core.Workspace;
+using DeckForge.Core.Settings;
 
 namespace DeckForge.App.ViewModels;
 

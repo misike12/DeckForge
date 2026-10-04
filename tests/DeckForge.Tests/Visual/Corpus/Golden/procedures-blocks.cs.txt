@@ -1,0 +1,11 @@
+// ==== golden: procedures-blocks ====
+// Covers: Every Procedures block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task helperAsync()
+{
+}
+// script: main
+await helperAsync();
+await helperAsync();

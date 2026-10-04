@@ -1,0 +1,13 @@
+// ==== golden: procedure-returns ====
+// Covers: A procedure that returns a value, its call used as a reporter and as a statement, and a return of a nested reporter.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - `proc.call-value` is shaped like a reporter, so the drop resolver will let a user plug it into a slot - but the emitter only knows how to emit it at statement position. In a slot it falls through to the catalog's placeholder expression and writes `await VisualRuntime.NoToken() ?? Task.CompletedTask`, which is CS0019 and, worse, a generated action that quietly does nothing. The golden file shows both.
+
+async Task<object?> computeAsync(object? n)
+{
+    VisualRuntime.Set("n", n);
+    return VisualRuntime.Round(VisualRuntime.ToNumber(VisualRuntime.Get("n")) + VisualRuntime.ToNumber(1));
+}
+// script: main
+var _r0 = await computeAsync("3");
+VisualRuntime.Set(VisualRuntime.ToText("answer"), await VisualRuntime.NoToken() ?? Task.CompletedTask);

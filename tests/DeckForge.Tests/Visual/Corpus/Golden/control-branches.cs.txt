@@ -1,0 +1,40 @@
+// ==== golden: control-branches ====
+// Covers: if, if-else, if-else-if with both arms, if-else-if without the second condition, and an if-else whose else is empty.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+if (VisualRuntime.Compare("left", VisualRuntime.ToText("="), "right"))
+{
+    _logger.Information(VisualRuntime.LogTemplate("then", context.Parameters));
+}
+if (VisualRuntime.Compare("left", VisualRuntime.ToText("!="), "right"))
+{
+    _logger.Information(VisualRuntime.LogTemplate("then", context.Parameters));
+}
+else
+{
+    _logger.Information(VisualRuntime.LogTemplate("else", context.Parameters));
+}
+if (VisualRuntime.Compare("left", VisualRuntime.ToText("<"), "right"))
+{
+}
+if (VisualRuntime.Compare("left", VisualRuntime.ToText("<="), "right"))
+{
+    _logger.Information(VisualRuntime.LogTemplate("first", context.Parameters));
+}
+else if (VisualRuntime.Compare("left", VisualRuntime.ToText(">="), "right"))
+{
+    _logger.Information(VisualRuntime.LogTemplate("second", context.Parameters));
+}
+else
+{
+    _logger.Information(VisualRuntime.LogTemplate("third", context.Parameters));
+}
+if (VisualRuntime.Compare("left", VisualRuntime.ToText("contains"), "right"))
+{
+    _logger.Information(VisualRuntime.LogTemplate("contains", context.Parameters));
+}
+else if (false)
+{
+    _logger.Information(VisualRuntime.LogTemplate("does not", context.Parameters));
+}

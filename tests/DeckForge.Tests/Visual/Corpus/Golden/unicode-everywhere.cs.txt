@@ -1,0 +1,9 @@
+// ==== golden: unicode-everywhere ====
+// Covers: Non-ASCII text in every place text can go: a script name, a comment, literals and a log template.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: スクリプト – скрипт
+// Ünicode comment: 日本語, emoji 🎛️, Ω≈ç√∫, and a combining é.
+_logger.Information(VisualRuntime.LogTemplate("Grüße 🎛️ 日本語 «quoted» 100% \\backslash\\", context.Parameters));
+// note: مرحبا بالعالم and zero-width​here
+VisualRuntime.Set(VisualRuntime.ToText("café"), "naïve — dash, ‹angle›, and a tab\there");

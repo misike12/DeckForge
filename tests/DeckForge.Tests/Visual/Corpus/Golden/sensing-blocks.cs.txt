@@ -1,0 +1,29 @@
+// ==== golden: sensing-blocks ====
+// Covers: Every Sensing block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+// script: main
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Parameter(context, VisualRuntime.ToText("name")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Parameter(context, VisualRuntime.ToText("name"), VisualRuntime.ToText("fallback")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), context.Parameters.ContainsKey(VisualRuntime.ToText("name")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await VisualRuntime.HostVariableAsync(_integration, VisualRuntime.ToText("name"), context.CancellationToken));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await VisualRuntime.HostVariableAsync(_integration, VisualRuntime.ToText("name"), context.CancellationToken) is not null);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText("name"), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Set, VisualRuntime.ToText("value"), context.CancellationToken);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText("name"), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Add, VisualRuntime.ToText(1), context.CancellationToken);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText("name"), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Toggle, null, context.CancellationToken);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText("name"), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Append, VisualRuntime.ToText("value"), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ElapsedSeconds());
+VisualRuntime.ResetTimer();
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.UptimeSeconds());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Time")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), context.OriginClientId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), context.OwnerWidgetId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ActionId());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration is not null);
+await _integration.Scripts.RunAsync(VisualRuntime.ToText("script"), null, context.OriginClientId, context.OwnerWidgetId, context.CancellationToken);
+await _integration.Scripts.RunAsync(VisualRuntime.ToText("script"), VisualRuntime.Parameters(VisualRuntime.ToText("inputs")), context.OriginClientId, context.OwnerWidgetId, context.CancellationToken);

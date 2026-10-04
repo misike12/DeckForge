@@ -1,0 +1,18 @@
+// ==== golden: reporter-at-statement-position ====
+// Covers: Reporters and booleans used as statements, which the canvas refuses and the emitter reports.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+
+async Task<object?> computeAsync()
+{
+    return 1;
+}
+// script: main
+var _r0 = await computeAsync();
+_logger.Information(VisualRuntime.LogTemplate("unreached", context.Parameters));
+
+// ==== problems the emitter reported ====
+// b1: "{a} + {b}" produces a value; nothing here reads it.
+// b2: "not {a}" produces a value; nothing here reads it.
+// b3: "connected client count" produces a value; nothing here reads it.
+// b4: "{var}" produces a value; nothing here reads it.

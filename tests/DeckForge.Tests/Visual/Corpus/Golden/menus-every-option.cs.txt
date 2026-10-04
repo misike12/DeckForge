@@ -1,0 +1,86 @@
+// ==== golden: menus-every-option ====
+// Covers: Every option of every menu in the catalog, so a renamed or dropped option changes a golden.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+// script: main
+var items = new List<string>();
+;
+;
+;
+;
+;
+;
+;
+return ActionResult.Failed(ActionErrorCodes.NotConfigured, "message");
+return ActionResult.Failed(ActionErrorCodes.NotConnected, "message");
+return ActionResult.Failed(ActionErrorCodes.PermissionDenied, "message");
+return ActionResult.Failed(ActionErrorCodes.ProviderError, "message");
+return ActionResult.Failed(ActionErrorCodes.ProviderRejected, "message");
+return ActionResult.Failed(ActionErrorCodes.InvalidParameter, "message");
+return ActionResult.Failed(ActionErrorCodes.NotFound, "message");
+return ActionResult.Failed(ActionErrorCodes.Timeout, "message");
+return ActionResult.Failed(ActionErrorCodes.Unavailable, "message");
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Level = MacroDeck.Sdk.Notifications.UserNotificationLevel.Info, Title = VisualRuntime.ToText("title"), Message = VisualRuntime.ToText("message") });
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Level = MacroDeck.Sdk.Notifications.UserNotificationLevel.Warning, Title = VisualRuntime.ToText("title"), Message = VisualRuntime.ToText("message") });
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Level = MacroDeck.Sdk.Notifications.UserNotificationLevel.Error, Title = VisualRuntime.ToText("title"), Message = VisualRuntime.ToText("message") });
+_logger.Verbose(VisualRuntime.LogTemplate("template", context.Parameters));
+_logger.Debug(VisualRuntime.LogTemplate("template", context.Parameters));
+_logger.Information(VisualRuntime.LogTemplate("template", context.Parameters));
+_logger.Warning(VisualRuntime.LogTemplate("template", context.Parameters));
+_logger.Error(VisualRuntime.LogTemplate("template", context.Parameters));
+_logger.Verbose(VisualRuntime.LogTemplate("template", context.Parameters), VisualRuntime.ToText(VisualRuntime.Parameter(context, VisualRuntime.ToText("param"))));
+_logger.Debug(VisualRuntime.LogTemplate("template", context.Parameters), VisualRuntime.ToText(VisualRuntime.Parameter(context, VisualRuntime.ToText("param"))));
+_logger.Information(VisualRuntime.LogTemplate("template", context.Parameters), VisualRuntime.ToText(VisualRuntime.Parameter(context, VisualRuntime.ToText("param"))));
+_logger.Warning(VisualRuntime.LogTemplate("template", context.Parameters), VisualRuntime.ToText(VisualRuntime.Parameter(context, VisualRuntime.ToText("param"))));
+_logger.Error(VisualRuntime.LogTemplate("template", context.Parameters), VisualRuntime.ToText(VisualRuntime.Parameter(context, VisualRuntime.ToText("param"))));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Year")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Month")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Day")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Weekday")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Hour")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Minute")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Second")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Date")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Time")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Timestamp")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("UtcHour")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("UtcDate")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("abs"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("floor"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("ceiling"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("sqrt"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("sin"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("cos"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("tan"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("asin"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("acos"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("atan"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("ln"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("log"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("exp"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("pow10"), "value"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("="), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("!="), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("<"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText(">"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("<="), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText(">="), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("isEmpty"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("isNotEmpty"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("isAvailable"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("isNotAvailable"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("contains"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare("a", VisualRuntime.ToText("notContains"), "b"));
+VisualRuntime.Set(VisualRuntime.ToText("var"), VisualRuntime.ReadParameter(context, VisualRuntime.ToText("param"), VisualRuntime.ToText("Text"), VisualRuntime.ToBool("false")));
+VisualRuntime.Set(VisualRuntime.ToText("var"), VisualRuntime.ReadParameter(context, VisualRuntime.ToText("param"), VisualRuntime.ToText("Numeric"), VisualRuntime.ToBool("false")));
+VisualRuntime.Set(VisualRuntime.ToText("var"), VisualRuntime.ReadParameter(context, VisualRuntime.ToText("param"), VisualRuntime.ToText("Boolean"), VisualRuntime.ToBool("false")));
+VisualRuntime.Set(VisualRuntime.ToText("var"), VisualRuntime.ReadParameter(context, VisualRuntime.ToText("param"), VisualRuntime.ToText("Text"), VisualRuntime.ToBool("true")));
+VisualRuntime.Set(VisualRuntime.ToText("var"), VisualRuntime.ReadParameter(context, VisualRuntime.ToText("param"), VisualRuntime.ToText("Text"), VisualRuntime.ToBool("false")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Convert(VisualRuntime.Parameter(context, VisualRuntime.ToText("name")), VisualRuntime.ToText("Text")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Convert(VisualRuntime.Parameter(context, VisualRuntime.ToText("name")), VisualRuntime.ToText("Numeric")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Convert(VisualRuntime.Parameter(context, VisualRuntime.ToText("name")), VisualRuntime.ToText("Boolean")));

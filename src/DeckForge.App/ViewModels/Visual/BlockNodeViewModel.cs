@@ -70,8 +70,29 @@ public sealed partial class BlockNodeViewModel : ObservableObject
     /// told which surface it is on, and the palette rows and the canvas tiles are otherwise the same type
     /// on purpose — a palette that draws blocks one way and the canvas another is a palette that lies
     /// about what dropping will produce.
+    /// <para>
+    /// A setter rather than a field because a palette row is the one tile that belongs to no document and so
+    /// is never stamped with a position: it announces itself here, with the position left out, and a
+    /// document tile waits for <see cref="VisualEditorViewModel.StampAnnouncements"/>. Without that a
+    /// palette row would have no name at all until something stamped it, and a screen reader would fall
+    /// back to the tooltip — which is the block's name with a newline and its summary, read as one run.
+    /// </para>
     /// </remarks>
-    public bool IsPaletteRow { get; init; }
+    public bool IsPaletteRow
+    {
+        get => _isPaletteRow;
+        init
+        {
+            _isPaletteRow = value;
+
+            if (value)
+            {
+                Announce(0, 0);
+            }
+        }
+    }
+
+    private bool _isPaletteRow;
 
     /// <summary>Its catalogue row, or null for a kind from a newer build.</summary>
     public BlockDescriptor? Descriptor { get; }
@@ -137,6 +158,38 @@ public sealed partial class BlockNodeViewModel : ObservableObject
     /// </remarks>
     [ObservableProperty]
     private bool _isFavourite;
+
+    /// <summary>
+    /// What a screen reader is told about this block.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Part 9.8 asks for exactly one sentence per tile, and this is it — "repeat 10, C block, 3 statements
+    /// inside". The text is built in Core by <see cref="BlockAnnouncement"/>, because an automation peer is
+    /// WPF and the test project may not reference WPF: a peer that announced the letter "b" would pass
+    /// every test that only checks such a peer exists.
+    /// </para>
+    /// <para>
+    /// Written by the editor on every rebuild rather than computed in this constructor, because the position
+    /// in it is only true once the canvas has decided what else is on it. A tile inside a data template
+    /// knows nothing about its siblings, and a reader told "block 1 of 400" for every one of them has been
+    /// told nothing at all.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    private string _automationName = string.Empty;
+
+    /// <summary>
+    /// Rebuilds the announcement from the document and this block's place on the canvas.
+    /// </summary>
+    /// <param name="position">One-based, across every block the canvas is showing.</param>
+    /// <param name="of">How many blocks the canvas is showing in all.</param>
+    /// <remarks>
+    /// Zero for either number means "not known", and the sentence then omits the position rather than
+    /// inventing one. That is the honest reading for a palette row, which belongs to no document.
+    /// </remarks>
+    public void Announce(int position, int of) =>
+        AutomationName = BlockAnnouncement.Describe(Block, Services.BlockText.Current, position, of);
 
     /// <summary>Whether the block carries a comment.</summary>
     public bool HasComment => !string.IsNullOrWhiteSpace(Block.Comment);

@@ -1,0 +1,14 @@
+// ==== golden: events-blocks ====
+// Covers: Every Events block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+// script: main
+_integration.Events.Publish(VisualRuntime.ToText(@"event"), null);
+_integration.Events.Publish(VisualRuntime.ToText(@"event"), VisualRuntime.Parameters(VisualRuntime.ToText("payload")));
+await _integration.Messages.PublishAsync(VisualRuntime.ToText("topic"), VisualRuntime.Json(VisualRuntime.ToText("body")), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await _integration.Messages.RequestAsync(VisualRuntime.ToText("topic"), VisualRuntime.Json(VisualRuntime.ToText("body")), System.TimeSpan.FromMilliseconds(VisualRuntime.ToNumber(1)), context.CancellationToken));

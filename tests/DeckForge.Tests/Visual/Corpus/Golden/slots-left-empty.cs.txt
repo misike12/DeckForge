@@ -1,0 +1,187 @@
+// ==== golden: slots-left-empty ====
+// Covers: Every block with every slot empty, so the coerced defaults are pinned: zero, false and string.Empty.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - Leaving every slot empty is a shape the compiler rejects in four different ways, and the golden file is how each one is pinned: CS0117, because `ui.notify-level` falls back to a level of `Information` and the SDK's enum spells it `Info`; CS1503, because an empty Any, List or request slot is emitted as the identifier `string.Empty` where the helper wants a Guid?, an IReadOnlyList<string> or an HttpResponseRecord; CS0103, because `proc.call` with no name emits `procedureAsync()`. The coerced defaults this document exists for - 0, false - are visible in the golden either way.
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+if (context.Ui is null || context.Interactions is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.Unavailable, "No client surface is available yet.");
+}
+
+// script: main
+await Task.Delay((int)(VisualRuntime.ToNumber(string.Empty) * 1000), context.CancellationToken);
+await Task.Delay((int)VisualRuntime.ToNumber(string.Empty), context.CancellationToken);
+await VisualRuntime.WaitUntilAsync(() => VisualRuntime.ToBool(string.Empty), 50, context.CancellationToken);
+for (var _i0 = 0; _i0 < 0; _i0++)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+}
+do
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+}
+while (!false);
+while (true)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+}
+while (false)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+}
+if (false)
+{
+}
+if (false)
+{
+}
+if (false)
+{
+}
+await Task.Yield();
+return ActionResult.Success();
+return ActionResult.Success();
+return ActionResult.Success();
+return ActionResult.Failed(ActionErrorCodes.ProviderError, string.Empty);
+return ActionResult.Accepted(string.Empty);
+throw new InvalidOperationException(VisualRuntime.ToText(string.Empty));
+await _integration.Deck.ChangeFolderAsync(VisualRuntime.ToText(string.Empty), context.OriginClientId, context.CancellationToken);
+await _integration.Deck.ChangeFolderAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty), context.CancellationToken);
+await _integration.Deck.GoToParentAsync(context.OriginClientId, context.CancellationToken);
+await _integration.Deck.GoBackAsync(context.OriginClientId, context.CancellationToken);
+await _integration.Deck.ChangeProfileAsync(VisualRuntime.ToText(string.Empty), context.OriginClientId, context.CancellationToken);
+await _integration.Widgets.InvalidateIconAsync(VisualRuntime.ToText(string.Empty), context.CancellationToken);
+await _integration.Widgets.SetStateAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().FirstOrDefault(_c => _c.ClientId == context.OriginClientId)?.FolderId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().FirstOrDefault(_c => _c.ClientId == context.OriginClientId)?.ProfileId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().FirstOrDefault(_c => _c.ClientId == VisualRuntime.ToText(string.Empty))?.FolderId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().Count);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(_integration.Deck.GetClients().Select(_c => _c.ClientId)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Deck.GetClients().Any(_c => _c.ClientId == VisualRuntime.ToText(string.Empty)));
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Title = VisualRuntime.ToText(string.Empty), Message = VisualRuntime.ToText(string.Empty) });
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Level = MacroDeck.Sdk.Notifications.UserNotificationLevel.Information, Title = VisualRuntime.ToText(string.Empty), Message = VisualRuntime.ToText(string.Empty) });
+_integration.Notifications.Notify(new MacroDeck.Sdk.Notifications.UserNotificationRequest { Key = VisualRuntime.ToText(string.Empty), Title = VisualRuntime.ToText(string.Empty), Message = VisualRuntime.ToText(string.Empty) });
+_integration.Notifications.Dismiss(VisualRuntime.ToText(string.Empty));
+await context.Ui.ShowModalAsync(context.OriginClientId, new MacroDeck.Sdk.Ui.ModalDefinition { ViewId = VisualRuntime.ToText(string.Empty), Title = VisualRuntime.ToText(string.Empty) }, context.CancellationToken);
+await context.Ui.ShowModalAsync(context.OriginClientId, new MacroDeck.Sdk.Ui.ModalDefinition { ViewId = VisualRuntime.ToText(string.Empty), Title = VisualRuntime.ToText(string.Empty), Data = VisualRuntime.Data(VisualRuntime.ToText(string.Empty)) }, context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await context.Ui.ShowModalAsync<string>(context.OriginClientId, new MacroDeck.Sdk.Ui.ModalDefinition { ViewId = VisualRuntime.ToText(string.Empty) }, context.CancellationToken));
+_logger.Information(VisualRuntime.LogTemplate(string.Empty, context.Parameters));
+_logger.Information(VisualRuntime.LogTemplate(string.Empty, context.Parameters), VisualRuntime.ToText(VisualRuntime.Parameter(context, VisualRuntime.ToText(string.Empty))));
+await _integration.Widgets.ApplyAsync(new MacroDeck.Sdk.Widgets.WidgetAppearanceRequest { WidgetId = VisualRuntime.ToText(string.Empty) }, context.CancellationToken);
+await _integration.Widgets.InvalidateIconAsync(VisualRuntime.ToText(string.Empty), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration.Widgets.Exists(VisualRuntime.ToText(string.Empty)));
+await VisualRuntime.RegisterAssetAsync(_integration, VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty), context.CancellationToken);
+context.Interactions.RequestItemPicker(context.OriginClientId, VisualRuntime.ToText(string.Empty), MacroDeck.Sdk.MusicPlayer.MusicPlayerCatalogItemKind.Track, VisualRuntime.ToText(string.Empty));
+context.Interactions.RequestDevicePicker(context.OriginClientId, VisualRuntime.ToText(string.Empty), false, VisualRuntime.ToText(string.Empty));
+_integration.Events.Publish(VisualRuntime.ToText(@string.Empty), null);
+_integration.Events.Publish(VisualRuntime.ToText(@string.Empty), VisualRuntime.Parameters(VisualRuntime.ToText(string.Empty)));
+await _integration.Messages.PublishAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.Json(VisualRuntime.ToText(string.Empty)), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await _integration.Messages.RequestAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.Json(VisualRuntime.ToText(string.Empty)), System.TimeSpan.FromMilliseconds(VisualRuntime.ToNumber(string.Empty)), context.CancellationToken));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Parameter(context, VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Parameter(context, VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), context.Parameters.ContainsKey(VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await VisualRuntime.HostVariableAsync(_integration, VisualRuntime.ToText(string.Empty), context.CancellationToken));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await VisualRuntime.HostVariableAsync(_integration, VisualRuntime.ToText(string.Empty), context.CancellationToken) is not null);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText(string.Empty), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Set, VisualRuntime.ToText(string.Empty), context.CancellationToken);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText(string.Empty), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Add, VisualRuntime.ToText(string.Empty), context.CancellationToken);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText(string.Empty), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Toggle, null, context.CancellationToken);
+await VisualRuntime.WriteUserVariableAsync(_integration, VisualRuntime.ToText(string.Empty), context.OwnerWidgetId, MacroDeck.Sdk.Variables.UserVariableOperation.Append, VisualRuntime.ToText(string.Empty), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await _integration.Config.GetStringAsync(VisualRuntime.EntryId(string.Empty), VisualRuntime.ToText(string.Empty), context.CancellationToken));
+await _integration.Config.SetStringAsync(VisualRuntime.EntryId(string.Empty), VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ElapsedSeconds());
+VisualRuntime.ResetTimer();
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.UptimeSeconds());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Current(VisualRuntime.ToText("Time")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.FormatDate(string.Empty, VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.SecondsSince(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), context.OriginClientId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), context.OwnerWidgetId);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ActionId());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), _integration is not null);
+await _integration.Scripts.RunAsync(VisualRuntime.ToText(string.Empty), null, context.OriginClientId, context.OwnerWidgetId, context.CancellationToken);
+await _integration.Scripts.RunAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.Parameters(VisualRuntime.ToText(string.Empty)), context.OriginClientId, context.OwnerWidgetId, context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber(string.Empty) + VisualRuntime.ToNumber(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber(string.Empty) - VisualRuntime.ToNumber(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber(string.Empty) * VisualRuntime.ToNumber(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Divide(string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Modulo(string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Round(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Math(VisualRuntime.ToText("abs"), string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Clamp(string.Empty, string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Random(string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.RandomItem(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Compare(string.Empty, VisualRuntime.ToText("="), string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToBool(string.Empty) && VisualRuntime.ToBool(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToBool(string.Empty) || VisualRuntime.ToBool(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), !VisualRuntime.ToBool(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty) + VisualRuntime.ToText(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.JoinList(string.Empty, VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.LetterOf(string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty).Length);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty).Contains(VisualRuntime.ToText(string.Empty), StringComparison.Ordinal));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Substring(string.Empty, string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty).Replace(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty), StringComparison.Ordinal));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty).ToUpperInvariant());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty).ToLowerInvariant());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty).Trim());
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Split(string.Empty, VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Format(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), Uri.EscapeDataString(VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(VisualRuntime.ToText(string.Empty))));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Base64Decode(VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.JsonGet(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText(string.Empty), string.Empty);
+VisualRuntime.Change(VisualRuntime.ToText(string.Empty), string.Empty);
+VisualRuntime.Set(VisualRuntime.ToText(string.Empty), VisualRuntime.ReadParameter(context, VisualRuntime.ToText(string.Empty), VisualRuntime.ToText("Text"), VisualRuntime.ToBool("false")));
+VisualRuntime.Set(VisualRuntime.ToText(string.Empty), await VisualRuntime.HostVariableAsync(_integration, VisualRuntime.ToText(string.Empty), context.CancellationToken));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Get(string.Empty));
+VisualRuntime.Watch(VisualRuntime.ToText(string.Empty));
+VisualRuntime.Unwatch(VisualRuntime.ToText(string.Empty));
+VisualRuntime.ClearLocals();
+var _ = new List<string>();
+VisualRuntime.List(string.Empty).Add(VisualRuntime.ToText(string.Empty));
+VisualRuntime.List(string.Empty).RemoveAt((int)VisualRuntime.ToNumber(string.Empty) - 1);
+VisualRuntime.List(string.Empty).Clear();
+VisualRuntime.List(string.Empty).Insert((int)VisualRuntime.ToNumber(string.Empty) - 1, VisualRuntime.ToText(string.Empty));
+VisualRuntime.List(string.Empty)[(int)VisualRuntime.ToNumber(string.Empty) - 1] = VisualRuntime.ToText(string.Empty);
+VisualRuntime.List(string.Empty).AddRange(VisualRuntime.List(string.Empty));
+VisualRuntime.List(string.Empty).Sort(StringComparer.Ordinal);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Item(string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.IndexOf(string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(string.Empty).Count);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(string.Empty).Contains(VisualRuntime.ToText(string.Empty), StringComparer.Ordinal));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.List(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Convert(VisualRuntime.Parameter(context, VisualRuntime.ToText(string.Empty)), VisualRuntime.ToText("Text")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.Parameter(context, VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.HasValue(context, VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToNumber(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToText(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ToBool(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.IsNumeric(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.DefaultIfEmpty(string.Empty, string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.DecodeJson(VisualRuntime.ToText(string.Empty)));
+var _1 = await VisualRuntime.HttpAsync(VisualRuntime.ToText(string.Empty), "GET", null, null, context.CancellationToken);
+var _2 = await VisualRuntime.HttpAsync(VisualRuntime.ToText(string.Empty), "POST", VisualRuntime.ToText(string.Empty), null, context.CancellationToken);
+var _3 = await VisualRuntime.HttpAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText("GET"), VisualRuntime.ToText(string.Empty), VisualRuntime.Parameters(VisualRuntime.ToText(string.Empty)), context.CancellationToken);
+VisualRuntime.UseBearerToken(VisualRuntime.ToText(string.Empty));
+for (var _attempt = 0; _attempt < (int)VisualRuntime.ToNumber(string.Empty) && VisualRuntime.LastRequestFailed(); _attempt++);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ResponseBody(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.StatusCode(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ResponseHeader(string.Empty, VisualRuntime.ToText(string.Empty)));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.IsSuccess(string.Empty));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.TimedOut(string.Empty));
+await VisualRuntime.DownloadAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty), context.CancellationToken);
+await VisualRuntime.UploadAsync(VisualRuntime.ToText(string.Empty), VisualRuntime.ToText(string.Empty), context.CancellationToken);
+await procedureAsync("");
+await procedureAsync("");
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await VisualRuntime.NoToken() ?? Task.CompletedTask);
+for (var _i4 = 0; _i4 < VisualRuntime.ToNumber(3); _i4++)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+    break;
+    continue;
+}

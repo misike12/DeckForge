@@ -1,0 +1,39 @@
+// ==== golden: blocks-whose-generated-call-does-not-typecheck ====
+// Covers: Every block whose generated call the C# compiler rejects, with the SDK or runtime signature it disagrees with.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: no - Every block in this document generates a call the compiler rejects: CS1061 and CS0411 for the list mutators against an IReadOnlyList<string>, CS1503 for http.request's headers and for the two date blocks' Guid?, CS9035 for ui.update-widget's required Patch, CS1061 for a procedure call nested in a slot, and CS0019 for a variable used as a loop count. Each is pinned in its own golden file; this one is the summary, and it is excluded so the rest of the corpus can still be built.
+if (_integration is null)
+{
+    return ActionResult.Failed(ActionErrorCodes.NotConnected, "No host session is established yet.");
+}
+
+
+async Task helperAsync()
+{
+}
+// script: main
+var items = new List<string>();
+await _integration.Widgets.ApplyAsync(new MacroDeck.Sdk.Widgets.WidgetAppearanceRequest { WidgetId = VisualRuntime.ToText("widget") }, context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await _integration.Config.GetStringAsync(VisualRuntime.EntryId("entry"), VisualRuntime.ToText("key"), context.CancellationToken));
+await _integration.Config.SetStringAsync(VisualRuntime.EntryId("entry"), VisualRuntime.ToText("key"), VisualRuntime.ToText("value"), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.FormatDate("value", VisualRuntime.ToText("pattern")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.SecondsSince("value"));
+VisualRuntime.List(items).Add(VisualRuntime.ToText("item"));
+VisualRuntime.List(items).RemoveAt((int)VisualRuntime.ToNumber("index") - 1);
+VisualRuntime.List(items).Clear();
+VisualRuntime.List(items).Insert((int)VisualRuntime.ToNumber("index") - 1, VisualRuntime.ToText("item"));
+VisualRuntime.List(items)[(int)VisualRuntime.ToNumber("index") - 1] = VisualRuntime.ToText("item");
+VisualRuntime.List(items).AddRange(VisualRuntime.List(items));
+VisualRuntime.List(items).Sort(StringComparer.Ordinal);
+var into = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("GET"), VisualRuntime.ToText("body"), VisualRuntime.Parameters(VisualRuntime.ToText("headers")), context.CancellationToken);
+var into0 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("POST"), VisualRuntime.ToText("body"), VisualRuntime.Parameters(VisualRuntime.ToText("headers")), context.CancellationToken);
+var into1 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("PUT"), VisualRuntime.ToText("body"), VisualRuntime.Parameters(VisualRuntime.ToText("headers")), context.CancellationToken);
+var into2 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("PATCH"), VisualRuntime.ToText("body"), VisualRuntime.Parameters(VisualRuntime.ToText("headers")), context.CancellationToken);
+var into3 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("DELETE"), VisualRuntime.ToText("body"), VisualRuntime.Parameters(VisualRuntime.ToText("headers")), context.CancellationToken);
+var into4 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("HEAD"), VisualRuntime.ToText("body"), VisualRuntime.Parameters(VisualRuntime.ToText("headers")), context.CancellationToken);
+var into5 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("OPTIONS"), VisualRuntime.ToText("body"), VisualRuntime.Parameters(VisualRuntime.ToText("headers")), context.CancellationToken);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), await VisualRuntime.NoToken() ?? Task.CompletedTask);
+for (var _i6 = 0; _i6 < VisualRuntime.Get("times"); _i6++)
+{
+    context.CancellationToken.ThrowIfCancellationRequested();
+}

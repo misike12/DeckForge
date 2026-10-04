@@ -2531,16 +2531,19 @@ the palette, the shortcut sheet and the page's dispatcher all read, so the sheet
 nothing does; and a command palette and shortcut sheet that are also header buttons, because a feature
 reachable only from the keyboard is a feature nobody finds.
 
-**Not shipped, and named here so nobody goes looking for it:**
+**Shipped since, and named here because Part 18.5's table is the promise they answer to:** Ctrl+C /
+Ctrl+X / Ctrl+V on the selected run and the `.dfblock` envelope behind them (18.3, 25.2); the tile,
+canvas and stage context menus, all built from the one `VisualCommands` table so a menu cannot drift
+from the shortcut sheet (18.5); rubber-band selection on empty canvas, with left-drag arbitrated by what
+is under the press (18.1); the header target picker, which scopes the diagnostics, the script strip, the
+canvas and the stage's run (9.7); an automation peer per tile (9.8); and the transport's Pause on F6.
+
+**Still not shipped, and named here so nobody goes looking for it:**
 
 | Promised | Where | State |
 |---|---|---|
-| Ctrl+C / Ctrl+X / Ctrl+V on a focused run, and the `.dfblock` clipboard envelope | 18.3, 25.2 | not built |
-| Tile context menu - duplicate, delete, comment, disable, wrap, unwrap, extract as procedure, open docs, show emitted C# | 18.5 | not built; the script row's own menu exists |
-| Canvas and stage context menus | 18.5 | not built |
-| Rubber-band selection on empty canvas | 18.1 | not built |
-| Header target picker and script name | 9.7 | not built; the target is implicit and the strip edits the script name |
-| An automation peer per tile | 9.8 | not built |
+| Six of the tile menu's twelve rows - add comment, disable, wrap, unwrap, extract as procedure | 18.5 | not built; none is in the command table, and inventing five gestures would put keys in the sheet that nothing presses |
+| A palette-row context menu - add to selected script, open docs | 18.1 | not built. Part 18.5 does not ask for it, and the palette has no drop zone until the user picks one, so "add to selected script" would be a menu item that cannot do its own job |
 | The transport's Pause | 10.3 | not built; Stop is the only way to end a run, and Reset clears it |
 | Icon gallery, colour swatch, file picker, event picker in the inspector | 9.6 | not built; four editors render: text, a number stepper, a boolean, and a name field for every reference type |
 | Stage menu item to allow real network, with confirmation | 18.5, 27.1 | not built, and deliberately unreachable - see Part 27.1 |
@@ -3122,26 +3125,40 @@ is deliberately phrased so each line can be demonstrated rather than argued.
 
 ### 28.5 Criteria not met
 
-**Section 28 is titled "acceptance criteria" and the tracker above says every phase is complete.** Those two
-statements are only compatible if this table exists, so here it is: what 28 asks for that the product does
-not do, and why. Every row is either deferred by decision or unbuilt, and none of them is claimed as done
-anywhere else in this document - which is the discipline the audit found this table missing.
+**Section 28 is titled "acceptance criteria" and the tracker above says every phase is complete.** This
+table is what it took to make those two statements agree. Every row now says **met**, or **half** with
+the half named, and nothing here is claimed as done anywhere else in this document unless it is done
+here.
 
-| Criterion | State | Why |
+| Criterion | State | What it took |
 |---|---|---|
-| 13 - PNG export | **not built, by decision (P10e)** | SVG ships. Rasterising belongs to the caller that already has a drawing surface, and a third-party encoder in Core would make the export untestable. Part 25.3 keeps the design for whoever wants it. |
-| 13 - `.dfblock` export and import, and clipboard copy/paste of a run | **met** | `VisualClipboard` (Core) is one versioned envelope, camelCase JSON, used for both the clipboard and the `.dfblock` file so the two cannot drift. A paste is a **drop**: `DragPayload.IsPaste` distinguishes it from a move and from a palette drag, and `DropPlan` inserts the whole run - which was the bug waiting to happen, since a paste read as a palette drag became one fresh block and dropped the rest of the stack on the floor. Every block that comes back in is re-identified through `Block.Clone`, recursively, because a pasted `repeat` whose inner blocks kept their ids would collide with the document one level down. A payload from a newer format is refused by name rather than imported into a document that cannot compile. Wired to Ctrl+C/X/V, Ctrl+Shift+C/V and the palette; 17 tests. |
-| 10 - a legacy `.blocks.json` workspace migrates *and keeps the originals* | **half** | `VisualProjectJson` migrates a legacy document it is handed, and `VisualStore` reports the migration. Nothing discovers a legacy file in a workspace and nothing copies an original anywhere. |
-| 10 - a canvas written by a newer DeckForge is opened read-only | **half** | The reader refuses it and the page now refuses to save over it (P10j). The user is told in a message, not offered the newer file in a read-only editor. |
-| Part 24 - round-tripping blocks out of existing C# | **not started** | `BlockCompiler.ExtractRegion` is the seam; nothing builds a document from a region. |
-| Part 23 - the third-party block provider contract | **not started** | The catalogue is closed. |
-| 28.3 - 60fps drag with 500 visible tiles | **half, Core half only** | `CanvasPerformanceBudget` measures cached metric reads and one hit-test pass against a tenth of a frame. The WPF half - arrange and draw - is unmeasured, because the harness that would measure it does not reach this window. Part 9.9 and Appendix H now say so. |
-| 28.2 - label contrast computed at 4.5:1 in a test | **met** | `ContrastRatio` (Core) implements WCAG relative luminance and `BlockThemePalette` now derives each category's fill and outline *from the thresholds* rather than from hand-tuned constants, which `LiquidTheme` converts to brushes. `BlockThemePaletteTests` measures every category, both themes and both gradient stops. It found two real defects the moment it ran: Events' dark fill gave white ink **3.89:1**, and every light-theme outline sat between **1.5:1 and 2.8:1** against the fill it was meant to be drawing the edge of. Both are fixed by construction now - adding a pale category hue cannot reintroduce them. |
-| 28.2, Part 19 - reduced motion | **not built** | There are no animations in the block editor and no durations to shorten. Part 20's sixteen settings keys are likewise unbuilt; see the note there. |
-| 18.5 - the three context menus, rubber-band selection, the header target picker, tile automation peers, the transport's Pause | **not built** | Part 18.6 lists what shipped in their place. |
-| 12 - a ~40-document compile corpus and golden-file snapshots | **not built** | `MultiTargetCodegenTests` scaffolds a plugin, writes into `src/<Project>/` and builds it for all three extra targets. That is the part worth having; the corpus is not written. |
+| 13 - PNG export | **met** | The original refusal - "a third-party encoder in Core would make the export untestable" - was a constraint, not a verdict, and it is met by splitting the decision from the raster. `PngExportPlan` (Core) owns every number: which blocks, where, how big, the scale and its clamps, the padding, the caption and its plate, the draw order, and a SHA-256 fingerprint. `BlockImageRenderer` (App) multiplies nothing, rounds nothing and decides nothing. `BlockExport` was lifted out of `SvgRenderer` so the two renders share one vocabulary, and a test parses the real SVG and compares it with the plan - "the two cannot disagree" is tested, not promised. Two runs in separate processes produce byte-identical files. |
+| 13 - `.dfblock` export and import, and clipboard copy/paste of a run | **met** | `VisualClipboard` (Core): one versioned camelCase envelope for both the clipboard and the file, so they cannot drift. A paste is a **drop** - `DragPayload.IsPaste` separates it from a move and from a palette drag, and `DropPlan` inserts the whole run. Pasted blocks are re-identified recursively through `Block.Clone`; a newer format version is refused by name instead of imported into a document that cannot compile. Part 25.2's bitmap half rides along on the same read of the selection. Ctrl+C/X/V, Ctrl+Shift+C/V, and the palette. |
+| 10 - a legacy `.blocks.json` workspace migrates *and keeps the originals* | **met** | `LegacyCanvas` (Core) discovers a sidecar when no `canvas.json` exists, migrates it once, and copies the original to `<action>.blocks.original.json` - a name that does not itself end in `.blocks.json`, so a preserved copy is never rediscovered as a candidate. Idempotent, and a kept original is never overwritten. Doing this exposed a real defect: `BlockStatement` is polymorphic on a `kind` discriminator, so a sidecar without discriminators threw *out of* `TryLoad` - unreachable while nothing went looking. |
+| 10 - a canvas written by a newer DeckForge is opened read-only | **met** | The strict reader is untouched and still refuses. A second entry point, `TryLoadReadOnly`, loads the file and flags the project, and `ReadOnly` lives on the **model** rather than on the result so `VisualStore.Save` refuses on its own instead of trusting the page. The version-mismatch sentence reaches the status line, so a read-only canvas does not look like an editable one with a greyed button. |
+| Part 24 - round-tripping blocks out of existing C# | **half** | `BlockRegionReader` (Core) reads the marked region back into blocks, and reports `vis-opaque-lines` for anything it does not recognise rather than dropping it. What is **not** claimed is byte-for-byte re-emission (§24.1.5): that means inverting the emitter's lowering, and the guarantee actually asserted is that nothing is *lost*. Conditions are the honest boundary of the subset. Re-emitting an opaque run is not implemented. |
+| Part 23 - the third-party block provider contract | **met** | `IVisualBlockProvider`, `VisualBlockRegistry` and a loader, with the built-in catalogue unchanged. A provider's descriptors go through the same validation the built-ins do - contrast measured by the same `BlockThemePalette`, label and glyph checks - so a third party cannot introduce a block that fails a guarantee the built-ins have. Providers fill `BlockCategory.Media`, the one slot Part 7.16 emptied on purpose, and are refused a category the rail already has. |
+| 28.3 - 60fps drag with 500 visible tiles | **half, and now measured** | `CanvasTileLayoutBudgetTests` arranges and draws 500 tile-shaped elements over the same synthetic document the Core half uses. The honest result: **arrange is ~6 ms, inside one 60fps frame, and cost-per-tile is flat from 125 to 500** - which is what makes 500 a defensible number. The software rasteriser took ~77 ms, so a *frame rate* is still not claimed and a test named after fps would be a fiction. What the budget catches is a shape change, which multiplies cost rather than adding ten per cent. The test project is now `net10.0-windows`, which is what made the measurement possible at all. |
+| 28.2 - label contrast computed at 4.5:1 in a test | **met** | `ContrastRatio` (Core) is WCAG relative luminance, and `BlockThemePalette` now derives each category's fill and outline *from the thresholds*, which `LiquidTheme` converts to brushes. Computing it found two real defects the moment it ran: Events' dark fill gave white ink **3.89:1**, and every light-theme outline sat between **1.5:1 and 2.8:1** against the fill it was drawing the edge of. Both are now impossible to reintroduce. |
+| 28.2, Part 19 - reduced motion | **met, with its scope stated** | `MotionPreference` (Core) resolves System / Always / Never against the OS answer; `MotionController` (App) applies it to the sidebar transition, to popups in the window's logical tree, and to the window manager's own animations via `DWMWA_TRANSITIONS_FORCEDISABLED`. WPF-UI 4.3.0 has **no global animation switch** and WPF's `ClientAreaAnimation` is get-only, so the honest scope is those three, not "all motion". What it does *not* govern is named: the toolkit's own control storyboards, which have no public way in. Part 19's duration table stays unbuilt because there are no durations in this build. |
+| Part 20 - the sixteen settings keys | **met** | `SettingCatalog` (Core) holds all sixteen with typed defaults, ranges and validation; `SettingsService` writes atomically beside and replaces, exactly as `VisualStore` does for the canvas, and a corrupt or partial file falls back to defaults with a reason rather than throwing. Every key is rendered and described on the settings page, and a test fails if a key is stored without a row or described in markup rather than from the catalogue. |
+| 18.5 - the three context menus, rubber-band selection, the header target picker, tile automation peers, the transport's Pause | **met** | Pause yields at a block boundary in the interpreter and resumes without resetting, on F6; the rubber band arbitrates against the block drag by *what is under the press* and its hit test is in Core; the target picker scopes the diagnostics, the script strip, the canvas **and the stage's run**, without which it would mean nothing; tiles carry a real automation peer and Part 9.8's own announcement sentence, which replaced a second implementation in the interpreter. The tile menu opens from the tile's own right-button handler - see the note below. |
+| 12 - a ~40-document compile corpus and golden-file snapshots | **met** | **48 documents**, 11 generated one-per-category and 37 written by hand, with 48 committed golden files and four independent coverage tests that fail if a block, a menu option, a category or a wrapped body has no document. **42 of the 48 are built for real** against the SDK in one scaffolded plugin; the other 8 each record the compiler diagnostic that excludes them, and a companion test fails if one of them *stops* failing. The goldens are rewritten only by an explicit two-gate act (`[Explicit]` **and** an environment variable), never on failure. |
 
-**What is verified, and how.** The Visual page was driven in the real window at the end of P10, and the
+**What is verified, and how.** The Visual page was driven in the real window at the end of P10, and again
+after this table was written; the defects that found are recorded with their fixes in `fixplan.md`. The
+one thing the window cannot check is the keyboard: synthesised keystrokes do not reach it, so every
+shortcut is covered by `VisualCommandsTests` - the palette, the sheet, the three context menus and the
+page's dispatcher all read one table, so none of them can claim a key nothing does - rather than by
+pressing it.
+
+**Two things this table does not claim.** The tile context menu was found *not opening* by driving the
+window, and was fixed by taking the right button off `ContextMenuService` entirely: the tile opens its own
+menu, which removes the dependence on which of two `ContextMenu`s on one route wins. That fix has not
+been confirmed end to end, because the harness could not hold the foreground window reliably enough to
+navigate to the page - it reports `GetForegroundWindow()` returning zero, so the click that selects the
+page is swallowed. The canvas and stage menus are unverified for the same reason. And §27.2's "exports
+warn when a literal looks like a secret" is still unbuilt for both export formats.
 defects that found are recorded with their fixes in `fixplan.md`. The one thing the window cannot check is
 the keyboard: synthesised keystrokes do not reach it, so every shortcut is covered by
 `VisualCommandsTests` - the palette, the sheet and the page's dispatcher read one table, so the sheet
@@ -3562,7 +3579,7 @@ to, so the pane can select and centre it.
 | `vis-opaque-lines` | Warning | round-trip could not recognise some lines | "They are preserved and written back unchanged." |
 | `vis-secret-literal` | Warning | a URL or field that looks like it carries a credential | "Use a parameter instead, so the value is not committed to your repository." |
 | `vis-step-budget` | Error | the interpreter hit its step budget | "This script may never finish; it was paused." |
-| `vis-migration-originals` | Info | legacy sidecars were migrated | "The originals were kept under `.deckforge/visual/legacy/`." |
+| `vis-migration-originals` | Info | legacy sidecars were migrated | "The originals were kept beside the file, as `<action>.blocks.original.json` - a name that does not itself end in `.blocks.json`, so a preserved copy is never rediscovered as a candidate." |
 
 ### F.1 As built
 

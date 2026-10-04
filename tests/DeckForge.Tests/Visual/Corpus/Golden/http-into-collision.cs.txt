@@ -1,0 +1,9 @@
+// ==== golden: http-into-collision ====
+// Covers: Two requests declaring the same response name: the second local has to be renamed, not redeclared.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+var response = await VisualRuntime.HttpAsync(VisualRuntime.ToText("https://example.com/one"), "GET", null, null, context.CancellationToken);
+var response0 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("https://example.com/two"), "POST", VisualRuntime.ToText("{}"), null, context.CancellationToken);
+await VisualRuntime.DownloadAsync(VisualRuntime.ToText("https://example.com/three"), VisualRuntime.ToText("third.json"), context.CancellationToken);
+VisualRuntime.UseBearerToken(VisualRuntime.ToText("token"));

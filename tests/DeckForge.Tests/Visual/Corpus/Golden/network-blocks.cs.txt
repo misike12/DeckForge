@@ -1,0 +1,17 @@
+// ==== golden: network-blocks ====
+// Covers: Every Network block the palette offers, with every slot and every menu filled.
+// Rewrite deliberately: DECKFORGE_REWRITE_CORPUS_GOLDENS=1 dotnet test tests/DeckForge.Tests --filter "Name~Rewrite_the_golden_files"
+// Compiled for real: yes
+// script: main
+var response = await VisualRuntime.HttpAsync(VisualRuntime.ToText("https://example.com/api"), "GET", null, null, context.CancellationToken);
+var into = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), "GET", null, null, context.CancellationToken);
+var into0 = await VisualRuntime.HttpAsync(VisualRuntime.ToText("url"), "POST", VisualRuntime.ToText("body"), null, context.CancellationToken);
+VisualRuntime.UseBearerToken(VisualRuntime.ToText("name"));
+for (var _attempt = 0; _attempt < (int)VisualRuntime.ToNumber(1) && VisualRuntime.LastRequestFailed(); _attempt++);
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ResponseBody(response));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.StatusCode(response));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.ResponseHeader(response, VisualRuntime.ToText("name")));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.IsSuccess(response));
+VisualRuntime.Set(VisualRuntime.ToText("reading"), VisualRuntime.TimedOut(response));
+await VisualRuntime.DownloadAsync(VisualRuntime.ToText("url"), VisualRuntime.ToText("path"), context.CancellationToken);
+await VisualRuntime.UploadAsync(VisualRuntime.ToText("path"), VisualRuntime.ToText("url"), context.CancellationToken);
