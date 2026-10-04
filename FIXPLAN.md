@@ -249,3 +249,40 @@ that lean on the same implicit mode (`IsChecked="{Binding ...}"`, `SelectedItem=
 without `Mode=`). Every one checked has a setter, so none is presently a crash; none is guarded
 either. The honest recommendation is a sweep that makes each of them state its mode, which is
 mechanical and about an hour, and this entry is the argument for doing it.
+## The second crash: moving a MenuItem between menus
+
+`crash.log`, entry 45, 2026-10-04 18:42:37:
+
+```
+System.InvalidOperationException: Element already has a logical parent. It must be
+detached from the old parent before it is attached to a new one.
+   at MS.Internal.Controls.InnerItemCollectionView.Add(Object item)
+   at DeckForge.App.Pages.VisualEditorPage.Tile_MenuRequested(...) line 456
+   at DeckForge.App.Controls.Blocks.BlockTile.OnPreviewMouseRightButtonDown(...) line 122
+```
+
+**This one was mine.** `Tile_MenuRequested` built a menu with `VisualMenus.ForTile` and then copied its
+`Items` into the tile's own menu. A `MenuItem` carries its logical parent, so adding one that is still in
+another menu throws from inside a WPF internal - with a message that names neither a menu nor a context
+menu, on a line that reads like copying a list.
+
+`VisualMenus.Menu` became `Fill(menu, ...)`, and a new `FillTileMenu` fills a menu the caller already
+owns. Nothing is moved between parents anywhere now. `ForCanvas` and `ForStage` create their own menu and
+fill it, which is why they never hit this.
+
+**Two things worth keeping from this.**
+
+The crash is what proved the first fix worked. The right-click reaching `Tile_MenuRequested` at all is
+the evidence that the tile's own right-button handler runs, which was the thing I could not verify last
+round - so a defect I introduced is what finally confirmed the repair for the defect before it.
+
+The lesson is about the fix's shape, not the bug. The handler that fixed the *first* crash took the right
+button off `ContextMenuService` and opened the menu itself, and the page filled a menu the tile owned.
+That was right. What was wrong was the page then filling it by *transferring* rows from a menu it had
+built for the purpose. Building into the target, rather than building and moving, is the whole difference
+between the two versions.
+
+**Still unverified:** that the menu paints. A WPF `ContextMenu` renders into its own top-level window,
+which the window-DC capture cannot see; the full-desktop capture is too wide to read without knowing where
+the window landed. Right-clicking a block now selects it and does not throw - both verified - but whether
+the popup is visible on screen is not.

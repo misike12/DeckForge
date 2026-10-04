@@ -450,11 +450,11 @@ AddHandler(
 
         _vm.Select(requested.Block);
 
-        requested.Menu.Items.Clear();
-        foreach (var item in Controls.Blocks.VisualMenus.ForTile(requested.Block, _vm, Dispatch).Items)
-        {
-            requested.Menu.Items.Add(item);
-        }
+        // Filled in place, not built here and copied across. A MenuItem carries its logical parent, so
+        // adding one that is still in another menu throws "Element already has a logical parent" from
+        // inside InnerItemCollectionView - which is what this did, on every right-click, with nothing in
+        // the message to say a menu was involved.
+        Controls.Blocks.VisualMenus.FillTileMenu(requested.Menu, requested.Block, _vm, Dispatch);
     }
 
     /// <summary>

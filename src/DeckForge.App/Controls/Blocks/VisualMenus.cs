@@ -57,10 +57,39 @@ internal static class VisualMenus
         VisualEditorViewModel vm,
         Action<string> dispatch)
     {
+        var menu = new ContextMenu();
+        FillTileMenu(menu, block, vm, dispatch);
+        return menu;
+    }
+
+    /// <summary>
+    /// Fills a menu the caller already owns with one block's rows.
+    /// </summary>
+    /// <param name="menu">The menu to fill. Its items are replaced.</param>
+    /// <param name="block">The block that was right-clicked.</param>
+    /// <param name="vm">The editor.</param>
+    /// <param name="dispatch">Runs one command by id.</param>
+    /// <remarks>
+    /// This exists instead of "build one and copy its items across" because <see cref="MenuItem"/> carries
+    /// its logical parent, and moving one that is still in another menu throws
+    /// <c>Element already has a logical parent</c> from deep inside <c>InnerItemCollectionView</c>. That is
+    /// what the tile did, and it crashed on every right-click - a fault with no message anyone could read,
+    /// thrown from a framework internal about a line of code that looks like copying a list.
+    /// </remarks>
+    public static void FillTileMenu(
+        ContextMenu menu,
+        BlockNodeViewModel block,
+        VisualEditorViewModel vm,
+        Action<string> dispatch)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
         ArgumentNullException.ThrowIfNull(block);
         ArgumentNullException.ThrowIfNull(vm);
 
-        return Menu(
+        menu.Items.Clear();
+
+        Fill(
+            menu,
             [
                 VisualCommands.Duplicate,
                 VisualCommands.Copy,
@@ -96,7 +125,10 @@ internal static class VisualMenus
     {
         ArgumentNullException.ThrowIfNull(vm);
 
-        return Menu(
+        var menu = new ContextMenu();
+
+        Fill(
+            menu,
             [
                 VisualCommands.Undo,
                 VisualCommands.Redo,
@@ -119,6 +151,8 @@ internal static class VisualMenus
             vm,
             dispatch,
             subtitle: "Every item here also has a key. The shortcut sheet lists them (Ctrl+/).");
+
+        return menu;
     }
 
     /// <summary>
@@ -144,14 +178,16 @@ internal static class VisualMenus
     /// </remarks>
     public static ContextMenu ForStage(StageViewModel stage, VisualEditorViewModel vm, Action<string> dispatch)
     {
-        ArgumentNullException.ThrowIfNull(stage);
-        ArgumentNullException.ThrowIfNull(vm);
+        var menu = new ContextMenu();
 
-        return Menu(
+        Fill(
+            menu,
             [.. VisualCommands.InScope(CommandScope.Stage).Select(command => command.Id)],
             vm,
             dispatch,
             subtitle: "The same commands the transport row offers, and the same keys.");
+
+        return menu;
     }
 
     /// <summary>
@@ -162,7 +198,8 @@ internal static class VisualMenus
     /// <param name="dispatch">Runs one command by id.</param>
     /// <param name="Header">A disabled first row naming what was clicked, when there is one.</param>
     /// <param name="subtitle">A disabled last row saying where else these are available.</param>
-    private static ContextMenu Menu(
+    private static void Fill(
+        ContextMenu menu,
         IReadOnlyList<string> ids,
         VisualEditorViewModel vm,
         Action<string> dispatch,
@@ -170,8 +207,6 @@ internal static class VisualMenus
         BlockNodeViewModel? block = null,
         string? subtitle = null)
     {
-        var menu = new ContextMenu();
-
         if (Header is not null)
         {
             menu.Items.Add(new MenuItem
@@ -231,7 +266,6 @@ internal static class VisualMenus
             menu.Items.Add(new MenuItem { Header = subtitle, IsEnabled = false });
         }
 
-        return menu;
     }
 
     /// <summary>What the tooltip says about one command, without inventing anything the table lacks.</summary>
