@@ -54,6 +54,18 @@ public sealed record DragPayload(
 
     /// <summary>Whether this carries a run that is already in the document.</summary>
     public bool IsMove => !IsPalette && Run is { Count: > 0 } && First is not null && Source is not null;
+
+    /// <summary>
+    /// Whether this is a pasted run: blocks that are not in the document yet, and are not one new block
+    /// from the palette either.
+    /// </summary>
+    /// <remarks>
+    /// The third case, and the reason <see cref="IsMove"/> could not simply be inverted. A move has a
+    /// <c>Source</c> to take the blocks away from, a palette drag has no run at all, and a paste has a run
+    /// and nowhere to take it from - so without this, a pasted stack was read as a palette drag and
+    /// silently replaced by one freshly-built block, throwing away every field value it carried.
+    /// </remarks>
+    public bool IsPaste => !IsPalette && Run is { Count: > 0 } && Source is null;
 }
 
 /// <summary>
@@ -151,6 +163,14 @@ public static class DropPlan
         // refusal about a missing body.
         var where = landing.Where;
 
+        // A pasted run is inserted whole, with nothing to take it away from. It is checked before the
+        // palette branch below, because a paste has a run and a palette drag does not - and reading a
+        // paste as a palette drag built one new block and dropped the rest of the stack on the floor.
+        if (payload.IsPaste)
+        {
+            return editor.Insert(where, landing.Index, payload.Run!, $"Paste {Describe(payload.Kind)}");
+        }
+
         if (!payload.IsMove)
         {
             var descriptor = BlockCatalog.Find(payload.Kind)!;
@@ -172,14 +192,17 @@ public static class DropPlan
         // The catalogue's label rather than the kind, so the pointer path and the keyboard path agree:
         // this read "Undo Move control.forever" where DocumentEditor.Describe reads "Undo Move repeat 10",
         // and the same gesture had two names in the same session.
-        var described = BlockCatalog.Find(payload.Kind)?.Label is { } label
-            ? label.Replace('{', ' ').Replace('}', ' ').Trim()
-            : payload.Kind;
-
-        // what Alt means. Passing the payload's run through keeps the narrowed drag narrowed.
         return editor.Execute(new MoveRun(
-            payload.Source!.Value, where, payload.Run!, landing.Index, $"Move {described}"));
+            payload.Source!.Value, where, payload.Run!, landing.Index, $"Move {Describe(payload.Kind)}"));
     }
+
+    /// <summary>
+    /// What to call a kind of block in an undo description: its label with the placeholders taken out.
+    /// </summary>
+    private static string Describe(string kind) =>
+        BlockCatalog.Find(kind)?.Label is { } label
+            ? label.Replace('{', ' ').Replace('}', ' ').Trim()
+            : kind;
 
     /// <summary>
     /// A drop onto a statement's own footprint rather than onto a gap beside it.
@@ -218,6 +241,21 @@ public static class DropPlan
         {
             return editor.Execute(new WrapRun(
                 where, victim, BlockFactory.Preview(descriptor), 1, $"Wrap in {descriptor.Label}"));
+        }
+
+        // A pasted container wraps too, and unlike the palette case it wraps the run it came with: the
+        // blocks inside it are already written, and dropping them would be a silent way to lose a stack.
+        if (payload.IsPaste && descriptor.IsContainer)
+        {
+            return editor.Execute(new WrapRun(
+                where, victim, payload.First!, payload.Run!.Count, $"Wrap in {descriptor.Label}"));
+        }
+
+        if (payload.IsPaste)
+        {
+            return editor.Transaction(
+                $"Replace {victim.Kind}",
+                [new DeleteRun(where, [victim]), new InsertRun(where, landing.Index, payload.Run!)]);
         }
 
         if (!payload.IsMove)
@@ -270,6 +308,13 @@ public static class DropPlan
         var reporter = payload.First ?? BlockFactory.Preview(BlockCatalog.Find(payload.Kind)!);
         var bind = new BindSlot(landing.ParentId, slotName, before, new BlockInput { Block = reporter });
 
+        if (payload.IsPaste)
+        {
+            // No removal half: the blocks were never in the document, so there is nothing to delete and a
+            // delete here would have taken out whatever happened to be at index zero.
+            return editor.Execute(bind);
+        }
+
         return payload.IsMove
             ? editor.Transaction("Move into slot", [new DeleteRun(payload.Source!.Value, payload.Run!), bind])
             : editor.Execute(bind);
@@ -310,6 +355,29 @@ public static class DropPlan
         }
 
         var hat = payload.First ?? BlockFactory.Preview(descriptor);
+
+        if (payload.IsPaste && payload.Run is { Count: > 1 } run)
+        {
+            // A pasted hat arrives with the stack that was under it, and only the hat itself is named
+            // here. Dropping just the hat would leave a script that runs its first block and then stops,
+            // with the rest of the pasted stack nowhere at all - which reads as the paste having lost
+            // blocks rather than as the paste having been incomplete.
+            var script = new VisualScript
+            {
+                Id = $"script-{Guid.NewGuid().ToString("n")[..8]}",
+                Name = descriptor.Label,
+                Hat = hat,
+                X = x,
+                Y = y,
+            };
+
+            return editor.Transaction(
+                $"Paste {Describe(payload.Kind)}",
+                [
+                    new AddScript(target, script),
+                    new InsertRun(BodyRef.ScriptBody(script.Hat.Id), 0, run.Skip(1).ToList()),
+                ]);
+        }
 
         return editor.AddScript(target, new VisualScript
         {

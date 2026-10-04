@@ -154,11 +154,18 @@ public sealed class VisualCommandsTests
                     VisualCommands.FocusPaletteSearch,
                     VisualCommands.Delete,
                     VisualCommands.Duplicate,
+                    VisualCommands.Copy,
+                    VisualCommands.Cut,
+                    VisualCommands.Paste,
+                    VisualCommands.ExportBlock,
+                    VisualCommands.ImportBlock,
                     VisualCommands.StageStep,
                     VisualCommands.StageStepInto,
                 }),
                 "and a title that merely contains it. \"Search blocks\" is here and \"Stop\" is not, which "
-                + "is the difference between matching a word and matching a letter");
+                + "is the difference between matching a word and matching a letter. Every clipboard command "
+                + "is here too, which is the point of the substring tier: somebody who types \"bloc\" "
+                + "wanting the clipboard is not made to remember which of the five says so in its title");
 
             // Keyword: no command is *called* cheatsheet.
             Assert.That(

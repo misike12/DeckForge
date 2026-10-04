@@ -85,6 +85,21 @@ public static class VisualCommands
     /// <summary>Duplicate the selected run.</summary>
     public const string Duplicate = "canvas.duplicate";
 
+    /// <summary>Copy the selected run to the clipboard.</summary>
+    public const string Copy = "canvas.copy";
+
+    /// <summary>Copy the selected run and delete it.</summary>
+    public const string Cut = "canvas.cut";
+
+    /// <summary>Drop whatever the clipboard holds as a run.</summary>
+    public const string Paste = "canvas.paste";
+
+    /// <summary>Write the selected run to a <c>.dfblock</c> file.</summary>
+    public const string ExportBlock = "canvas.export-block";
+
+    /// <summary>Read a run from a <c>.dfblock</c> file.</summary>
+    public const string ImportBlock = "canvas.import-block";
+
     /// <summary>Delete the selected run.</summary>
     public const string Delete = "canvas.delete";
 
@@ -126,6 +141,11 @@ public static class VisualCommands
         new(Undo, "Undo", "Ctrl+Z", CommandScope.Canvas, ["revert", "back"]),
         new(Redo, "Redo", "Ctrl+Y", CommandScope.Canvas, ["again", "forward"]),
         new(Duplicate, "Duplicate block", "Ctrl+D", CommandScope.Canvas, ["copy", "clone"], NeedsSelection: true),
+        new(Copy, "Copy block", "Ctrl+C", CommandScope.Canvas, ["clipboard", "take"], NeedsSelection: true),
+        new(Cut, "Cut block", "Ctrl+X", CommandScope.Canvas, ["clipboard", "remove"], NeedsSelection: true),
+        new(Paste, "Paste block", "Ctrl+V", CommandScope.Canvas, ["clipboard", "insert"]),
+        new(ExportBlock, "Export block as .dfblock", "Ctrl+Shift+C", CommandScope.Canvas, ["save", "file"]),
+        new(ImportBlock, "Import a .dfblock", "Ctrl+Shift+V", CommandScope.Canvas, ["open", "file"]),
         new(Delete, "Delete block", "Delete", CommandScope.Canvas, ["remove", "erase"], NeedsSelection: true),
         new(PickUpOrDrop, "Pick up or drop", "Space", CommandScope.Canvas, ["move", "carry", "drag"]),
         new(Cancel, "Cancel", "Esc", CommandScope.Canvas, ["escape", "stop", "clear"]),

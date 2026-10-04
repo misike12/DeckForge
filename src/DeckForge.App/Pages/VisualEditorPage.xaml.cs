@@ -1024,6 +1024,125 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
     private bool IsOverlayOpen =>
         PaletteOverlay.Visibility == Visibility.Visible || ShortcutOverlay.Visibility == Visibility.Visible;
 
+    /// <summary>
+    /// Puts text on the system clipboard, and survives it being closed.
+    /// </summary>
+    /// <param name="text">What to copy.</param>
+    /// <returns>Whether it landed.</returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Clipboard"/> is a single process-wide lock that any other application may hold, and every
+    /// access can fail with it. The failure is not exceptional in practice - another app opening the
+    /// clipboard twice in a row makes it ordinary - and an unhandled one out of a key handler takes the
+    /// dispatcher with it, which loses the whole session rather than one copy.
+    /// </para>
+    /// <para>
+    /// Retried once, because the common case really is the transient one: another process had it a
+    /// moment ago and has let go by the time the second attempt runs.
+    /// </para>
+    /// </remarks>
+    private bool WriteClipboard(string text)
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                Clipboard.SetText(text);
+                return true;
+            }
+            catch (Exception error) when (error is System.Runtime.InteropServices.COMException or System.Runtime.InteropServices.ExternalException)
+            {
+                Thread.Sleep(60);
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The clipboard's text, or null when it holds none or cannot be read.</summary>
+    private static string? ReadClipboard()
+    {
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                return Clipboard.ContainsText() ? Clipboard.GetText() : null;
+            }
+            catch (Exception error) when (error is System.Runtime.InteropServices.COMException or System.Runtime.InteropServices.ExternalException)
+            {
+                Thread.Sleep(60);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Writes the selected run to a <c>.dfblock</c> the user names.</summary>
+    /// <remarks>
+    /// The same text the clipboard carries, so a file and a copy cannot drift apart - which is the whole
+    /// argument for the envelope being one format rather than two.
+    /// </remarks>
+    private void ExportBlock()
+    {
+        if (_vm.CopySelected() is not { } text)
+        {
+            _vm.ReportProblem("Select a block to export.");
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export this block",
+            FileName = $"{_vm.Selected!.Block.Kind}{Core.Visual.VisualClipboard.Extension}",
+            DefaultExt = Core.Visual.VisualClipboard.Extension,
+            Filter = $"DeckForge block (*{Core.Visual.VisualClipboard.Extension})|*{Core.Visual.VisualClipboard.Extension}"
+                + "|Text (*.txt)|*.txt",
+        };
+
+        if (dialog.ShowDialog() is not true)
+        {
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(dialog.FileName, text, new System.Text.UTF8Encoding(false));
+            _vm.Report($"Exported {Path.GetFileName(dialog.FileName)}.");
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // The refusal names the path, for the reason the SVG export's does: "could not save" leaves the
+            // user looking for whatever it tried to write.
+            _vm.ReportProblem($"Could not write {dialog.FileName}: {error.Message}");
+        }
+    }
+
+    /// <summary>Reads a run from a <c>.dfblock</c> the user names, and drops it in.</summary>
+    private void ImportBlock()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import a block",
+            Filter = $"DeckForge block (*{Core.Visual.VisualClipboard.Extension})|*{Core.Visual.VisualClipboard.Extension}"
+                + "|Text (*.txt)|*.txt",
+        };
+
+        if (dialog.ShowDialog() is not true)
+        {
+            return;
+        }
+
+        try
+        {
+            _vm.PasteText(File.ReadAllText(dialog.FileName));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            _vm.ReportProblem($"Could not read {dialog.FileName}: {error.Message}");
+        }
+    }
+
+
     /// <summary>Opens the command palette.</summary>
     /// <summary>Opens the command palette from the header button, so Ctrl+K is not the only way in.</summary>
     private void OpenPalette_Click(object sender, RoutedEventArgs e) => OpenPalette();
@@ -1111,6 +1230,48 @@ private ViewModels.Visual.CanvasViewModel CreateCanvas()
             case VisualCommands.Duplicate:
                 _vm.DuplicateSelected();
                 break;
+
+            case VisualCommands.Copy:
+                if (_vm.CopySelected() is { } copy)
+                {
+                    WriteClipboard(copy);
+                }
+                else
+                {
+                    _vm.ReportProblem("Select a block to copy.");
+                }
+
+                break;
+
+            case VisualCommands.Cut:
+                var (text, deleted) = _vm.CutSelected();
+                if (text is null)
+                {
+                    _vm.ReportProblem("Select a block to cut.");
+                }
+                else if (!WriteClipboard(text))
+                {
+                    _vm.ReportProblem("The clipboard would not take it. The blocks are still here - undo is one Ctrl+Z away.");
+                }
+                else if (!deleted)
+                {
+                    _vm.ReportProblem("Copied, but the blocks could not be removed.");
+                }
+
+                break;
+
+            case VisualCommands.Paste:
+                _vm.PasteText(ReadClipboard());
+                break;
+
+            case VisualCommands.ExportBlock:
+                ExportBlock();
+                break;
+
+            case VisualCommands.ImportBlock:
+                ImportBlock();
+                break;
+
 
             case VisualCommands.Delete:
                 _vm.DeleteSelected();

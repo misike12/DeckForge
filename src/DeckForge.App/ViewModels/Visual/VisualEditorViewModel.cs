@@ -628,7 +628,7 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
     /// one's timer.
     /// </para>
     /// </remarks>
-    private void ReportProblem(string problem)
+    public void ReportProblem(string problem)
     {
         Message = problem;
 
@@ -1050,6 +1050,116 @@ Columns = [.. Scripts.Cast<ColumnViewModel>(), .. Procedures];
 
     /// <summary>Duplicates the selected block and its run.</summary>
     public void DuplicateSelected() => Apply(KeyboardMoves.Duplicate(Document, Selected!.Block));
+
+    /// <summary>The run a copy or a cut would take: the selected block and everything below it.</summary>
+    /// <remarks>
+    /// The same rule as a stack drag with nothing held down, because copy means the same thing as picking
+    /// up and putting down somewhere else. Copying one block out of the middle of a five-block stack
+    /// would be a surprise; <c>Duplicate</c> is the command that narrows to one.
+    /// </remarks>
+    private IReadOnlyList<Block>? SelectedRun() =>
+        Selected?.Block is { } block
+        && DocumentLists.Locate(Document, block) is { } where
+            ? Editor.RunFrom(where, block, wholeStack: true)
+            : null;
+
+    /// <summary>Copies the selected run to the clipboard.</summary>
+    /// <remarks>
+    /// The clipboard itself is the page's business, not the view model's: <c>System.Windows.Clipboard</c>
+    /// is a static, throws when another process holds it, and has to be touched on the dispatcher thread.
+    /// What is decided here is what goes on it - the run, in the envelope - and this hands that text
+    /// upwards rather than writing it.
+    /// </remarks>
+    public string? CopySelected()
+    {
+        if (SelectedRun() is not { Count: > 0 } run)
+        {
+            return null;
+        }
+
+        return VisualClipboard.Write(run);
+    }
+
+    /// <summary>
+    /// Copies the selected run and deletes it.
+    /// </summary>
+    /// <returns>
+    /// The text to put on the clipboard, and whether the blocks were actually removed.
+    /// </returns>
+    /// <remarks>
+    /// The copy half is the caller's, for the same reason <see cref="CopySelected"/> hands the text up: if
+    /// the clipboard write fails there is nothing to report as a cut, and deleting first would lose the
+    /// run. So the text comes back first and the deletion has already happened - a caller whose write
+    /// failed says so, and the user still has their undo.
+    /// </remarks>
+    public (string? Text, bool Deleted) CutSelected()
+    {
+        var text = CopySelected();
+        if (text is null)
+        {
+            return (null, false);
+        }
+
+        // KeyboardMoves builds the command; the editor applies it, because only the editor knows whether it
+        // was allowed - and a cut that reported success for a delete the editor refused would claim the
+        // blocks are gone while they are still on the canvas.
+        if (KeyboardMoves.Delete(Document, Selected!.Block) is not { } command)
+        {
+            return (text, false);
+        }
+
+        var result = Editor.Execute(command);
+        Apply(result);
+
+        return (text, result.Applied);
+    }
+
+    /// <summary>
+    /// Drops whatever the clipboard holds as a run, directly after the selection.
+    /// </summary>
+    /// <param name="text">The clipboard's text.</param>
+    /// <remarks>
+    /// A paste needs somewhere to land, and "wherever the pointer happens to be" is not available to a
+    /// keystroke. So it goes below the selection - which is where a paste lands in every editor that does
+    /// this, and the one place a user can predict without looking - or at the end of the first script when
+    /// nothing is selected.
+    /// </remarks>
+    public void PasteText(string? text)
+    {
+        var read = VisualClipboard.Read(text);
+        if (!read.HasRun)
+        {
+            ReportProblem(read.Problem ?? "There is nothing on the clipboard to paste.");
+            return;
+        }
+
+        if (Target is not { } target)
+        {
+            ReportProblem("There is nowhere to paste - open a script first.");
+            return;
+        }
+
+        var selected = Selected?.Block;
+        var located = selected is null ? null : DocumentLists.Locate(Document, selected);
+        var where = located ?? BodyRef.ScriptBody(target.Scripts.FirstOrDefault()?.Hat.Id ?? string.Empty);
+
+        if (string.IsNullOrEmpty(where.OwnerId) || DocumentLists.ListFor(Document, where) is not { } body)
+        {
+            ReportProblem("There is nowhere to paste - open a script first.");
+            return;
+        }
+
+        var index = located is null || selected is null
+            ? body.Count
+            : Math.Min(DocumentLists.IndexOf(Document, where, [selected], orLast: false) + 1, body.Count);
+
+        Apply(DropPlan.Apply(
+            Editor,
+            target,
+            read.ToDragPayload(),
+            new DropCandidate(DropTargetKind.StackGap, where.OwnerId, where.BodyName, Index: index)));
+    }
+
 
     /// <summary>Selects the next block, wrapping round.</summary>
     public void CycleSelection(bool forward) =>
